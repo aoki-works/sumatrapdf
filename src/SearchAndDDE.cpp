@@ -724,6 +724,7 @@ static const char* HandleSearchCmd(const char* cmd, DDEACK& ack) {
     ack.fAck = 1;
     bool wasModified = true;
     bool showProgress = true;
+    HwndSetText(win->hwndFindEdit, term);
     FindTextOnThread(win, TextSearchDirection::Forward, term, wasModified, showProgress);
     win->Focus();
     return next;
