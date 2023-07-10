@@ -48,6 +48,10 @@
 
 bool gIsStartup = false;
 StrVec gDdeOpenOnStartup;
+WCHAR* PDFSYNC_DDE_SERVICE = nullptr;
+WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
+WCHAR* USERAPP_DDE_SERVICE = nullptr;
+WCHAR* USERAPP_DDE_TOPIC = nullptr;
 
 Kind kNotifGroupFindProgress = "findProgress";
 

@@ -110,6 +110,14 @@ struct Flags {
     // before proceeding
     int sleepMs = 0;
 
+    // DDE Service/Topic name for PdfSync
+    char* pdfsync_dde_service = nullptr;
+    char* pdfsync_dde_topic = nullptr;
+
+    // DDE Service/Topic name for user application
+    char* userapp_dde_service = nullptr;
+    char* userapp_dde_topic = nullptr;
+
     bool testBrowser = false;
 
     Flags() = default;

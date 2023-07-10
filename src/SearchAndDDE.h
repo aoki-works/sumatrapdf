@@ -1,9 +1,6 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
-#define PDFSYNC_DDE_SERVICE L"SUMATRA"
-#define PDFSYNC_DDE_TOPIC L"control"
-
 LRESULT OnDDEInitiate(HWND hwnd, WPARAM wp, LPARAM lp);
 LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp);
 LRESULT OnDDETerminate(HWND hwnd, WPARAM wp, LPARAM lp);
@@ -31,3 +28,8 @@ void FindTextOnThread(MainWindow* win, TextSearchDirection direction, const char
                       bool showProgress);
 extern bool gIsStartup;
 extern StrVec gDdeOpenOnStartup;
+extern WCHAR* PDFSYNC_DDE_SERVICE;
+extern WCHAR* PDFSYNC_DDE_TOPIC;
+extern WCHAR* USERAPP_DDE_SERVICE;
+extern WCHAR* USERAPP_DDE_TOPIC;
+

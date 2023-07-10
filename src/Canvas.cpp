@@ -603,13 +603,14 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
             dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y);
             UpdateTextSelection(win, false);
             RepaintAsync(win, 0);
-            /* CPS LAB.*/
-            if (0 < dm->textSelection->result.len) {
+            /* callback to user application via DDE. */
+            if (USERAPP_DDE_SERVICE != nullptr &&
+                USERAPP_DDE_TOPIC != nullptr &&
+                0 < dm->textSelection->result.len) {
                 AutoFreeWstr selection(dm->textSelection->ExtractText(" "));
                 str::NormalizeWSInPlace(selection);
                 if (!str::IsEmpty(selection)) {
-                    //WCHAR* cmd = ToWstrTemp(selection.Get());
-                    DDEExecute(L"BARCODE", L"CODE", selection.Get());
+                    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, selection.Get());
                 }
             }
         }

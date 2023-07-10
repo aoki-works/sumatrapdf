@@ -1209,6 +1209,34 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         goto Exit;
     }
 
+    // DDE Server/Topic name for PdfSync
+    if(flags.pdfsync_dde_service != nullptr) {
+        PDFSYNC_DDE_SERVICE = strconv::Utf8ToWstr(flags.pdfsync_dde_service);
+    } else {
+        PDFSYNC_DDE_SERVICE = strconv::Utf8ToWstr("SUMATRA");
+    }
+    logf("PDFSYNC_DDE_SERVICE : '%ls'\n", PDFSYNC_DDE_SERVICE);
+    if(flags.pdfsync_dde_topic != nullptr) {
+        PDFSYNC_DDE_TOPIC = strconv::Utf8ToWstr(flags.pdfsync_dde_topic);
+    } else {
+        PDFSYNC_DDE_TOPIC = strconv::Utf8ToWstr("control");
+    }
+    logf("PDFSYNC_DDE_TOPIC : '%ls'\n", PDFSYNC_DDE_TOPIC);
+
+    // DDE Server/Topic name for UserApp
+    if(flags.userapp_dde_service != nullptr) {
+        USERAPP_DDE_SERVICE = strconv::Utf8ToWstr(flags.userapp_dde_service);
+    } else {
+        USERAPP_DDE_SERVICE = strconv::Utf8ToWstr("BARCODE");
+    }
+    logf("USERAPP_DDE_SERVICE : '%ls'\n", USERAPP_DDE_SERVICE);
+    if(flags.userapp_dde_topic != nullptr) {
+        USERAPP_DDE_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_topic);
+    } else {
+        USERAPP_DDE_TOPIC = strconv::Utf8ToWstr("CODE");
+    }
+    logf("USERAPP_DDE_TOPIC : '%ls'\n", USERAPP_DDE_TOPIC);
+
     if (flags.printDialog || flags.stressTestPath || gPluginMode) {
         // TODO: pass print request through to previous instance?
     } else if (flags.reuseDdeInstance || flags.dde) {

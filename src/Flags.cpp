@@ -86,7 +86,11 @@
     V(TestBrowser, "test-browser")               \
     V(Adobe, "a")                                \
     V(DDE, "dde")                                \
-    V(SetColorRange, "set-color-range")
+    V(SetColorRange, "set-color-range")          \
+    V(PdfSyncDDEService, "pdfsync-dde-service")  \
+    V(PdfSyncDDETopic, "pdfsync-dde-topic")      \
+    V(UserAppDDEService, "userapp-dde-service")  \
+    V(UserAppDDETopic, "userapp-dde-topic")
 
 #define MAKE_ARG(__arg, __name) __arg,
 #define MAKE_STR(__arg, __name) __name "\0"
@@ -689,6 +693,22 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
             i.globalPrefArgs.Append(args.EatParam());
             continue;
         }
+        if (arg == Arg::PdfSyncDDEService) {
+            i.pdfsync_dde_service = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::PdfSyncDDETopic) {
+            i.pdfsync_dde_topic = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::UserAppDDEService) {
+            i.userapp_dde_service = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::UserAppDDETopic) {
+            i.userapp_dde_topic = str::Dup(param);
+            continue;
+        }
         // again, argName is any of the known args, so assume it's a file starting with '-'
         args.RewindParam();
 
@@ -729,4 +749,8 @@ Flags::~Flags() {
     str::Free(deleteFile);
     str::Free(search);
     str::Free(dde);
+    str::Free(pdfsync_dde_service);
+    str::Free(pdfsync_dde_topic);
+    str::Free(userapp_dde_service);
+    str::Free(userapp_dde_topic);
 }
