@@ -343,6 +343,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
         win->linkOnLastButtonDown = nullptr;
     }
 
+    DisplayModel* dm = win->AsFixed(); // CPS Lab.
     int dx, dy;  // CPS Lab.
     Point prevPos = win->dragPrevPos;
     Point pos{x, y};
@@ -358,7 +359,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
             }
             [[fallthrough]];
         case MouseAction::Selecting:
-            if (gGlobalPrefs->circularSelectionRegion) {
+            if (gGlobalPrefs->circularSelectionRegion and dm->textSelection->result.len == 0) {
                 // CPS Lab.
                 dx = (x - win->selectionRect.x) - win->selectionRect.dx;
                 dy = (y - win->selectionRect.y) - win->selectionRect.dy;

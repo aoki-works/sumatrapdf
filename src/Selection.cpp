@@ -193,8 +193,12 @@ void PaintSelection(MainWindow* win, HDC hdc) {
         }
     }
 
+    DisplayModel* dm = win->AsFixed();
     ParsedColor* parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.selectionColor);
-    if (gGlobalPrefs->circularSelectionRegion && !win->selectionRect.IsEmpty() && win->mouseAction != MouseAction::SelectingText) {
+    if (gGlobalPrefs->circularSelectionRegion &&
+        !win->selectionRect.IsEmpty() &&
+        //win->mouseAction != MouseAction::SelectingText &&
+        dm->textSelection->result.len == 0) {
         PaintTransparentCircles(hdc, win->canvasRc, rects, parsedCol->col);
     } else {
         PaintTransparentRectangles(hdc, win->canvasRc, rects, parsedCol->col);
@@ -488,7 +492,8 @@ void OnSelectionStop(MainWindow* win, int x, int y, bool aborted) {
         UpdateTextSelection(win);
     }
 
-    if (gGlobalPrefs->circularSelectionRegion && win->mouseAction != MouseAction::SelectingText) {
+    DisplayModel* dm = win->AsFixed();
+    if (gGlobalPrefs->circularSelectionRegion && dm->textSelection->result.len == 0){
         // CPS Labs.
         int dx = (x - win->selectionRect.x) - win->selectionRect.dx;
         int dy = (y - win->selectionRect.y) - win->selectionRect.dy;
