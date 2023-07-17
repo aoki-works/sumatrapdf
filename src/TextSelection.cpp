@@ -7,6 +7,8 @@
 
 #include "wingui/UIModels.h"
 
+#include "Settings.h"
+#include "GlobalPrefs.h"
 #include "DocController.h"
 #include "EngineBase.h"
 #include "TextSelection.h"
@@ -16,6 +18,21 @@ uint distSq(int x, int y) {
 }
 // underscore is mainly used for programming and is thus considered a word character
 bool isWordChar(WCHAR c) {
+
+    /*
+    if (gGlobalPrefs->printableCharAsWordChar) {
+        // CPS Labs.
+        if (c == '\n')
+            return false;
+        if (str::IsNonCharacter(c))
+            return false;
+        if (isspace(c))
+            return false;
+        return true;
+    } else {
+        return IsCharAlphaNumeric(c) || c == '_';
+    }
+    */
     return IsCharAlphaNumeric(c) || c == '_';
 }
 

@@ -25,6 +25,8 @@ struct SelectionOnPage {
 void DeleteOldSelectionInfo(MainWindow* win, bool alsoTextSel = false);
 void PaintTransparentRectangles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha = 0x5f,
                                 int margin = 1);
+void PaintTransparentCircles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha = 0x5f,
+                             int margin = 1);
 void PaintSelection(MainWindow* win, HDC hdc);
 void UpdateTextSelection(MainWindow* win, bool select = true);
 void ZoomToSelection(MainWindow* win, float factor, bool scrollToFit = true, bool relative = false);

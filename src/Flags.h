@@ -117,6 +117,7 @@ struct Flags {
     // DDE Service/Topic name for user application
     char* userapp_dde_service = nullptr;
     char* userapp_dde_topic = nullptr;
+    char* userapp_dde_debug_topic = nullptr;
 
     bool testBrowser = false;
 

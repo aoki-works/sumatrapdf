@@ -343,6 +343,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
         win->linkOnLastButtonDown = nullptr;
     }
 
+    int dx, dy;  // CPS Lab.
     Point prevPos = win->dragPrevPos;
     Point pos{x, y};
     Annotation* annot = win->annotationOnLastButtonDown;
@@ -357,8 +358,18 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
             }
             [[fallthrough]];
         case MouseAction::Selecting:
-            win->selectionRect.dx = x - win->selectionRect.x;
-            win->selectionRect.dy = y - win->selectionRect.y;
+            if (gGlobalPrefs->circularSelectionRegion) {
+                // CPS Lab.
+                dx = (x - win->selectionRect.x) - win->selectionRect.dx;
+                dy = (y - win->selectionRect.y) - win->selectionRect.dy;
+                win->selectionRect.x -= dx < dy ? dy : dx;
+                win->selectionRect.y -= dx < dy ? dy : dx;
+                win->selectionRect.dx += 2 * (dx < dy ? dy : dx);
+                win->selectionRect.dy += 2 * (dx < dy ? dy : dx);
+            } else {
+                win->selectionRect.dx = x - win->selectionRect.x;
+                win->selectionRect.dy = y - win->selectionRect.y;
+            }
             OnSelectionEdgeAutoscroll(win, x, y);
             RepaintAsync(win, 0);
             break;
@@ -510,6 +521,52 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         if (MouseAction::Selecting == ma && win->showSelection) {
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
         }
+        /* callback to user application via DDE. CPS Lab.*/
+        if (USERAPP_DDE_SERVICE != nullptr &&
+            USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+            str::Str cmd;
+            cmd.AppendFmt("[AreaSelection(%d, %d, %d, %d)]", win->selectionRect.x, win->selectionRect.y,
+                          win->selectionRect.x + win->selectionRect.dx, win->selectionRect.y + win->selectionRect.dy); 
+            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC,
+                       ToWstrTemp(cmd.Get()));
+        }
+        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+            RectF selectionRect = dm->CvtFromScreen(win->selectionRect);
+            str::Str cmd;
+            cmd.AppendFmt("[AreaSelection(%d, %d, %d, %d)]", selectionRect.x, selectionRect.y,
+                          selectionRect.x + selectionRect.dx, selectionRect.y + selectionRect.dy);
+            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+        }
+        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+            Point pt(x, y);
+            int pageNo = dm->GetPageNoByPoint(pt);
+            PageInfo* pageInfo = dm->GetPageInfo(pageNo);
+            str::Str cmd;
+            cmd.AppendFmt("[PageRect(%d, %d, %d, %d)]", pageInfo->pageOnScreen.x, pageInfo->pageOnScreen.y,
+                          pageInfo->pageOnScreen.x + pageInfo->pageOnScreen.dx, pageInfo->pageOnScreen.y + pageInfo->pageOnScreen.dy);
+            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+        }
+        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+            const char* sep = "\r\n";
+            bool collapse = true;
+            bool isTextOnlySelectionOut = false;
+            WindowTab* tab = win->CurrentTab();
+            char* selText = GetSelectedText(tab, sep, isTextOnlySelectionOut);
+            if (!str::IsEmpty(selText)) {
+                StrVec words;
+                Split(words, selText, sep, collapse);
+                str::Str cmd("[Search(");
+                for (size_t i = 0; i < words.size(); ++i) {
+                    char* s = words.at(i);
+                    if (0 < i) {
+                        cmd.Append(",", 1);
+                    }
+                    cmd.AppendFmt("\"%s\"", s);
+                }
+                cmd.Append(")]", 2);
+                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+            }
+        }
     }
 
     win->mouseAction = MouseAction::Idle;
@@ -603,7 +660,7 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
             dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y);
             UpdateTextSelection(win, false);
             RepaintAsync(win, 0);
-            /* callback to user application via DDE. */
+            /* callback to user application via DDE. CPS Lab.*/
             if (USERAPP_DDE_SERVICE != nullptr &&
                 USERAPP_DDE_TOPIC != nullptr &&
                 0 < dm->textSelection->result.len) {
@@ -611,6 +668,18 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
                 str::NormalizeWSInPlace(selection);
                 if (!str::IsEmpty(selection)) {
                     DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, selection.Get());
+                    if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+                        str::Str cmd;
+                        cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), x, y);
+                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC,
+                                   ToWstrTemp(cmd.Get()));
+                    }
+                    if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+                        str::Str cmd;
+                        cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), pt.x, pt.y);
+                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC,
+                                   ToWstrTemp(cmd.Get()));
+                    }
                 }
             }
         }

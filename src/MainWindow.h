@@ -173,6 +173,9 @@ struct MainWindow {
     Rect selectionRect;
     // size of the current rectangular selection in document units
     SizeF selectionMeasure;
+    // if true, shape of selection region is circle. if false, the shape is
+    // rectangle.
+    bool circularSelectionRegion = false;
 
     // a list of static links (mainly used for About and Frequently Read pages)
     Vec<StaticLinkInfo*> staticLinks;

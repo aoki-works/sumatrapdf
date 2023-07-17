@@ -1685,16 +1685,90 @@ char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
 
     str::WStr result;
     Rect regionI = region.Round();
-    for (const WCHAR* src = pageText; *src; src++) {
-        if (*src != '\n') {
+    if (gGlobalPrefs->circularSelectionRegion) {
+        /* CPS Lab. add  */
+        int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
+        float sqrr = pow(radius, 2);
+        int cx = regionI.x + regionI.dx / 2;
+        int cy = regionI.y + regionI.dy / 2;
+        for (const WCHAR* src = pageText; *src; ) {
+            if (*src == '\n') { ++src; continue; }
+            if (!isWordChar(*src)) { ++src; continue; }
             Rect rect = coords[src - pageText];
-            Rect isect = regionI.Intersect(rect);
-            if (!isect.IsEmpty() && 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) >= 0.3) {
-                result.AppendChar(*src);
+            Rect rc;
+            if (0 < rect.dx) rc = Rect(rect.x - radius, rect.y, rect.dx + 2 * radius, rect.dy);
+            else             rc = Rect(rect.x + radius, rect.y, rect.dx - 2 * radius, rect.dy);
+            Rect isect = regionI.Intersect(rc);
+            if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+                ++src;
+                continue;
             }
-        } else if (result.size() > 0 && result.Last() != '\n') {
+            if (0 < rect.dy) rc = Rect(rect.x, rect.y - radius, rect.dx, rect.dy + 2 * radius);
+            else             rc = Rect(rect.x, rect.y + radius, rect.dx, rect.dy - 2 * radius);
+            isect = regionI.Intersect(rc);
+            if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+                ++src;
+                continue;
+            }
+            if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
+            if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
+            if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
+            if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
+            const WCHAR* begin = src;
+            for (; src <= begin; --begin) if (!isWordChar(*begin)) break;
+            const WCHAR* end = src;
+            for (; *end; ++end) if (!isWordChar(*end)) break;
+            result.Append(begin, end - begin);
             result.Append(L"\r\n", 2);
+            src = end;
         }
+    } else {
+        for (const WCHAR* src = pageText; *src; src++) {
+            if (*src != '\n') {
+                Rect rect = coords[src - pageText];
+                Rect isect = regionI.Intersect(rect);
+                if (!isect.IsEmpty() && 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) >= 0.3) {
+                    result.AppendChar(*src);
+                }
+            } else if (result.size() > 0 && result.Last() != '\n') {
+                result.Append(L"\r\n", 2);
+            }
+        }
+    }
+    int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
+    float sqrr = pow(radius, 2);
+    int cx = regionI.x + regionI.dx / 2;
+    int cy = regionI.y + regionI.dy / 2;
+    for (const WCHAR* src = pageText; *src; ) {
+        if (*src == '\n') { ++src; continue; }
+        if (!isWordChar(*src)) { ++src; continue; }
+        Rect rect = coords[src - pageText];
+        Rect rc;
+        if (0 < rect.dx) rc = Rect(rect.x - radius, rect.y, rect.dx + 2 * radius, rect.dy);
+        else             rc = Rect(rect.x + radius, rect.y, rect.dx - 2 * radius, rect.dy);
+        Rect isect = regionI.Intersect(rc);
+        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+            ++src;
+            continue;
+        }
+        if (0 < rect.dy) rc = Rect(rect.x, rect.y - radius, rect.dx, rect.dy + 2 * radius);
+        else             rc = Rect(rect.x, rect.y + radius, rect.dx, rect.dy - 2 * radius);
+        isect = regionI.Intersect(rc);
+        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+            ++src;
+            continue;
+        }
+        if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
+        if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
+        if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
+        if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
+        const WCHAR* begin = src;
+        for (; src <= begin; --begin) if (!isWordChar(*begin)) break;
+        const WCHAR* end = src;
+        for (; *end; ++end) if (!isWordChar(*end)) break;
+        result.Append(begin, end - begin);
+        result.Append(L"\r\n", 2);
+        src = end;
     }
 
     WCHAR* ws = result.Get();

@@ -361,6 +361,11 @@ var (
 		mkField("CustomScreenDPI", Int, 0,
 			"actual resolution of the main screen in DPI (if this value "+
 				"isn't positive, the system's UI setting is used)").setExpert().setVersion("2.5"),
+		mkField("PrintableCharAsWordChar", Bool, false,
+			"if true, all printable characters except white space are recognized as word-characteres. " +
+            "if false, number, alphabetic and under score (_) are recognized as word-characteres").setExpert(),
+		mkField("CircularSelectionRegion", Bool, false,
+            "if true, a circular shape is used for the area selection").setExpert(),
 		mkEmptyLine(),
 
 		// file history and favorites

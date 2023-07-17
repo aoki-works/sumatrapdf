@@ -107,18 +107,8 @@ void DeleteOldSelectionInfo(MainWindow* win, bool alsoTextSel) {
     }
 }
 
-void PaintTransparentRectangles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha,
-                                int margin) {
-    // create path from rectangles
-    Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
-    screenRc.Inflate(margin, margin);
-    for (size_t i = 0; i < rects.size(); i++) {
-        Rect rc = rects.at(i).Intersect(screenRc);
-        if (!rc.IsEmpty()) {
-            path.AddRectangle(ToGdipRect(rc));
-        }
-    }
 
+static void FillTransparentPath(HDC hdc, Gdiplus::GraphicsPath& path, COLORREF selectionColor, u8 alpha, int margin) {
     // fill path (and draw optional outline margin)
     Gdiplus::Graphics gs(hdc);
     u8 r, g, b;
@@ -132,6 +122,35 @@ void PaintTransparentRectangles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORR
         gs.DrawPath(&tmpPen, &path);
     }
 }
+
+void PaintTransparentRectangles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha,
+                                int margin) {
+    // create path from rectangles
+    Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
+    screenRc.Inflate(margin, margin);
+    for (size_t i = 0; i < rects.size(); i++) {
+        Rect rc = rects.at(i).Intersect(screenRc);
+        if (!rc.IsEmpty()) {
+            path.AddRectangle(ToGdipRect(rc));
+        }
+    }
+    FillTransparentPath(hdc, path, selectionColor, alpha, margin);
+}
+
+void PaintTransparentCircles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha,
+                             int margin) {
+    // create path from rectangles
+    Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
+    screenRc.Inflate(margin, margin);
+    for (size_t i = 0; i < rects.size(); i++) {
+        Rect rc = rects.at(i).Intersect(screenRc);
+        if (!rc.IsEmpty()) {
+            path.AddArc(ToGdipRect(rc), 0, 360);
+        }
+    }
+    FillTransparentPath(hdc, path, selectionColor, alpha, margin);
+}
+
 
 void PaintSelection(MainWindow* win, HDC hdc) {
     CrashIf(!win->AsFixed());
@@ -175,7 +194,11 @@ void PaintSelection(MainWindow* win, HDC hdc) {
     }
 
     ParsedColor* parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.selectionColor);
-    PaintTransparentRectangles(hdc, win->canvasRc, rects, parsedCol->col);
+    if (gGlobalPrefs->circularSelectionRegion && !win->selectionRect.IsEmpty() && win->mouseAction != MouseAction::SelectingText) {
+        PaintTransparentCircles(hdc, win->canvasRc, rects, parsedCol->col);
+    } else {
+        PaintTransparentRectangles(hdc, win->canvasRc, rects, parsedCol->col);
+    }
 }
 
 void UpdateTextSelection(MainWindow* win, bool select) {
@@ -465,7 +488,18 @@ void OnSelectionStop(MainWindow* win, int x, int y, bool aborted) {
         UpdateTextSelection(win);
     }
 
-    win->selectionRect = Rect::FromXY(win->selectionRect.x, win->selectionRect.y, x, y);
+    if (gGlobalPrefs->circularSelectionRegion && win->mouseAction != MouseAction::SelectingText) {
+        // CPS Labs.
+        int dx = (x - win->selectionRect.x) - win->selectionRect.dx;
+        int dy = (y - win->selectionRect.y) - win->selectionRect.dy;
+        win->selectionRect.x -= dx < dy ? dy : dx;
+        win->selectionRect.y -= dx < dy ? dy : dx;
+        win->selectionRect.dx += 2 * (dx < dy ? dy : dx);
+        win->selectionRect.dy += 2 * (dx < dy ? dy : dx);
+    } else {
+        win->selectionRect = Rect::FromXY(win->selectionRect.x, win->selectionRect.y, x, y);
+    }
+
     if (aborted || (MouseAction::Selecting == win->mouseAction ? win->selectionRect.IsEmpty()
                                                                : !win->CurrentTab()->selectionOnPage)) {
         DeleteOldSelectionInfo(win, true);

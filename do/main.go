@@ -189,6 +189,7 @@ func main() {
 		flgClangFormat     bool
 		flgDiff            bool
 		flgGenSettings     bool
+		flgGenSettingsOnly bool
 		flgUpdateVer       string
 		flgDrMem           bool
 		flgLogView         bool
@@ -226,6 +227,7 @@ func main() {
 		//flag.BoolVar(&flgClangTidyFix, "clang-tidy-fix", false, "run clang-tidy (must be installed)")
 		flag.BoolVar(&flgDiff, "diff", false, "preview diff using winmerge")
 		flag.BoolVar(&flgGenSettings, "gen-settings", false, "re-generate src/Settings.h")
+		flag.BoolVar(&flgGenSettingsOnly, "gen-settings-only", false, "re-generate src/Settings.h only. without website update.")
 		flag.StringVar(&flgUpdateVer, "update-auto-update-ver", "", "update version used for auto-update checks")
 		flag.BoolVar(&flgDrMem, "drmem", false, "run drmemory of rel 64")
 		flag.BoolVar(&flgLogView, "logview", false, "run logview")
@@ -318,6 +320,11 @@ func main() {
 
 	if flgGenSettings {
 		genAndSaveSettingsStructs()
+		return
+	}
+
+	if flgGenSettingsOnly {
+		genAndSaveSettingsOnly()
 		return
 	}
 

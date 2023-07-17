@@ -90,7 +90,8 @@
     V(PdfSyncDDEService, "pdfsync-dde-service")  \
     V(PdfSyncDDETopic, "pdfsync-dde-topic")      \
     V(UserAppDDEService, "userapp-dde-service")  \
-    V(UserAppDDETopic, "userapp-dde-topic")
+    V(UserAppDDETopic, "userapp-dde-topic") \
+    V(UserAppDDEDebugTopic, "userapp-dde-debug-topic")
 
 #define MAKE_ARG(__arg, __name) __arg,
 #define MAKE_STR(__arg, __name) __name "\0"
@@ -707,6 +708,10 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
         }
         if (arg == Arg::UserAppDDETopic) {
             i.userapp_dde_topic = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::UserAppDDEDebugTopic) {
+            i.userapp_dde_debug_topic = str::Dup(param);
             continue;
         }
         // again, argName is any of the known args, so assume it's a file starting with '-'

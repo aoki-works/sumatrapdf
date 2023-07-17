@@ -549,3 +549,15 @@ func genAndSaveSettingsStructs() {
 	genLangsHTML()
 	logf(ctx(), "!!!!!! checkin sumatra website repo!!!!\n")
 }
+
+
+func genAndSaveSettingsOnly() {
+	s := genSettingsStruct()
+	s = strings.Replace(s, "\n", "\r\n", -1)
+	s = strings.Replace(s, "\t", "    ", -1)
+	path := filepath.Join("src", "Settings.h")
+	writeFileMust(path, []byte(s))
+	detectClangFormat()
+	clangFormatFile(path)
+	fmt.Printf("Wrote '%s'\n", path)
+}

@@ -1236,6 +1236,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         USERAPP_DDE_TOPIC = strconv::Utf8ToWstr("CODE");
     }
     logf("USERAPP_DDE_TOPIC : '%ls'\n", USERAPP_DDE_TOPIC);
+    if(flags.userapp_dde_debug_topic != nullptr) {
+        USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_debug_topic);
+    } else {
+        USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWstr("DEBUG_CODE");
+    }
+    logf("USERAPP_DDE_DEBUG_TOPIC : '%ls'\n", USERAPP_DDE_DEBUG_TOPIC);
 
     if (flags.printDialog || flags.stressTestPath || gPluginMode) {
         // TODO: pass print request through to previous instance?
