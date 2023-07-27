@@ -2266,29 +2266,40 @@ bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command) {
     DWORD cbLen = 0;
     HDDEDATA answer;
 
+    logf("DDEExecute : %ls\n", command);
     CrashIf(str::Len(command) >= INT_MAX - 1);
     if (str::Len(command) >= INT_MAX - 1) {
+        logf("Failed \n");
         return false;
     }
 
+    logf("DdeInitializeW \n");
     result = DdeInitializeW(&inst, DdeCallback, APPCMD_CLIENTONLY, 0);
     if (result != DMLERR_NO_ERROR) {
+        logf("Failed \n");
         return false;
     }
 
+    logf("DdeCreateStringHandle ServerName : %ls\n", server);
     hszServer = DdeCreateStringHandleW(inst, server, CP_WINNEUTRAL);
     if (!hszServer) {
+        logf("Failed \n");
         goto Exit;
     }
+    logf("DdeCreateStringHandle TopicName : %ls\n", topic);
     hszTopic = DdeCreateStringHandleW(inst, topic, CP_WINNEUTRAL);
     if (!hszTopic) {
+        logf("Failed \n");
         goto Exit;
     }
+    logf("DdeConnect \n");
     hconv = DdeConnect(inst, hszServer, hszTopic, nullptr);
     if (!hconv) {
+        logf("Failed \n");
         goto Exit;
     }
 
+    logf("DdeTransatcion \n");
     cbLen = ((DWORD)str::Len(command) + 1) * sizeof(WCHAR);
     answer = DdeClientTransaction((BYTE*)command, cbLen, hconv, nullptr, CF_UNICODETEXT, XTYP_EXECUTE, 10000, nullptr);
     if (answer) {
@@ -2307,6 +2318,7 @@ Exit:
         DdeFreeStringHandle(inst, hszServer);
     }
     DdeUninitialize(inst);
+    logf("Return \n");
 
     return ok;
 }

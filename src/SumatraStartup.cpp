@@ -1227,13 +1227,13 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     if(flags.userapp_dde_service != nullptr) {
         USERAPP_DDE_SERVICE = strconv::Utf8ToWstr(flags.userapp_dde_service);
     } else {
-        USERAPP_DDE_SERVICE = strconv::Utf8ToWstr("BARCODE");
+        USERAPP_DDE_SERVICE = strconv::Utf8ToWstr("USERAPP");
     }
     logf("USERAPP_DDE_SERVICE : '%ls'\n", USERAPP_DDE_SERVICE);
     if(flags.userapp_dde_topic != nullptr) {
         USERAPP_DDE_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_topic);
     } else {
-        USERAPP_DDE_TOPIC = strconv::Utf8ToWstr("CODE");
+        USERAPP_DDE_TOPIC = strconv::Utf8ToWstr("xcontrol");
     }
     logf("USERAPP_DDE_TOPIC : '%ls'\n", USERAPP_DDE_TOPIC);
     if(flags.userapp_dde_debug_topic != nullptr) {
