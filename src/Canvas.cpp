@@ -523,20 +523,18 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
         }
         /* callback to user application via DDE. CPS Lab.*/
-        if (USERAPP_DDE_SERVICE != nullptr &&
-            USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
             str::Str cmd;
             cmd.AppendFmt("[AreaSelection(%d, %d, %d, %d)]", win->selectionRect.x, win->selectionRect.y,
                           win->selectionRect.x + win->selectionRect.dx, win->selectionRect.y + win->selectionRect.dy); 
-            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC,
-                       ToWstrTemp(cmd.Get()));
+            //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
         }
         if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
             RectF selectionRect = dm->CvtFromScreen(win->selectionRect);
             str::Str cmd;
             cmd.AppendFmt("[AreaSelection(%d, %d, %d, %d)]", selectionRect.x, selectionRect.y,
                           selectionRect.x + selectionRect.dx, selectionRect.y + selectionRect.dy);
-            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+            //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
         }
         if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
             Point pt(x, y);
@@ -545,9 +543,9 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
             str::Str cmd;
             cmd.AppendFmt("[PageRect(%d, %d, %d, %d)]", pageInfo->pageOnScreen.x, pageInfo->pageOnScreen.y,
                           pageInfo->pageOnScreen.x + pageInfo->pageOnScreen.dx, pageInfo->pageOnScreen.y + pageInfo->pageOnScreen.dy);
-            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+            //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
         }
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
             const char* sep = "\r\n";
             bool collapse = true;
             bool isTextOnlySelectionOut = false;
@@ -565,7 +563,7 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
                     cmd.AppendFmt("\"%s\"", s);
                 }
                 cmd.Append(")]", 2);
-                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
             }
         }
     }
@@ -668,18 +666,17 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
                 AutoFreeWstr selection(dm->textSelection->ExtractText(" "));
                 str::NormalizeWSInPlace(selection);
                 if (!str::IsEmpty(selection)) {
-                    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, selection.Get());
+                    str::Str cmd;
+                    cmd.AppendFmt("[Search(\"%ls\")]", selection.Get());
+                    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+                    //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, selection.Get());
                     if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
-                        str::Str cmd;
                         cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), x, y);
-                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC,
-                                   ToWstrTemp(cmd.Get()));
+                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
                     }
                     if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
-                        str::Str cmd;
                         cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), pt.x, pt.y);
-                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC,
-                                   ToWstrTemp(cmd.Get()));
+                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
                     }
                 }
             }
