@@ -39,8 +39,8 @@ struct TextSelection {
     bool IsOverGlyph(int pageNo, double x, double y);
     void StartAt(int pageNo, int glyphIx);
     void StartAt(int pageNo, double x, double y);
-    void SelectUpTo(int pageNo, int glyphIx);
-    void SelectUpTo(int pageNo, double x, double y);
+    void SelectUpTo(int pageNo, int glyphIx, bool conti=false);
+    void SelectUpTo(int pageNo, double x, double y, bool conti=false);
     void SelectWordAt(int pageNo, double x, double y);
     void CopySelection(TextSelection* orig);
     WCHAR* ExtractText(const char* lineSep);

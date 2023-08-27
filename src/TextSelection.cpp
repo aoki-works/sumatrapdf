@@ -18,8 +18,6 @@ uint distSq(int x, int y) {
 }
 // underscore is mainly used for programming and is thus considered a word character
 bool isWordChar(WCHAR c) {
-
-    /*
     if (gGlobalPrefs->printableCharAsWordChar) {
         // CPS Labs.
         if (c == '\n')
@@ -32,8 +30,7 @@ bool isWordChar(WCHAR c) {
     } else {
         return IsCharAlphaNumeric(c) || c == '_';
     }
-    */
-    return IsCharAlphaNumeric(c) || c == '_';
+    //return IsCharAlphaNumeric(c) || c == '_';
 }
 
 DocumentTextCache::DocumentTextCache(EngineBase* engine) : engine(engine) {
@@ -249,11 +246,11 @@ void TextSelection::StartAt(int pageNo, double x, double y) {
     StartAt(pageNo, FindClosestGlyph(this, pageNo, x, y));
 }
 
-void TextSelection::SelectUpTo(int pageNo, double x, double y) {
-    SelectUpTo(pageNo, FindClosestGlyph(this, pageNo, x, y));
+void TextSelection::SelectUpTo(int pageNo, double x, double y, bool conti) {
+    SelectUpTo(pageNo, FindClosestGlyph(this, pageNo, x, y), conti);
 }
 
-void TextSelection::SelectUpTo(int pageNo, int glyphIx) {
+void TextSelection::SelectUpTo(int pageNo, int glyphIx, bool conti) {
     if (startPage == -1 || startGlyph == -1) {
         return;
     }
@@ -266,7 +263,9 @@ void TextSelection::SelectUpTo(int pageNo, int glyphIx) {
         endGlyph = textLen + glyphIx + 1;
     }
 
-    result.len = 0;
+    if (not conti) {
+        result.len = 0;  // CPS Lab.
+    }
     int fromPage = std::min(startPage, endPage), toPage = std::max(startPage, endPage);
     int fromGlyph = (fromPage == endPage ? endGlyph : startGlyph);
     int toGlyph = (fromPage == endPage ? startGlyph : endGlyph);

@@ -529,6 +529,7 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
                           win->selectionRect.x + win->selectionRect.dx, win->selectionRect.y + win->selectionRect.dy); 
             //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
         }
+        /* callback to user application via DDE. CPS Lab.*/
         if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
             RectF selectionRect = dm->CvtFromScreen(win->selectionRect);
             str::Str cmd;
@@ -536,6 +537,7 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
                           selectionRect.x + selectionRect.dx, selectionRect.y + selectionRect.dy);
             //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
         }
+        /* callback to user application via DDE. CPS Lab.*/
         if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
             Point pt(x, y);
             int pageNo = dm->GetPageNoByPoint(pt);
@@ -545,12 +547,16 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
                           pageInfo->pageOnScreen.x + pageInfo->pageOnScreen.dx, pageInfo->pageOnScreen.y + pageInfo->pageOnScreen.dy);
             //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
         }
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
+        /* callback to user application via DDE. CPS Lab.*/
+        //if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
+        {
             const char* sep = "\r\n";
             bool collapse = true;
             bool isTextOnlySelectionOut = false;
             WindowTab* tab = win->CurrentTab();
             char* selText = GetSelectedText(tab, sep, isTextOnlySelectionOut);
+            UpdateTextSelection(win, false);
+            RepaintAsync(win, 0);
             if (!str::IsEmpty(selText)) {
                 StrVec words;
                 Split(words, selText, sep, collapse);
@@ -563,7 +569,9 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
                     cmd.AppendFmt("\"%s\"", s);
                 }
                 cmd.Append(")]", 2);
-                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+                if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
+                    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+                }
             }
         }
     }
@@ -660,9 +668,7 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
             UpdateTextSelection(win, false);
             RepaintAsync(win, 0);
             /* callback to user application via DDE. CPS Lab.*/
-            if (USERAPP_DDE_SERVICE != nullptr &&
-                USERAPP_DDE_TOPIC != nullptr &&
-                0 < dm->textSelection->result.len) {
+            if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr && 0 < dm->textSelection->result.len) {
                 AutoFreeWstr selection(dm->textSelection->ExtractText(" "));
                 str::NormalizeWSInPlace(selection);
                 if (!str::IsEmpty(selection)) {

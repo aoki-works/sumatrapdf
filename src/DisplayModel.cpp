@@ -1674,6 +1674,7 @@ void DisplayModel::RotateBy(int newRotation) {
     GoToPage(currPageNo, 0);
 }
 
+
 /* Given <region> (in user coordinates ) on page <pageNo>, copies text in that region
  * into a newly allocated buffer (which the caller needs to free()). */
 char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
@@ -1691,6 +1692,7 @@ char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
         float sqrr = pow(radius, 2);
         int cx = regionI.x + regionI.dx / 2;
         int cy = regionI.y + regionI.dy / 2;
+        int selected_words = 0;
         for (const WCHAR* src = pageText; *src; ) {
             if (*src == '\n') { ++src; continue; }
             if (!isWordChar(*src)) { ++src; continue; }
@@ -1715,14 +1717,60 @@ char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
             if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
             if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
             const WCHAR* begin = src;
-            for (; src <= begin; --begin) if (!isWordChar(*begin)) break;
+            for (; *begin; --begin) if (!isWordChar(*begin)) break;
+            if (!isWordChar(*begin)) begin++;
             const WCHAR* end = src;
             for (; *end; ++end) if (!isWordChar(*end)) break;
+            /**/
+            rect = coords[begin - pageText];
+            int px , py;  
+            px = rect.x + rect.dx / 2.0;
+            py = rect.y + rect.dy / 2.0;
+            textSelection->StartAt(pageNo, px, py);
+            rect = coords[end - pageText - 1];
+            px = rect.x + rect.dx ;
+            py = rect.y + rect.dy / 2.0;
+            textSelection->SelectUpTo(pageNo, px, py, 0 < selected_words);
+            /**/
             result.Append(begin, end - begin);
             result.Append(L"\r\n", 2);
             src = end;
+            selected_words++;
         }
     } else {
+        /* CPS Lab. add  */
+        int selected_words = 0;
+        for (const WCHAR* src = pageText; *src; ) {
+            if (*src == '\n') { ++src; continue; }
+            if (!isWordChar(*src)) { ++src; continue; }
+            Rect rect = coords[src - pageText];
+            Rect isect = regionI.Intersect(rect);
+            if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+                ++src;
+                continue;
+            }
+            const WCHAR* begin = src;
+            for (; *begin; --begin) if (!isWordChar(*begin)) break;
+            if (!isWordChar(*begin)) begin++;
+            const WCHAR* end = src;
+            for (; *end; ++end) if (!isWordChar(*end)) break;
+            /**/
+            rect = coords[begin - pageText];
+            int px , py;  
+            px = rect.x + rect.dx / 2.0;
+            py = rect.y + rect.dy / 2.0;
+            textSelection->StartAt(pageNo, px, py);
+            rect = coords[end - pageText - 1];
+            px = rect.x + rect.dx ;
+            py = rect.y + rect.dy / 2.0;
+            textSelection->SelectUpTo(pageNo, px, py, 0 < selected_words);
+            /**/
+            result.Append(begin, end - begin);
+            result.Append(L"\r\n", 2);
+            src = end;
+            selected_words++;
+        }
+        /*
         for (const WCHAR* src = pageText; *src; src++) {
             if (*src != '\n') {
                 Rect rect = coords[src - pageText];
@@ -1734,43 +1782,8 @@ char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
                 result.Append(L"\r\n", 2);
             }
         }
+        */
     }
-    int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
-    float sqrr = pow(radius, 2);
-    int cx = regionI.x + regionI.dx / 2;
-    int cy = regionI.y + regionI.dy / 2;
-    for (const WCHAR* src = pageText; *src; ) {
-        if (*src == '\n') { ++src; continue; }
-        if (!isWordChar(*src)) { ++src; continue; }
-        Rect rect = coords[src - pageText];
-        Rect rc;
-        if (0 < rect.dx) rc = Rect(rect.x - radius, rect.y, rect.dx + 2 * radius, rect.dy);
-        else             rc = Rect(rect.x + radius, rect.y, rect.dx - 2 * radius, rect.dy);
-        Rect isect = regionI.Intersect(rc);
-        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
-            ++src;
-            continue;
-        }
-        if (0 < rect.dy) rc = Rect(rect.x, rect.y - radius, rect.dx, rect.dy + 2 * radius);
-        else             rc = Rect(rect.x, rect.y + radius, rect.dx, rect.dy - 2 * radius);
-        isect = regionI.Intersect(rc);
-        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
-            ++src;
-            continue;
-        }
-        if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
-        if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
-        if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
-        if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
-        const WCHAR* begin = src;
-        for (; src <= begin; --begin) if (!isWordChar(*begin)) break;
-        const WCHAR* end = src;
-        for (; *end; ++end) if (!isWordChar(*end)) break;
-        result.Append(begin, end - begin);
-        result.Append(L"\r\n", 2);
-        src = end;
-    }
-
     WCHAR* ws = result.Get();
     return ToUtf8(ws);
 }
