@@ -927,6 +927,59 @@ static const char* HandleSetViewCmd(const char* cmd, DDEACK& ack) {
     return next;
 }
 
+
+
+/*
+ CPS Lab.
+[GetText("<pdffilepath>", "<textFileName>", "<pageNo>")]
+[GetText("<pdffilepath>", "<textFileName>)]
+*/
+static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
+    AutoFreeStr pdfFile ;
+    AutoFreeStr txtFile ;
+    float zoom = kInvalidZoom;
+    Point scroll(-1, -1);
+    int pageNo=0;
+    const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\",%? \"%d\")]", &pdfFile, &txtFile, &pageNo);
+    if (!next) {
+        next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+    }
+    if (!next) {
+        return nullptr;
+    }
+
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+
+    DisplayModel* dm = win->AsFixed();
+    char* text = nullptr;
+    if (0 < pageNo) {
+        text = dm->GetText(pageNo);
+    } else {
+        text = dm->GetText();
+    }
+    if (text != nullptr) {
+        FILE* outFile = nullptr;
+        WCHAR* tmpFileW = ToWstrTemp(txtFile);
+        errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
+        if (err == 0) {
+            std::fwrite(text, 1, std::strlen(text), outFile);
+            std::fclose(outFile);
+        }
+        str::Free(text);
+    }
+    ack.fAck = 1;
+    return next;
+}
+
 /*
 Handle all commands as defined in Commands.h
 eg: [CmdClose]
@@ -971,6 +1024,9 @@ static void HandleDdeCmds(HWND hwnd, const char* cmd, DDEACK& ack) {
         }
         if (!nextCmd) {
             nextCmd = HandleSearchCmd(cmd, ack);
+        }
+        if (!nextCmd) {
+            nextCmd = HandleGetTextCmd(cmd, ack);
         }
         if (!nextCmd) {
             nextCmd = HandleCmdCommand(hwnd, cmd, ack);

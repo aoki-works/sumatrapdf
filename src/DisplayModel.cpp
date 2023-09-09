@@ -1674,6 +1674,29 @@ void DisplayModel::RotateBy(int newRotation) {
     GoToPage(currPageNo, 0);
 }
 
+char* DisplayModel::GetText(int pageNo) const { // CPS lab.
+    Rect* coords;
+    const WCHAR* pageText = textCache->GetTextForPage(pageNo, nullptr, &coords);
+    if (str::IsEmpty(pageText)) {
+        return nullptr;
+    }
+    return ToUtf8(pageText);
+}
+
+char* DisplayModel::GetText() const {   // CPS lab.
+    Rect* coords;
+    str::WStr result;
+    int pageCount = PageCount();
+    for (int pageNo = 1; pageNo < pageCount; pageNo++) {
+        const WCHAR* pageText = textCache->GetTextForPage(pageNo, nullptr, &coords);
+        if (str::IsEmpty(pageText)) {
+            continue;
+        }
+        result.Append(pageText, str::Len(pageText));
+    }
+    WCHAR* ws = result.Get();
+    return ToUtf8(ws);
+}
 
 /* Given <region> (in user coordinates ) on page <pageNo>, copies text in that region
  * into a newly allocated buffer (which the caller needs to free()). */
