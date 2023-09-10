@@ -253,7 +253,7 @@ static const WCHAR* GetNextIndex(const WCHAR* base, int offset, bool forward) {
     return c;
 }
 
-bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyph) {
+bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyph, bool conti) {
     if (str::IsEmpty(findText)) {
         return false;
     }
@@ -290,7 +290,7 @@ bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyp
     int offset = (int)(found - pageText);
     searchHitStartAt = pageNo;
     StartAt(pageNo, offset);
-    SelectUpTo(fg.page, fg.offset);
+    SelectUpTo(fg.page, fg.offset, conti);
     findIndex = forward ? fg.offset : offset;
 
     // try again if the found text is completely outside the page's mediabox
@@ -304,7 +304,7 @@ bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyp
     return true;
 }
 
-bool TextSearch::FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker) {
+bool TextSearch::FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker, bool conti) {
     if (str::IsEmpty(findText)) {
         return false;
     }
@@ -328,7 +328,7 @@ bool TextSearch::FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker) {
                 findIndex = 0;
             }
             PageAndOffset r;
-            if (FindTextInPage(pageNo, &r)) {
+            if (FindTextInPage(pageNo, &r, conti)) {
                 if (forward) {
                     if (findPage != r.page) {
                         findPage = r.page;
@@ -350,16 +350,16 @@ bool TextSearch::FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker) {
     return false;
 }
 
-TextSel* TextSearch::FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tracker) {
+TextSel* TextSearch::FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tracker, bool conti) {
     SetText(text);
 
-    if (FindStartingAtPage(page, tracker)) {
+    if (FindStartingAtPage(page, tracker, conti)) {
         return &result;
     }
     return nullptr;
 }
 
-TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker) {
+TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker, bool conti) {
     CrashIf(!findText);
     if (!findText) {
         return nullptr;
@@ -373,7 +373,7 @@ TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker) {
     }
 
     PageAndOffset finalGlyph;
-    if (FindTextInPage(findPage, &finalGlyph)) {
+    if (FindTextInPage(findPage, &finalGlyph, conti)) {
         if (forward) {
             findPage = finalGlyph.page;
             findIndex = finalGlyph.offset;
@@ -383,7 +383,7 @@ TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker) {
     }
 
     auto next = forward ? 1 : -1;
-    if (FindStartingAtPage(findPage + next, tracker)) {
+    if (FindStartingAtPage(findPage + next, tracker, conti)) {
         return &result;
     }
     return nullptr;

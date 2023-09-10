@@ -13,8 +13,8 @@ class TextSearch : public TextSelection {
     void SetSensitive(bool sensitive);
     void SetDirection(TextSearchDirection direction);
     void SetLastResult(TextSelection* sel);
-    TextSel* FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tracker = nullptr);
-    TextSel* FindNext(ProgressUpdateUI* tracker = nullptr);
+    TextSel* FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tracker = nullptr, bool conti=false);
+    TextSel* FindNext(ProgressUpdateUI* tracker = nullptr, bool conti=false);
 
     int GetCurrentPageNo() const;
     int GetSearchHitStartPageNo() const;
@@ -39,8 +39,8 @@ class TextSearch : public TextSelection {
     bool matchWordEnd = false;
 
     void SetText(const WCHAR* text);
-    bool FindTextInPage(int pageNo, PageAndOffset* finalGlyph);
-    bool FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker);
+    bool FindTextInPage(int pageNo, PageAndOffset* finalGlyph, bool conti=false);
+    bool FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker, bool conti=false);
     PageAndOffset MatchEnd(const WCHAR* start) const;
 
     void Clear();

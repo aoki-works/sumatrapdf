@@ -305,10 +305,12 @@ void TextSelection::SelectWordAt(int pageNo, double x, double y) {
     SelectUpTo(pageNo, i);
 }
 
-void TextSelection::CopySelection(TextSelection* orig) {
-    Reset();
+void TextSelection::CopySelection(TextSelection* orig, bool conti) {
+    if (!conti) {
+        Reset();
+    }
     StartAt(orig->startPage, orig->startGlyph);
-    SelectUpTo(orig->endPage, orig->endGlyph);
+    SelectUpTo(orig->endPage, orig->endGlyph, conti);
 }
 
 WCHAR* TextSelection::ExtractText(const char* lineSep) {

@@ -42,7 +42,7 @@ struct TextSelection {
     void SelectUpTo(int pageNo, int glyphIx, bool conti=false);
     void SelectUpTo(int pageNo, double x, double y, bool conti=false);
     void SelectWordAt(int pageNo, double x, double y);
-    void CopySelection(TextSelection* orig);
+    void CopySelection(TextSelection* orig, bool conti=false);
     WCHAR* ExtractText(const char* lineSep);
     void Reset();
 

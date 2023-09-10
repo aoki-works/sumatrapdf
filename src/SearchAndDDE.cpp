@@ -19,6 +19,7 @@
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
+#include "Annotation.h"
 #include "GlobalPrefs.h"
 #include "ChmModel.h"
 #include "DisplayModel.h"
@@ -980,6 +981,171 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
     return next;
 }
 
+
+/*
+ CPS Lab.
+[SelectText("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
+[SelectText("<pdffilepath>", "<Text>", "<Text>", ...)]
+*/
+static const char* HandleSelectTextCmd(const char* cmd, DDEACK& ack)
+{
+    static Vec<Annotation*> ANNOTS;
+    AutoFreeStr pdfFile ;
+    float zoom = kInvalidZoom;
+    Point scroll(-1, -1);
+    // ---------------------------------------------
+    //AutoFreeStr term;
+    int pageNo=0;
+    const char* next = str::Parse(cmd, "[SelectText(\"%s\",%? \"%d\",%? ", &pdfFile, &pageNo);
+    if (!next) {
+        next = str::Parse(cmd, "[SelectText(\"%s\",%? ", &pdfFile);
+    }
+    if (!next) {
+        bool wasModified = true;
+        bool showProgress = true;
+        MainWindow* win = FindMainWindowByFile(pdfFile, true);
+        HwndSetText(win->hwndFindEdit, "NsOT SELECT");
+        FindTextOnThread(win, TextSearchDirection::Forward, "NsOT SELECT", wasModified, showProgress);
+        return nullptr;
+    }
+    // ---------------------------------------------
+    AutoFreeStr word ;
+    StrVec word_vec;
+    const char* curcmd = next;
+    while (true) {
+        next = str::Parse(curcmd, "\"%s\",%? ", &word);
+        if (!next) {
+            next = str::Parse(curcmd, "\"%s\")]", &word);
+        }
+        if (!next) { break; }
+        word_vec.Append(word.Get());
+        curcmd = next;
+    }
+    if (word_vec.Size() == 0) {
+        bool wasModified = true;
+        bool showProgress = true;
+        MainWindow* win = FindMainWindowByFile(pdfFile, true);
+        HwndSetText(win->hwndFindEdit, "NOT SELECT2");
+        FindTextOnThread(win, TextSearchDirection::Forward, "NOT SELECT2", wasModified, showProgress);
+        return nullptr;
+    }
+    // ---------------------------------------------
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+    // ---------------------------------------------
+    /*
+    DisplayModel* dm = win->AsFixed();
+    char* text = nullptr;
+    if (0 < pageNo) {
+        text = dm->GetText(pageNo);
+    } else {
+        text = dm->GetText();
+    }
+    if (text != nullptr) {
+        FILE* outFile = nullptr;
+        WCHAR* tmpFileW = ToWstrTemp(txtFile);
+        errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
+        if (err == 0) {
+            std::fwrite(text, 1, std::strlen(text), outFile);
+            std::fclose(outFile);
+        }
+        str::Free(text);
+    }
+    */
+    // ---------------------------------------------
+    //Vec<Rect> rects;
+    //Vec<int> pageNos;
+    ack.fAck = 1;
+    WindowTab* tab = win->CurrentTab();
+    DisplayModel* dm = tab->AsFixed();
+    dm->textSearch->SetDirection(TextSearchDirection::Forward);
+    ClearSearchResult(win);
+    bool conti = false;
+    for (auto i = 0; i < word_vec.Size(); i++) {
+        char* term = word_vec.at(i);
+        TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
+        if (!sel) { continue; }
+        do {
+            dm->textSelection->CopySelection(dm->textSearch, conti);
+            UpdateTextSelection(win, false);
+            //dm->ShowResultRectToScreen(sel);
+            conti = true;
+            sel = dm->textSearch->FindNext(nullptr, conti);
+        } while (sel);
+    }
+    RepaintAsync(win, 0);
+    // ---------------------------------------------
+    for (auto annot : ANNOTS) {
+        DeleteAnnotation(annot);
+    }
+    ANNOTS.Reset();
+    // ---------------------------------------------
+    auto engine = dm->GetEngine();
+    Vec<SelectionOnPage>* s = tab->selectionOnPage;
+    Vec<int> pageNos;
+    for (auto& sel : *s) {
+        int pno = sel.pageNo;
+        if (!dm->ValidPageNo(pno)) {
+            continue;
+        }
+        bool fo = false;
+        for (auto n : pageNos) {
+            if (n == pno) { fo = true; break; }
+        }
+        if (!fo) { pageNos.Append(pno); }
+    }
+    for (auto pno : pageNos) {
+        Vec<RectF> rects;
+        for (auto& sel : *s) {
+            if (pno != sel.pageNo) {
+                continue;
+            }
+            rects.Append(sel.rect);
+        }
+        Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pno, PointF{});
+        SetQuadPointsAsRect(annot, rects);
+        ANNOTS.Append(annot);
+    }
+    DeleteOldSelectionInfo(win, true);
+    MainWindowRerender(win);
+    /*
+    DeleteOldSelectionInfo(win, true);
+    RepaintAsync(win, 0);
+    bool cont = false;
+    for (auto i = 0; i < rects.Size(); ++i) {
+        int pn = pageNos.at(i);
+        Rect r = rects.at(i);
+        dm->textSelection->SelectWordAt(pn, r.x+r.dx/.2, r.y+r.dy/.2);
+        int px, py;
+        // px = r.x + r.dx / 2.0;
+        // py = r.y + r.dy / 2.0;
+        px = r.x;
+        py = r.y;
+        dm->textSelection->StartAt(pn, px, py);
+        // px = r.x + r.dx;
+        // py = r.y + r.dy / 2.0;
+        px = r.x + r.dx;
+        py = r.y + r.dy / 2.0;
+        dm->textSelection->SelectUpTo(pn, px, py, cont);
+        cont = true;
+    }
+    UpdateTextSelection(win);
+    RepaintAsync(win, 0);
+    //win->Focus();
+    */
+    return next;
+}
+
+
+
 /*
 Handle all commands as defined in Commands.h
 eg: [CmdClose]
@@ -1027,6 +1193,9 @@ static void HandleDdeCmds(HWND hwnd, const char* cmd, DDEACK& ack) {
         }
         if (!nextCmd) {
             nextCmd = HandleGetTextCmd(cmd, ack);
+        }
+        if (!nextCmd) {
+            nextCmd = HandleSelectTextCmd(cmd, ack);
         }
         if (!nextCmd) {
             nextCmd = HandleCmdCommand(hwnd, cmd, ack);
