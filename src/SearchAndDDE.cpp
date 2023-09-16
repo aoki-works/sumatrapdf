@@ -941,9 +941,18 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
     int pageNo=0;
+    bool get_word = false;
     const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\",%? \"%d\")]", &pdfFile, &txtFile, &pageNo);
     if (!next) {
         next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+    }
+    if (!next) {
+        next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\",%? \"%d\")]", &pdfFile, &txtFile, &pageNo);
+        get_word = true;
+    }
+    if (!next) {
+        next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+        get_word = true;
     }
     if (!next) {
         return nullptr;
@@ -967,16 +976,47 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
     } else {
         text = dm->GetText();
     }
-    if (text != nullptr) {
-        FILE* outFile = nullptr;
-        WCHAR* tmpFileW = ToWstrTemp(txtFile);
-        errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
-        if (err == 0) {
-            std::fwrite(text, 1, std::strlen(text), outFile);
-            std::fclose(outFile);
-        }
-        str::Free(text);
+    if (text == nullptr) {
+        return next;
     }
+
+    StrVec text_vec;
+    if (get_word) {
+        StrVec word_vec;
+        const char* delim = ", \n";
+        char* ctx;
+        char* wd = strtok_s(text, delim, &ctx);
+        while (wd) {
+            word_vec.Append(wd);
+            wd = strtok_s(nullptr, delim, &ctx);
+        }
+        word_vec.Sort();
+
+        char* prev = nullptr;
+        for (auto sel : word_vec) {
+            if (prev == nullptr || !str::Eq(prev, sel)) {
+                text_vec.Append(sel);
+                prev = sel;
+            }
+        }
+    }
+
+    FILE* outFile = nullptr;
+    WCHAR* tmpFileW = ToWstrTemp(txtFile);
+    errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
+    if (err == 0) {
+        if (0 < text_vec.Size()) {
+            for (auto sel : text_vec) {
+                std::fputs(sel, outFile);
+                std::fputs("\n", outFile);
+            }
+        } else {
+            std::fwrite(text, 1, std::strlen(text), outFile);
+        }
+        std::fclose(outFile);
+    }
+    str::Free(text);
+
     ack.fAck = 1;
     return next;
 }
