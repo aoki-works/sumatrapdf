@@ -984,10 +984,10 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
 
 /*
  CPS Lab.
-[SelectText("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
-[SelectText("<pdffilepath>", "<Text>", "<Text>", ...)]
+[MarkText("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
+[MarkText("<pdffilepath>", "<Text>", "<Text>", ...)]
 */
-static const char* HandleSelectTextCmd(const char* cmd, DDEACK& ack)
+static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
 {
     static Vec<Annotation*> ANNOTS;
     AutoFreeStr pdfFile ;
@@ -996,18 +996,18 @@ static const char* HandleSelectTextCmd(const char* cmd, DDEACK& ack)
     // ---------------------------------------------
     //AutoFreeStr term;
     int pageNo=0;
-    const char* next = str::Parse(cmd, "[SelectText(\"%s\",%? \"%d\",%? ", &pdfFile, &pageNo);
+    const char* next = str::Parse(cmd, "[MarkText(\"%s\",%? \"%d\",%? ", &pdfFile, &pageNo);
     if (!next) {
-        next = str::Parse(cmd, "[SelectText(\"%s\",%? ", &pdfFile);
+        next = str::Parse(cmd, "[MarkText(\"%s\",%? ", &pdfFile);
     }
     if (!next) {
-        bool wasModified = true;
-        bool showProgress = true;
-        MainWindow* win = FindMainWindowByFile(pdfFile, true);
-        HwndSetText(win->hwndFindEdit, "NsOT SELECT");
-        FindTextOnThread(win, TextSearchDirection::Forward, "NsOT SELECT", wasModified, showProgress);
         return nullptr;
     }
+    // ---------------------------------------------
+    for (auto annot : ANNOTS) {
+        DeleteAnnotation(annot);
+    }
+    ANNOTS.Reset();
     // ---------------------------------------------
     AutoFreeStr word ;
     StrVec word_vec;
@@ -1022,11 +1022,6 @@ static const char* HandleSelectTextCmd(const char* cmd, DDEACK& ack)
         curcmd = next;
     }
     if (word_vec.Size() == 0) {
-        bool wasModified = true;
-        bool showProgress = true;
-        MainWindow* win = FindMainWindowByFile(pdfFile, true);
-        HwndSetText(win->hwndFindEdit, "NOT SELECT2");
-        FindTextOnThread(win, TextSearchDirection::Forward, "NOT SELECT2", wasModified, showProgress);
         return nullptr;
     }
     // ---------------------------------------------
@@ -1040,26 +1035,6 @@ static const char* HandleSelectTextCmd(const char* cmd, DDEACK& ack)
             return next;
         }
     }
-    // ---------------------------------------------
-    /*
-    DisplayModel* dm = win->AsFixed();
-    char* text = nullptr;
-    if (0 < pageNo) {
-        text = dm->GetText(pageNo);
-    } else {
-        text = dm->GetText();
-    }
-    if (text != nullptr) {
-        FILE* outFile = nullptr;
-        WCHAR* tmpFileW = ToWstrTemp(txtFile);
-        errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
-        if (err == 0) {
-            std::fwrite(text, 1, std::strlen(text), outFile);
-            std::fclose(outFile);
-        }
-        str::Free(text);
-    }
-    */
     // ---------------------------------------------
     //Vec<Rect> rects;
     //Vec<int> pageNos;
@@ -1082,11 +1057,6 @@ static const char* HandleSelectTextCmd(const char* cmd, DDEACK& ack)
         } while (sel);
     }
     RepaintAsync(win, 0);
-    // ---------------------------------------------
-    for (auto annot : ANNOTS) {
-        DeleteAnnotation(annot);
-    }
-    ANNOTS.Reset();
     // ---------------------------------------------
     auto engine = dm->GetEngine();
     Vec<SelectionOnPage>* s = tab->selectionOnPage;
@@ -1116,31 +1086,6 @@ static const char* HandleSelectTextCmd(const char* cmd, DDEACK& ack)
     }
     DeleteOldSelectionInfo(win, true);
     MainWindowRerender(win);
-    /*
-    DeleteOldSelectionInfo(win, true);
-    RepaintAsync(win, 0);
-    bool cont = false;
-    for (auto i = 0; i < rects.Size(); ++i) {
-        int pn = pageNos.at(i);
-        Rect r = rects.at(i);
-        dm->textSelection->SelectWordAt(pn, r.x+r.dx/.2, r.y+r.dy/.2);
-        int px, py;
-        // px = r.x + r.dx / 2.0;
-        // py = r.y + r.dy / 2.0;
-        px = r.x;
-        py = r.y;
-        dm->textSelection->StartAt(pn, px, py);
-        // px = r.x + r.dx;
-        // py = r.y + r.dy / 2.0;
-        px = r.x + r.dx;
-        py = r.y + r.dy / 2.0;
-        dm->textSelection->SelectUpTo(pn, px, py, cont);
-        cont = true;
-    }
-    UpdateTextSelection(win);
-    RepaintAsync(win, 0);
-    //win->Focus();
-    */
     return next;
 }
 
@@ -1195,7 +1140,7 @@ static void HandleDdeCmds(HWND hwnd, const char* cmd, DDEACK& ack) {
             nextCmd = HandleGetTextCmd(cmd, ack);
         }
         if (!nextCmd) {
-            nextCmd = HandleSelectTextCmd(cmd, ack);
+            nextCmd = HandleMarkTextCmd(cmd, ack);
         }
         if (!nextCmd) {
             nextCmd = HandleCmdCommand(hwnd, cmd, ack);

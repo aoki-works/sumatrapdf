@@ -2452,6 +2452,7 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
         return;
     }
 
+
     bool didSavePrefs = false;
     size_t tabCount = win->TabCount();
     if (tabCount == 1 || (tabCount == 0 && quitIfLast)) {
@@ -2461,6 +2462,15 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
         }
     } else {
         CrashIf(gPluginMode && !gWindows.Contains(win));
+        // CPS Lab. file closed event
+        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
+            char* path = tab->filePath;
+            if (path != nullptr) {
+                str::Str cmd;
+                cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
+                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+            }
+        }
         RemoveTab(tab);
         delete tab;
     }
@@ -2564,6 +2574,18 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose) {
     // if list not empty, only close the tabs not on the list
     if (!canCloseWindow) {
         return;
+    }
+
+    // CPS Lab. file closed event
+    if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
+        for (auto& tab : win->Tabs()) {
+            char* path = tab->filePath;
+            if (path != nullptr) {
+                str::Str cmd;
+                cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
+                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+            }
+        }
     }
 
     bool lastWindow = (1 == gWindows.size());
