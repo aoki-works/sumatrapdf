@@ -51,11 +51,18 @@ bool gIsStartup = false;
 StrVec gDdeOpenOnStartup;
 WCHAR* PDFSYNC_DDE_SERVICE = nullptr;
 WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
+Kind kNotifGroupFindProgress = "findProgress";
+
+// CPS Lab.
 WCHAR* USERAPP_DDE_SERVICE = nullptr;
 WCHAR* USERAPP_DDE_TOPIC = nullptr;
 WCHAR* USERAPP_DDE_DEBUG_TOPIC = nullptr;
+struct MarkerNode {
+    AutoFreeStr filePath;
+    Annotation* annotation;
+};
+Vec<MarkerNode*> MARKER_TABLE;
 
-Kind kNotifGroupFindProgress = "findProgress";
 
 // don't show the Search UI for document types that don't
 // support extracting text and/or navigating to a specific
@@ -1022,6 +1029,30 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
 }
 
 
+
+
+/* CPS Lab.
+ * Delete Marker from tab.
+ */
+void DeleteMarker(WindowTab* tab) // CPS Lab.
+{
+    for (auto p : MARKER_TABLE) {
+        if (p->annotation == nullptr) {
+            continue;
+        }
+        if (tab == nullptr) {
+            if (!str::Eq(p->filePath.Get(), tab->filePath.Get())) {
+                continue;
+            }
+        }
+        if (str::Eq(p->filePath.Get(), tab->filePath.Get())) {
+            DeleteAnnotation(p->annotation);
+            p->annotation = nullptr;
+            p->filePath.Reset();
+        }
+    }
+}
+
 /*
  CPS Lab.
 [MarkText("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
@@ -1029,7 +1060,6 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
 */
 static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
 {
-    static Vec<Annotation*> ANNOTS;
     AutoFreeStr pdfFile ;
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
@@ -1044,10 +1074,20 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
         return nullptr;
     }
     // ---------------------------------------------
-    for (auto annot : ANNOTS) {
-        DeleteAnnotation(annot);
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
     }
-    ANNOTS.Reset();
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+    WindowTab* tab = win->CurrentTab();
+    DisplayModel* dm = tab->AsFixed();
+    // ---------------------------------------------
+    DeleteMarker(tab);
     // ---------------------------------------------
     AutoFreeStr word ;
     StrVec word_vec;
@@ -1065,22 +1105,7 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
         return nullptr;
     }
     // ---------------------------------------------
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
-    }
-    if (!win->IsDocLoaded()) {
-        ReloadDocument(win, false);
-        if (!win->IsDocLoaded()) {
-            return next;
-        }
-    }
-    // ---------------------------------------------
-    //Vec<Rect> rects;
-    //Vec<int> pageNos;
     ack.fAck = 1;
-    WindowTab* tab = win->CurrentTab();
-    DisplayModel* dm = tab->AsFixed();
     dm->textSearch->SetDirection(TextSearchDirection::Forward);
     ClearSearchResult(win);
     bool conti = false;
@@ -1100,31 +1125,54 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
     // ---------------------------------------------
     auto engine = dm->GetEngine();
     Vec<SelectionOnPage>* s = tab->selectionOnPage;
-    Vec<int> pageNos;
-    for (auto& sel : *s) {
-        int pno = sel.pageNo;
-        if (!dm->ValidPageNo(pno)) {
-            continue;
-        }
-        bool fo = false;
-        for (auto n : pageNos) {
-            if (n == pno) { fo = true; break; }
-        }
-        if (!fo) { pageNos.Append(pno); }
-    }
-    for (auto pno : pageNos) {
-        Vec<RectF> rects;
+    if (s != nullptr) {
+        Vec<int> pageNos;
         for (auto& sel : *s) {
-            if (pno != sel.pageNo) {
+            int pno = sel.pageNo;
+            if (!dm->ValidPageNo(pno)) {
                 continue;
             }
-            rects.Append(sel.rect);
+            bool fo = false;
+            for (auto n : pageNos) {
+                if (n == pno) {
+                    fo = true;
+                    break;
+                }
+            }
+            if (!fo) {
+                pageNos.Append(pno);
+            }
         }
-        Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pno, PointF{});
-        SetQuadPointsAsRect(annot, rects);
-        ANNOTS.Append(annot);
+        for (auto pno : pageNos) {
+            Vec<RectF> rects;
+            for (auto& sel : *s) {
+                if (pno != sel.pageNo) {
+                    continue;
+                }
+                rects.Append(sel.rect);
+            }
+            Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pno, PointF{});
+            SetQuadPointsAsRect(annot, rects);
+            SetColor(annot, 0xff00ffff); // Acua
+            bool found = false;
+            for (auto p : MARKER_TABLE) {
+                if (p->annotation == nullptr) {
+                    p->annotation = annot;
+                    p->filePath.SetCopy(tab->filePath.Get());
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                MarkerNode* p = new MarkerNode();
+                p->annotation = annot;
+                p->filePath.SetCopy(tab->filePath.Get());
+                MARKER_TABLE.Append(p);
+            }
+        }
+        tab->askedToSaveAnnotations = true;
+        DeleteOldSelectionInfo(win, true);
     }
-    DeleteOldSelectionInfo(win, true);
     MainWindowRerender(win);
     return next;
 }

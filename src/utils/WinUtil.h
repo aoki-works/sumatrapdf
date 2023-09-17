@@ -268,7 +268,7 @@ double GetProcessRunningTime();
 void RunNonElevated(const char* exePath);
 void VariantInitBstr(VARIANT& urlVar, const WCHAR* s);
 ByteSlice LoadDataResource(int resId);
-bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command);
+bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command, bool debug=false);
 
 void RectInflateTB(RECT& r, int top, int bottom);
 void DivideRectH(const RECT& r, int y, int dy, RECT& r1, RECT& r2, RECT& r3);

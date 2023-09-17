@@ -2408,10 +2408,16 @@ static bool MaybeSaveAnnotations(WindowTab* tab) {
         case SaveChoice::Discard:
             return true;
         case SaveChoice::SaveNew:
+            if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {   // CPS Lab.
+                // DeleteMarker(tab);
+            }
             SaveAnnotationsToMaybeNewPdfFile(tab);
             break;
         case SaveChoice::SaveExisting: {
             // const char* path = engine->FileName();
+            if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {   // CPS Lab.
+                // DeleteMarker(tab);
+            }
             bool ok = EngineMupdfSaveUpdated(engine, {}, [&tab, &path](const char* mupdfErr) {
                 str::Str msg;
                 // TODO: duplicated message
@@ -2466,9 +2472,15 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
         if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
             char* path = tab->filePath;
             if (path != nullptr) {
+                //str::WStr cmd;
+                //cmd.AppendFmt(L"[PDFClosed(\"%s\")]", path);
+                //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, cmd.Get());
                 str::Str cmd;
                 cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
-                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+                const WCHAR* w = ToWstrTemp(cmd.Get());
+                //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+                //w = L"[PDFClosed(\"AAA\")]";
+                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
             }
         }
         RemoveTab(tab);
@@ -2583,7 +2595,9 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose) {
             if (path != nullptr) {
                 str::Str cmd;
                 cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
-                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+                const WCHAR* w = ToWstrTemp(cmd.Get());
+                //w = L"[PDFClosed(\"AAA\")]";
+                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
             }
         }
     }

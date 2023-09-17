@@ -2257,7 +2257,7 @@ static HDDEDATA CALLBACK DdeCallback(__unused UINT uType, __unused UINT uFmt, __
     return nullptr;
 }
 
-bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command) {
+bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command, bool debug) {
     DWORD inst = 0;
     HSZ hszServer = nullptr, hszTopic = nullptr;
     HCONV hconv = nullptr;
@@ -2266,7 +2266,8 @@ bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command) {
     DWORD cbLen = 0;
     HDDEDATA answer;
 
-    logf("DDEExecute : %ls\n", command);
+    // TODO : logf command failed when 'command' includes multibyte char.
+    //logf("DDEExecute : %ls\n", command);
     CrashIf(str::Len(command) >= INT_MAX - 1);
     if (str::Len(command) >= INT_MAX - 1) {
         logf("Failed \n");
@@ -2286,12 +2287,14 @@ bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command) {
         logf("Failed \n");
         goto Exit;
     }
+    //if (debug) goto Exit;
     logf("DdeCreateStringHandle TopicName : %ls\n", topic);
     hszTopic = DdeCreateStringHandleW(inst, topic, CP_WINNEUTRAL);
     if (!hszTopic) {
         logf("Failed \n");
         goto Exit;
     }
+    //if (debug) goto Exit;
     logf("DdeConnect \n");
     hconv = DdeConnect(inst, hszServer, hszTopic, nullptr);
     if (!hconv) {
