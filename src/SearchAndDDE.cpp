@@ -994,7 +994,36 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
         char* ctx;
         char* wd = strtok_s(text, delim, &ctx);
         while (wd) {
-            word_vec.Append(wd);
+            /*
+            bool ascii = true;
+            for (auto c = wd; *c; c++) {
+                if (!isascii(*c)) {
+                    ascii = false;
+                    break;
+                }
+            }
+            if (ascii) {
+                word_vec.Append(wd);
+            }
+            */
+            /* split only ascii characters */
+            char* begin = nullptr;
+            for (auto c = wd; *c; c++) {
+                if (isascii(*c)) {
+                    if (begin == nullptr) {
+                        begin = c;
+                    }
+                } else {
+                    if (begin != nullptr) {
+                        *c = 0;
+                        word_vec.Append(begin);
+                    }
+                    begin = nullptr;
+                }
+            }
+            if (begin != nullptr) {
+                word_vec.Append(begin);
+            }
             wd = strtok_s(nullptr, delim, &ctx);
         }
         word_vec.Sort();
