@@ -662,8 +662,8 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, annotations), SettingType::Struct, (intptr_t)&gAnnotationsInfo},
     {offsetof(GlobalPrefs, defaultPasswords), SettingType::StringArray, 0},
     {(size_t)-1, SettingType::Comment, 0},
-    {offsetof(GlobalPrefs, rememberOpenedFiles), SettingType::Bool, true},
-    {offsetof(GlobalPrefs, rememberStatePerDocument), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, rememberOpenedFiles), SettingType::Bool, false},      // CPS Lab.
+    {offsetof(GlobalPrefs, rememberStatePerDocument), SettingType::Bool, false}, // CPS Lab.
     {offsetof(GlobalPrefs, restoreSession), SettingType::Bool, true},
     {offsetof(GlobalPrefs, uiLanguage), SettingType::String, 0},
     {offsetof(GlobalPrefs, inverseSearchCmdLine), SettingType::String, 0},
@@ -677,11 +677,11 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, mainWindowBackground), SettingType::Color, (intptr_t) "#80fff200"},
     {offsetof(GlobalPrefs, fullPathInTitle), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, false},     // CPS Lab.
     {offsetof(GlobalPrefs, showToolbar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showFavorites), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, showToc), SettingType::Bool, true},
-    {offsetof(GlobalPrefs, noHomeTab), SettingType::Bool, false},
+    {offsetof(GlobalPrefs, showToc), SettingType::Bool, false},         // CPS Lab.
+    {offsetof(GlobalPrefs, noHomeTab), SettingType::Bool, true},        // CPS Lab.
     {offsetof(GlobalPrefs, tocDy), SettingType::Int, 0},
     {offsetof(GlobalPrefs, sidebarDx), SettingType::Int, 0},
     {offsetof(GlobalPrefs, toolbarSize), SettingType::Int, 18},
@@ -695,7 +695,7 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, versionToSkip), SettingType::String, 0},
     {offsetof(GlobalPrefs, windowState), SettingType::Int, 1},
     {offsetof(GlobalPrefs, windowPos), SettingType::Compact, (intptr_t)&gRectInfo},
-    {offsetof(GlobalPrefs, useTabs), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, useTabs), SettingType::Bool, false},     // CPS Lab.
     {offsetof(GlobalPrefs, useSysColors), SettingType::Bool, false},
     {offsetof(GlobalPrefs, customScreenDPI), SettingType::Int, 0},
     {offsetof(GlobalPrefs, printableCharAsWordChar), SettingType::Bool, false},

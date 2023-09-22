@@ -1090,6 +1090,7 @@ void DeleteMarker(WindowTab* tab) // CPS Lab.
 static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
 {
     AutoFreeStr pdfFile ;
+    bool deleteAll = false;
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
     // ---------------------------------------------
@@ -1098,6 +1099,10 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
     const char* next = str::Parse(cmd, "[MarkText(\"%s\",%? \"%d\",%? ", &pdfFile, &pageNo);
     if (!next) {
         next = str::Parse(cmd, "[MarkText(\"%s\",%? ", &pdfFile);
+    }
+    if (!next) {
+        next = str::Parse(cmd, "[MarkText(\"%s\")]", &pdfFile);
+        deleteAll = true;
     }
     if (!next) {
         return nullptr;
@@ -1117,6 +1122,9 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
     DisplayModel* dm = tab->AsFixed();
     // ---------------------------------------------
     DeleteMarker(tab);
+    if (deleteAll) {
+        return next;
+    }
     // ---------------------------------------------
     AutoFreeStr word ;
     StrVec word_vec;
@@ -1202,6 +1210,16 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
         tab->askedToSaveAnnotations = true;
         DeleteOldSelectionInfo(win, true);
     }
+    // Pan to first word.
+    if (0 < word_vec.Size()) {
+        char* term = word_vec.at(0);
+        bool wasModified = true;
+        bool showProgress = true;
+        HwndSetText(win->hwndFindEdit, term);
+        FindTextOnThread(win, TextSearchDirection::Forward, term, wasModified, showProgress);
+        win->Focus();
+    }
+    //
     MainWindowRerender(win);
     return next;
 }
