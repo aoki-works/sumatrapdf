@@ -58,23 +58,6 @@ Kind kNotifGroupFindProgress = "findProgress";
 WCHAR* USERAPP_DDE_SERVICE = nullptr;
 WCHAR* USERAPP_DDE_TOPIC = nullptr;
 WCHAR* USERAPP_DDE_DEBUG_TOPIC = nullptr;
-/*
-struct MarkerNode {
-    AutoFreeStr filePath;
-    AutoFreeStr keyword;
-    PdfColor mark_color;
-    PdfColor select_color;
-    StrVec words;
-    Vec<Annotation*> annotations;
-
-  public:
-    MarkerNode() {
-        mark_color = 0xff00ffff; // Acua
-        select_color = 0xff0000ff; // Blue
-    }
-};
-Vec<MarkerNode*> MARKER_TABLE;
-*/
 
 
 // don't show the Search UI for document types that don't
@@ -981,6 +964,13 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
         }
     }
 
+    if (get_word) {
+        cpslab::SaveWordsToFile(win, txtFile.Get());
+    } else {
+        cpslab::SaveTextToFile(win, txtFile.Get());
+    }
+
+    /*****************************************
     DisplayModel* dm = win->AsFixed();
     char* text = dm->GetText();
     if (text == nullptr) {
@@ -994,7 +984,7 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
         char* ctx;
         char* wd = strtok_s(text, delim, &ctx);
         while (wd) {
-            /* split only ascii characters */
+            // split only ascii characters 
             char* begin = nullptr;
             for (auto c = wd; *c; c++) {
                 if (isascii(*c)) {
@@ -1039,43 +1029,13 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
         std::fclose(outFile);
     }
     str::Free(text);
+    *****************************************/
 
     ack.fAck = 1;
     return next;
 }
 
 
-
-
-/* CPS Lab.
- * Delete Marker from tab.
- */
-void DeleteMarker(WindowTab* tab) // CPS Lab.
-{
-    /*
-    for (auto p : MARKER_TABLE) {
-        if (p->filePath.empty()) {
-            continue;
-        }
-        if (tab == nullptr) {
-            if (!str::Eq(p->filePath.Get(), tab->filePath.Get())) {
-                continue;
-            }
-        }
-        if (str::Eq(p->filePath.Get(), tab->filePath.Get())) {
-            for (auto a : p->annotations) {
-                DeleteAnnotation(a);
-            }
-            p->annotations.Reset();
-            p->words.Reset();
-            p->filePath.Reset();
-        }
-    }
-    */
-    if (tab->markers) {
-        tab->markers->deleteAnnotations();
-    }
-}
 
 /*
  CPS Lab.
@@ -1107,10 +1067,76 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
             return next;
         }
     }
+    // ---------------------------------------------
+    AutoFreeStr word ;
+    StrVec  args;
+    const char* curcmd = next;
+    while (true) {
+        next = str::Parse(curcmd, "\"%s\",%? ", &word);
+        if (!next) {
+            next = str::Parse(curcmd, "\"%s\")]", &word);
+        }
+        if (!next) { break; }
+        // mark_words[0]->word_vec.Append(word.Get());
+        args.Append(word.Get()); 
+        curcmd = next;
+    }
+    // -----------------------------------------------------
+    const char* first_word = nullptr;
+    WindowTab* tab = win->CurrentTab();
+    if (args.Size() == 0) {
+        tab->markers->deleteAnnotations();
+    }
+    else if (args.Size() == 1) {
+        first_word = cpslab::MarkWords(win, args.at(0));
+    }
+    else {
+        first_word = cpslab::MarkWords(win, args);
+    }
+    // ---------------------------------------------
+    // Pan to first word.
+    if (first_word != nullptr) {
+        bool wasModified = true;
+        bool showProgress = true;
+        HwndSetText(win->hwndFindEdit, first_word);
+        FindTextOnThread(win, TextSearchDirection::Forward, first_word, wasModified, showProgress);
+        win->Focus();
+    }
+    // ---------------------------------------------
+    MainWindowRerender(win);
+    ack.fAck = 1;
+    return next;
+}
+#if 0
+static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
+{
+    AutoFreeStr pdfFile ;
+    float zoom = kInvalidZoom;
+    Point scroll(-1, -1);
+    // ---------------------------------------------
+    //AutoFreeStr term;
+    const char* next = str::Parse(cmd, "[MarkText(\"%s\",%? ", &pdfFile);
+    if (!next) {
+        next = str::Parse(cmd, "[MarkText(\"%s\")]", &pdfFile);
+    }
+    if (!next) {
+        return nullptr;
+    }
+    // ---------------------------------------------
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
     WindowTab* tab = win->CurrentTab();
     DisplayModel* dm = tab->AsFixed();
     // ---------------------------------------------
-    DeleteMarker(tab);
+    tab->markers->deleteAnnotations();
     // ---------------------------------------------
     //struct MarkWords {
     //    AutoFreeStr keyword ;
@@ -1245,6 +1271,7 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
     MainWindowRerender(win);
     return next;
 }
+#endif
 
 
 

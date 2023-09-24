@@ -197,7 +197,6 @@ void PaintSelection(MainWindow* win, HDC hdc) {
     ParsedColor* parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.selectionColor);
     if (gGlobalPrefs->circularSelectionRegion &&
         !win->selectionRect.IsEmpty() &&
-        //win->mouseAction != MouseAction::SelectingText &&
         dm->textSelection->result.len == 0) {
         PaintTransparentCircles(hdc, win->canvasRc, rects, parsedCol->col);
     } else {

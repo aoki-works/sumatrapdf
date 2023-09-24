@@ -9,6 +9,15 @@ struct Rect;
 
 namespace cpslab {
 
+extern void SaveWordsToFile(MainWindow* win, const char* fname);
+extern void SaveTextToFile(MainWindow* win, const char* fname);
+extern const char* MarkWords(MainWindow* win);
+extern const char* MarkWords(MainWindow* win, const char* json_file);
+extern const char* MarkWords(MainWindow* win, StrVec& words);
+extern void CloseEvent(WindowTab* tab);
+extern void CloseEvent(MainWindow* win);
+
+
 class MarkerNode
 {
   private:

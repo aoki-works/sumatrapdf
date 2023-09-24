@@ -16,6 +16,7 @@
 #include "DisplayModel.h"
 #include "SumatraPDF.h"
 #include "TextSelection.h"
+#include "TextSearch.h"
 #include "Annotation.h"
 #include "MainWindow.h"
 #include "WindowTab.h"
@@ -221,6 +222,9 @@ size_t Markers::getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result) {
 
 
 void Markers::sendMessage(MainWindow* win) {
+    if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
+        return;
+    }
     DisplayModel* dm = win->AsFixed();
     //if (dm->textSelection->result.len == 0) { return; }
     const char* sep = "\r\n";
@@ -284,10 +288,7 @@ void Markers::sendMessage(MainWindow* win) {
                 cmd.AppendFmt("(%d %d %d %d)", r.x, r.y, r.dx, r.dy);
             }
         }
-
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
-            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
-        }
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
     }*/
 
     for (auto m : markerTable) {
@@ -301,14 +302,221 @@ void Markers::sendMessage(MainWindow* win) {
             cmd.AppendFmt(", \"%s\"", s);
         }
         cmd.AppendFmt(")]");
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
-            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
-        }
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
     }
     /**/
 }
 
+// =============================================================
+//
+// =============================================================
+void CloseEvent(WindowTab* tab) {
+    if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
+        return;
+    }
+    char* path = tab->filePath;
+    if (path != nullptr) {
+        str::Str cmd;
+        cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
+        const WCHAR* w = ToWstrTemp(cmd.Get());
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
+    }
+}
 
+void CloseEvent(MainWindow* win) {
+    if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
+        return;
+    }
+    for (auto& tab : win->Tabs()) {
+        char* path = tab->filePath;
+        if (path != nullptr) {
+            str::Str cmd;
+            cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
+            const WCHAR* w = ToWstrTemp(cmd.Get());
+            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
+        }
+    }
+}
+
+// =============================================================
+//
+// =============================================================
+void SaveWordsToFile(MainWindow* win, const char* fname) {
+    DisplayModel* dm = win->AsFixed();
+    char* text = dm->GetText();
+    if (text == nullptr) {
+        return;
+    }
+
+    StrVec word_vec;
+    char* ctx;
+    const char* delim = ", \n";
+    char* wd = strtok_s(text, delim, &ctx);
+    while (wd) {
+        /* split only ascii characters */
+        char* begin = nullptr;
+        for (auto c = wd; *c; c++) {
+            if (isascii(*c)) {
+                if (begin == nullptr) {
+                    begin = c;
+                }
+            } else {
+                if (begin != nullptr) {
+                    *c = 0;
+                    word_vec.Append(begin);
+                }
+                begin = nullptr;
+            }
+        }
+        if (begin != nullptr) {
+            word_vec.Append(begin);
+        }
+        wd = strtok_s(nullptr, delim, &ctx);
+    }
+    word_vec.Sort();
+
+    StrVec words;
+    char* prev = nullptr;
+    for (auto sel : word_vec) {
+        if (prev == nullptr || !str::Eq(prev, sel)) {
+            words.Append(sel);
+            prev = sel;
+        }
+    }
+
+    FILE* outFile = nullptr;
+    WCHAR* tmpFileW = ToWstrTemp(fname);
+    errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
+    if (err == 0) {
+        for (auto sel : words) {
+            std::fputs(sel, outFile);
+            std::fputs("\n", outFile);
+        }
+        std::fclose(outFile);
+    }
+    str::Free(text);
+}
+
+// =============================================================
+//
+// =============================================================
+void SaveTextToFile(MainWindow* win, const char* fname) {
+    DisplayModel* dm = win->AsFixed();
+    char* text = dm->GetText();
+    if (text == nullptr) {
+        return;
+    }
+
+    FILE* outFile = nullptr;
+    WCHAR* tmpFileW = ToWstrTemp(fname);
+    errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
+    if (err == 0) {
+        std::fwrite(text, 1, std::strlen(text), outFile);
+        std::fclose(outFile);
+    }
+    str::Free(text);
+}
+
+// =============================================================
+//
+// =============================================================
+const char* MarkWords(MainWindow* win) {
+    WindowTab* tab = win->CurrentTab();
+    DisplayModel* dm = tab->AsFixed();
+    auto engine = dm->GetEngine();
+    // ---------------------------------------------
+    char* first_word = nullptr;
+    for (auto marker_node : tab->markers->markerTable) {
+        str::Str annot_key_content("@CPSLabMark:");
+        annot_key_content.Append(marker_node->keyword.Get());
+        annot_key_content.AppendChar('@');
+        // -- ClearSearchResult ------------
+        DeleteOldSelectionInfo(win, true);
+        RepaintAsync(win, 0);
+        // ---------------------------------
+        dm->textSearch->SetDirection(TextSearchDirection::Forward);
+        bool conti = false;
+        for (auto term : marker_node->words) {
+            TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
+            if (!sel) {
+                continue;
+            }
+            if (first_word == nullptr) {
+                first_word = term;
+            }
+            do {
+                for (int ixi = 0; ixi < sel->len; ixi++) {
+                    marker_node->rects.Append(sel->rects[ixi]);
+                }
+                dm->textSelection->CopySelection(dm->textSearch, conti);
+                UpdateTextSelection(win, false);
+                conti = true;
+                sel = dm->textSearch->FindNext(nullptr, conti);
+            } while (sel);
+        }
+        //  ---------------------------------------------
+        Vec<SelectionOnPage>* s = tab->selectionOnPage;
+        if (s != nullptr) {
+            Vec<int> pageNos;
+            for (auto& sel : *s) {
+                int pno = sel.pageNo;
+                if (!dm->ValidPageNo(pno)) {
+                    continue;
+                }
+                bool fo = false;
+                for (auto n : pageNos) {
+                    if (n == pno) {
+                        fo = true;
+                        break;
+                    }
+                }
+                if (!fo) {
+                    pageNos.Append(pno);
+                }
+            }
+            for (auto pno : pageNos) {
+                Vec<RectF> rects;
+                for (auto& sel : *s) {
+                    if (pno != sel.pageNo) {
+                        continue;
+                    }
+                    rects.Append(sel.rect);
+                }
+                Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pno, PointF{});
+                SetQuadPointsAsRect(annot, rects);
+                SetColor(annot, marker_node->mark_color); // Acua
+                SetContents(annot, annot_key_content.Get());
+                marker_node->annotations.Append(annot);
+            }
+            tab->askedToSaveAnnotations = true;
+            DeleteOldSelectionInfo(win, true);
+        }
+    }
+    return first_word;
+}
+
+// =============================================================
+//
+// =============================================================
+const char* MarkWords(MainWindow* win, const char* json_file) {
+    WindowTab* tab = win->CurrentTab();
+    tab->markers->deleteAnnotations();
+    tab->markers->parse(json_file);
+    return MarkWords(win);
+}
+
+// =============================================================
+//
+// =============================================================
+const char* MarkWords(MainWindow* win, StrVec& words) {
+    WindowTab* tab = win->CurrentTab();
+    tab->markers->deleteAnnotations();
+    MarkerNode* m = tab->markers->getMarker("Net");
+    for (auto w : words) {
+        m->words.Append(w);
+    }
+    return MarkWords(win);
+}
 
 } // end of namespace cpslab
 

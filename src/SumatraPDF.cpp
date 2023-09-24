@@ -83,6 +83,7 @@
 #include "EditAnnotations.h"
 #include "CommandPalette.h"
 #include "Theme.h"
+#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -2408,16 +2409,10 @@ static bool MaybeSaveAnnotations(WindowTab* tab) {
         case SaveChoice::Discard:
             return true;
         case SaveChoice::SaveNew:
-            if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {   // CPS Lab.
-                // DeleteMarker(tab);
-            }
             SaveAnnotationsToMaybeNewPdfFile(tab);
             break;
         case SaveChoice::SaveExisting: {
             // const char* path = engine->FileName();
-            if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {   // CPS Lab.
-                // DeleteMarker(tab);
-            }
             bool ok = EngineMupdfSaveUpdated(engine, {}, [&tab, &path](const char* mupdfErr) {
                 str::Str msg;
                 // TODO: duplicated message
@@ -2469,6 +2464,8 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
     } else {
         CrashIf(gPluginMode && !gWindows.Contains(win));
         // CPS Lab. file closed event
+        cpslab::CloseEvent(tab);
+        /*
         if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
             char* path = tab->filePath;
             if (path != nullptr) {
@@ -2483,6 +2480,7 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
                 DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
             }
         }
+        */
         RemoveTab(tab);
         delete tab;
     }
@@ -2589,6 +2587,8 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose) {
     }
 
     // CPS Lab. file closed event
+    cpslab::CloseEvent(win);
+    /*
     if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
         for (auto& tab : win->Tabs()) {
             char* path = tab->filePath;
@@ -2601,6 +2601,7 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose) {
             }
         }
     }
+    */
 
     bool lastWindow = (1 == gWindows.size());
     // RememberDefaultWindowPosition becomes a no-op once the window is hidden

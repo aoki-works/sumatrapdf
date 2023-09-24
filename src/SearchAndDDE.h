@@ -26,7 +26,6 @@ void AbortFinding(MainWindow* win, bool hideMessage);
 void FindTextOnThread(MainWindow* win, TextSearchDirection direction, bool showProgress);
 void FindTextOnThread(MainWindow* win, TextSearchDirection direction, const char* text, bool wasModified,
                       bool showProgress);
-void DeleteMarker(WindowTab* tab=nullptr); // CPS Lab.
 
 extern bool gIsStartup;
 extern StrVec gDdeOpenOnStartup;

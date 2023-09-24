@@ -30,7 +30,6 @@ bool isWordChar(WCHAR c) {
     } else {
         return IsCharAlphaNumeric(c) || c == '_';
     }
-    //return IsCharAlphaNumeric(c) || c == '_';
 }
 
 DocumentTextCache::DocumentTextCache(EngineBase* engine) : engine(engine) {
