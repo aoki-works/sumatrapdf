@@ -243,6 +243,9 @@
     <ClInclude Include="..\src\wingui\WinGui.h">
       <Filter>src\wingui</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\CpsLabAnnot.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\ext\synctex\synctex_parser.c">
@@ -532,6 +535,9 @@
     </ClCompile>
     <ClCompile Include="..\src\wingui\WinGui.cpp">
       <Filter>src\wingui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\CpsLabAnnot.cpp">
+      <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

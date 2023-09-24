@@ -677,7 +677,7 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, mainWindowBackground), SettingType::Color, (intptr_t) "#80fff200"},
     {offsetof(GlobalPrefs, fullPathInTitle), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, false},     // CPS Lab.
+    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showToolbar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showFavorites), SettingType::Bool, false},
     {offsetof(GlobalPrefs, showToc), SettingType::Bool, false},         // CPS Lab.

@@ -295,7 +295,7 @@ bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyp
 
     // try again if the found text is completely outside the page's mediabox
     if (result.len == 0) {
-        return FindTextInPage(pageNo, finalGlyph);
+        return FindTextInPage(pageNo, finalGlyph, conti);
     }
 
     if (finalGlyph) {

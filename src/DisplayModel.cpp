@@ -1687,7 +1687,7 @@ char* DisplayModel::GetText() const {   // CPS lab.
     Rect* coords;
     str::WStr result;
     int pageCount = PageCount();
-    for (int pageNo = 1; pageNo < pageCount; pageNo++) {
+    for (int pageNo = 1; pageNo <= pageCount; pageNo++) {
         const WCHAR* pageText = textCache->GetTextForPage(pageNo, nullptr, &coords);
         if (str::IsEmpty(pageText)) {
             continue;

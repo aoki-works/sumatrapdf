@@ -49,6 +49,7 @@
 #include "Tabs.h"
 #include "Toolbar.h"
 #include "Translations.h"
+#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -550,6 +551,9 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         /* callback to user application via DDE. CPS Lab.*/
         //if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
         {
+            WindowTab* tab = win->CurrentTab();
+            tab->markers->sendMessage(win);
+            /*
             const char* sep = "\r\n";
             bool collapse = true;
             bool isTextOnlySelectionOut = false;
@@ -560,7 +564,8 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
             if (!str::IsEmpty(selText)) {
                 StrVec words;
                 Split(words, selText, sep, collapse);
-                str::Str cmd("[Search(");
+                //str::Str cmd("[Search(");
+                str::Str cmd("[Select(");
                 for (size_t i = 0; i < words.size(); ++i) {
                     char* s = words.at(i);
                     if (0 < i) {
@@ -573,6 +578,7 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
                     DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
                 }
             }
+            */
         }
     }
 
@@ -669,22 +675,47 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
             RepaintAsync(win, 0);
             /* callback to user application via DDE. CPS Lab.*/
             if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr && 0 < dm->textSelection->result.len) {
+                WindowTab* tab = win->CurrentTab();
+                tab->markers->sendMessage(win);
+                /*
                 AutoFreeWstr selection(dm->textSelection->ExtractText(" "));
                 str::NormalizeWSInPlace(selection);
                 if (!str::IsEmpty(selection)) {
-                    str::Str cmd;
-                    cmd.AppendFmt("[Search(\"%ls\")]", selection.Get());
-                    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
-                    //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, selection.Get());
-                    if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
-                        cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), x, y);
-                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+                    Vec<cpslab::MarkerNode*> result;
+                    //tab->markers->getMarkersByWord(selection.Get(), result);
+                    tab->markers->getMarkersByTS(dm->textSelection, result);
+                    if (result.Size() == 0) {
+                        str::Str cmd;
+                        cmd.AppendFmt("[MMM ");
+                        for (int i = 0; i < dm->textSelection->result.len; ++i) {
+                            Rect r = dm->textSelection->result.rects[i];
+                            cmd.AppendFmt("(%lf %lf %lf %lf)", r.x, r.y, r.dx, r.dy);
+                        }
+                        cmd.AppendFmt(" = ");
+                        for (auto p : tab->markers->markerTable) {
+                            for (auto r : p->rects) {
+                                cmd.AppendFmt("(%lf %lf %lf %lf)", r.x, r.y, r.dx, r.dy);
+                            }
+                        }
+                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
                     }
-                    if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
-                        cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), pt.x, pt.y);
-                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+                    for (auto m : result) {
+                        str::Str cmd;
+                        //cmd.AppendFmt("[Search(\"%ls\")]", selection.Get());
+                        cmd.AppendFmt("[Select(\"%s\", \"%s\", \"%ls\")]", tab->filePath.Get(), m->keyword.Get(), selection.Get());
+                        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+                        // DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, selection.Get());
+                        if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+                            cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), x, y);
+                            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+                        }
+                        if (USERAPP_DDE_DEBUG_TOPIC != nullptr) {
+                            cmd.AppendFmt("[Search(\"%ls\", %d, %d)]", selection.Get(), pt.x, pt.y);
+                            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
+                        }
                     }
                 }
+                */
             }
         }
         return;

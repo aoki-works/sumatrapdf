@@ -22,9 +22,11 @@
 #include "Selection.h"
 #include "Translations.h"
 #include "EditAnnotations.h"
+#include "CpsLabAnnot.h"
 
 WindowTab::WindowTab(MainWindow* win) {
     this->win = win;
+    markers = new cpslab::Markers(this);
 }
 
 void WindowTab::SetFilePath(const char* path) {
@@ -38,6 +40,7 @@ bool WindowTab::IsAboutTab() const {
 }
 
 WindowTab::~WindowTab() {
+    delete markers; // CPS Lab.
     FileWatcherUnsubscribe(watcher);
     if (AsChm()) {
         AsChm()->RemoveParentHwnd();

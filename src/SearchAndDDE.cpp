@@ -38,6 +38,7 @@
 #include "Selection.h"
 #include "SumatraDialogs.h"
 #include "Translations.h"
+#include "CPSLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -57,11 +58,23 @@ Kind kNotifGroupFindProgress = "findProgress";
 WCHAR* USERAPP_DDE_SERVICE = nullptr;
 WCHAR* USERAPP_DDE_TOPIC = nullptr;
 WCHAR* USERAPP_DDE_DEBUG_TOPIC = nullptr;
+/*
 struct MarkerNode {
     AutoFreeStr filePath;
-    Annotation* annotation;
+    AutoFreeStr keyword;
+    PdfColor mark_color;
+    PdfColor select_color;
+    StrVec words;
+    Vec<Annotation*> annotations;
+
+  public:
+    MarkerNode() {
+        mark_color = 0xff00ffff; // Acua
+        select_color = 0xff0000ff; // Blue
+    }
 };
 Vec<MarkerNode*> MARKER_TABLE;
+*/
 
 
 // don't show the Search UI for document types that don't
@@ -947,16 +960,8 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
     AutoFreeStr txtFile ;
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
-    int pageNo=0;
     bool get_word = false;
-    const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\",%? \"%d\")]", &pdfFile, &txtFile, &pageNo);
-    if (!next) {
-        next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
-    }
-    if (!next) {
-        next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\",%? \"%d\")]", &pdfFile, &txtFile, &pageNo);
-        get_word = true;
-    }
+    const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
     if (!next) {
         next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
         get_word = true;
@@ -977,12 +982,7 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
     }
 
     DisplayModel* dm = win->AsFixed();
-    char* text = nullptr;
-    if (0 < pageNo) {
-        text = dm->GetText(pageNo);
-    } else {
-        text = dm->GetText();
-    }
+    char* text = dm->GetText();
     if (text == nullptr) {
         return next;
     }
@@ -994,18 +994,6 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
         char* ctx;
         char* wd = strtok_s(text, delim, &ctx);
         while (wd) {
-            /*
-            bool ascii = true;
-            for (auto c = wd; *c; c++) {
-                if (!isascii(*c)) {
-                    ascii = false;
-                    break;
-                }
-            }
-            if (ascii) {
-                word_vec.Append(wd);
-            }
-            */
             /* split only ascii characters */
             char* begin = nullptr;
             for (auto c = wd; *c; c++) {
@@ -1027,7 +1015,6 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
             wd = strtok_s(nullptr, delim, &ctx);
         }
         word_vec.Sort();
-
         char* prev = nullptr;
         for (auto sel : word_vec) {
             if (prev == nullptr || !str::Eq(prev, sel)) {
@@ -1065,8 +1052,9 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
  */
 void DeleteMarker(WindowTab* tab) // CPS Lab.
 {
+    /*
     for (auto p : MARKER_TABLE) {
-        if (p->annotation == nullptr) {
+        if (p->filePath.empty()) {
             continue;
         }
         if (tab == nullptr) {
@@ -1075,10 +1063,17 @@ void DeleteMarker(WindowTab* tab) // CPS Lab.
             }
         }
         if (str::Eq(p->filePath.Get(), tab->filePath.Get())) {
-            DeleteAnnotation(p->annotation);
-            p->annotation = nullptr;
+            for (auto a : p->annotations) {
+                DeleteAnnotation(a);
+            }
+            p->annotations.Reset();
+            p->words.Reset();
             p->filePath.Reset();
         }
+    }
+    */
+    if (tab->markers) {
+        tab->markers->deleteAnnotations();
     }
 }
 
@@ -1090,19 +1085,13 @@ void DeleteMarker(WindowTab* tab) // CPS Lab.
 static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
 {
     AutoFreeStr pdfFile ;
-    bool deleteAll = false;
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
     // ---------------------------------------------
     //AutoFreeStr term;
-    int pageNo=0;
-    const char* next = str::Parse(cmd, "[MarkText(\"%s\",%? \"%d\",%? ", &pdfFile, &pageNo);
-    if (!next) {
-        next = str::Parse(cmd, "[MarkText(\"%s\",%? ", &pdfFile);
-    }
+    const char* next = str::Parse(cmd, "[MarkText(\"%s\",%? ", &pdfFile);
     if (!next) {
         next = str::Parse(cmd, "[MarkText(\"%s\")]", &pdfFile);
-        deleteAll = true;
     }
     if (!next) {
         return nullptr;
@@ -1122,12 +1111,17 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
     DisplayModel* dm = tab->AsFixed();
     // ---------------------------------------------
     DeleteMarker(tab);
-    if (deleteAll) {
-        return next;
-    }
+    // ---------------------------------------------
+    //struct MarkWords {
+    //    AutoFreeStr keyword ;
+    //    StrVec word_vec;
+    //};
+    //Vec<MarkWords*> mark_words;
+    //mark_words.Append(new MarkWords());
+    //mark_words[0]->keyword.SetCopy("Net");
     // ---------------------------------------------
     AutoFreeStr word ;
-    StrVec word_vec;
+    StrVec  args;
     const char* curcmd = next;
     while (true) {
         next = str::Parse(curcmd, "\"%s\",%? ", &word);
@@ -1135,91 +1129,119 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
             next = str::Parse(curcmd, "\"%s\")]", &word);
         }
         if (!next) { break; }
-        word_vec.Append(word.Get());
+        // mark_words[0]->word_vec.Append(word.Get());
+        args.Append(word.Get()); 
         curcmd = next;
     }
-    if (word_vec.Size() == 0) {
-        return nullptr;
+    if (args.Size() == 0) {
+        /* pass */
+    }
+    else if (args.Size() == 1) {
+        tab->markers->parse(args.at(0));
+    }
+    else {
+        cpslab::MarkerNode* m = tab->markers->getMarker("Net");
+        for (auto w : args) {
+            m->words.Append(w);
+        }
     }
     // ---------------------------------------------
     ack.fAck = 1;
-    dm->textSearch->SetDirection(TextSearchDirection::Forward);
-    ClearSearchResult(win);
-    bool conti = false;
-    for (auto i = 0; i < word_vec.Size(); i++) {
-        char* term = word_vec.at(i);
-        TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
-        if (!sel) { continue; }
-        do {
-            dm->textSelection->CopySelection(dm->textSearch, conti);
-            UpdateTextSelection(win, false);
-            //dm->ShowResultRectToScreen(sel);
-            conti = true;
-            sel = dm->textSearch->FindNext(nullptr, conti);
-        } while (sel);
-    }
-    RepaintAsync(win, 0);
-    // ---------------------------------------------
+    char* first_word = nullptr;
     auto engine = dm->GetEngine();
-    Vec<SelectionOnPage>* s = tab->selectionOnPage;
-    if (s != nullptr) {
-        Vec<int> pageNos;
-        for (auto& sel : *s) {
-            int pno = sel.pageNo;
-            if (!dm->ValidPageNo(pno)) {
+    // ---------------------------------------------
+    //for (auto iw : mark_words) {
+    for (auto marker_node : tab->markers->markerTable) {
+        str::Str annot_key_content("@CPSLabMark:");
+        //annot_key_content.Append(iw->keyword.Get());
+        annot_key_content.Append(marker_node->keyword.Get());
+        annot_key_content.AppendChar('@');
+        //MarkerNode* marker_node = tab->markers->getMarker(iw->keyword.Get());
+        /*
+        for (auto p : MARKER_TABLE) {
+            if (str::Eq(p->keyword, iw->keyword)) {
+                marker_node = p;
+                break;
+            }
+        }
+        */
+        dm->textSearch->SetDirection(TextSearchDirection::Forward);
+        ClearSearchResult(win);
+        bool conti = false;
+        //for (auto i = 0; i <iw->word_vec.Size(); i++) {
+        //    char* term = iw->word_vec.at(i);
+        for (auto term : marker_node->words) {
+            TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
+            if (!sel) {
                 continue;
             }
-            bool fo = false;
-            for (auto n : pageNos) {
-                if (n == pno) {
-                    fo = true;
-                    break;
-                }
+            // marker_node->words.Append(term);
+            if (first_word == nullptr) {
+                first_word = term;
             }
-            if (!fo) {
-                pageNos.Append(pno);
-            }
+            do {
+                for (int ixi = 0; ixi < sel->len; ixi++) { marker_node->rects.Append(sel->rects[ixi]); }
+                dm->textSelection->CopySelection(dm->textSearch, conti);
+                UpdateTextSelection(win, false);
+                // dm->ShowResultRectToScreen(sel);
+                conti = true;
+                sel = dm->textSearch->FindNext(nullptr, conti);
+            } while (sel);
         }
-        for (auto pno : pageNos) {
-            Vec<RectF> rects;
+        //RepaintAsync(win, 0);
+        // ---------------------------------------------
+        Vec<SelectionOnPage>* s = tab->selectionOnPage;
+        if (s != nullptr) {
+            Vec<int> pageNos;
             for (auto& sel : *s) {
-                if (pno != sel.pageNo) {
+                int pno = sel.pageNo;
+                if (!dm->ValidPageNo(pno)) {
                     continue;
                 }
-                rects.Append(sel.rect);
-            }
-            Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pno, PointF{});
-            SetQuadPointsAsRect(annot, rects);
-            SetColor(annot, 0xff00ffff); // Acua
-            bool found = false;
-            for (auto p : MARKER_TABLE) {
-                if (p->annotation == nullptr) {
-                    p->annotation = annot;
-                    p->filePath.SetCopy(tab->filePath.Get());
-                    found = true;
-                    break;
+                bool fo = false;
+                for (auto n : pageNos) {
+                    if (n == pno) {
+                        fo = true;
+                        break;
+                    }
+                }
+                if (!fo) {
+                    pageNos.Append(pno);
                 }
             }
-            if (!found) {
-                MarkerNode* p = new MarkerNode();
-                p->annotation = annot;
-                p->filePath.SetCopy(tab->filePath.Get());
-                MARKER_TABLE.Append(p);
+            for (auto pno : pageNos) {
+                Vec<RectF> rects;
+                for (auto& sel : *s) {
+                    if (pno != sel.pageNo) {
+                        continue;
+                    }
+                    rects.Append(sel.rect);
+                }
+                Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pno, PointF{});
+                SetQuadPointsAsRect(annot, rects);
+                SetColor(annot, marker_node->mark_color); // Acua
+                SetContents(annot, annot_key_content.Get());
+                marker_node->annotations.Append(annot);
             }
+            tab->askedToSaveAnnotations = true;
+            DeleteOldSelectionInfo(win, true);
         }
-        tab->askedToSaveAnnotations = true;
-        DeleteOldSelectionInfo(win, true);
     }
+    // ---------------------------------------------
     // Pan to first word.
-    if (0 < word_vec.Size()) {
-        char* term = word_vec.at(0);
+    if (first_word != nullptr) {
         bool wasModified = true;
         bool showProgress = true;
-        HwndSetText(win->hwndFindEdit, term);
-        FindTextOnThread(win, TextSearchDirection::Forward, term, wasModified, showProgress);
+        HwndSetText(win->hwndFindEdit, first_word);
+        FindTextOnThread(win, TextSearchDirection::Forward, first_word, wasModified, showProgress);
         win->Focus();
     }
-    //
+    // ---------------------------------------------
+    //while (0 < mark_words.size()) {
+    //    MarkWords* p = mark_words.Pop();
+    //    delete p;
+   // }
+    // ---------------------------------------------
     MainWindowRerender(win);
     return next;
 }
