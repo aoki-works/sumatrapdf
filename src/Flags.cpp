@@ -90,7 +90,7 @@
     V(PdfSyncDDEService, "pdfsync-dde-service")  \
     V(PdfSyncDDETopic, "pdfsync-dde-topic")      \
     V(UserAppDDEService, "userapp-dde-service")  \
-    V(UserAppDDETopic, "userapp-dde-topic") \
+    V(UserAppDDETopic, "userapp-dde-topic")      \
     V(UserAppDDEDebugTopic, "userapp-dde-debug-topic")
 
 #define MAKE_ARG(__arg, __name) __arg,

@@ -9,6 +9,10 @@ struct Rect;
 
 namespace cpslab {
 
+extern WCHAR* USERAPP_DDE_SERVICE;
+extern WCHAR* USERAPP_DDE_TOPIC;
+extern WCHAR* USERAPP_DDE_DEBUG_TOPIC;
+
 extern void SaveWordsToFile(MainWindow* win, const char* fname);
 extern void SaveTextToFile(MainWindow* win, const char* fname);
 extern const char* MarkWords(MainWindow* win);
@@ -16,6 +20,8 @@ extern const char* MarkWords(MainWindow* win, const char* json_file);
 extern const char* MarkWords(MainWindow* win, StrVec& words);
 extern void CloseEvent(WindowTab* tab);
 extern void CloseEvent(MainWindow* win);
+extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI);
+extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI);
 
 
 class MarkerNode
@@ -51,7 +57,7 @@ class Markers
     Markers(WindowTab* tab);
     ~Markers();
   public:
-    void sendMessage(MainWindow* win);
+    void sendSelectMessage(MainWindow* win);
     void parse(const char* fname);
   public:
     void deleteAnnotations();

@@ -524,35 +524,8 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
         }
         /* callback to user application via DDE. CPS Lab.*/
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
-            str::Str cmd;
-            cmd.AppendFmt("[AreaSelection(%d, %d, %d, %d)]", win->selectionRect.x, win->selectionRect.y,
-                          win->selectionRect.x + win->selectionRect.dx, win->selectionRect.y + win->selectionRect.dy); 
-            //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
-        }
-        /* callback to user application via DDE. CPS Lab.*/
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
-            RectF selectionRect = dm->CvtFromScreen(win->selectionRect);
-            str::Str cmd;
-            cmd.AppendFmt("[AreaSelection(%d, %d, %d, %d)]", selectionRect.x, selectionRect.y,
-                          selectionRect.x + selectionRect.dx, selectionRect.y + selectionRect.dy);
-            //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
-        }
-        /* callback to user application via DDE. CPS Lab.*/
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_DEBUG_TOPIC != nullptr) {
-            Point pt(x, y);
-            int pageNo = dm->GetPageNoByPoint(pt);
-            PageInfo* pageInfo = dm->GetPageInfo(pageNo);
-            str::Str cmd;
-            cmd.AppendFmt("[PageRect(%d, %d, %d, %d)]", pageInfo->pageOnScreen.x, pageInfo->pageOnScreen.y,
-                          pageInfo->pageOnScreen.x + pageInfo->pageOnScreen.dx, pageInfo->pageOnScreen.y + pageInfo->pageOnScreen.dy);
-            //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_DEBUG_TOPIC, ToWstrTemp(cmd.Get()));
-        }
-        /* callback to user application via DDE. CPS Lab.*/
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
-            WindowTab* tab = win->CurrentTab();
-            tab->markers->sendMessage(win);
-        }
+        WindowTab* tab = win->CurrentTab();
+        tab->markers->sendSelectMessage(win);
     }
 
     win->mouseAction = MouseAction::Idle;
@@ -647,10 +620,8 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
             UpdateTextSelection(win, false);
             RepaintAsync(win, 0);
             /* callback to user application via DDE. CPS Lab.*/
-            if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr && 0 < dm->textSelection->result.len) {
-                WindowTab* tab = win->CurrentTab();
-                tab->markers->sendMessage(win);
-            }
+            WindowTab* tab = win->CurrentTab();
+            tab->markers->sendSelectMessage(win);
         }
         return;
     }

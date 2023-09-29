@@ -68,6 +68,7 @@
 #include "ExternalViewers.h"
 #include "AppColors.h"
 #include "Theme.h"
+#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -1212,35 +1213,22 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     // DDE Server/Topic name for PdfSync
     if(flags.pdfsync_dde_service != nullptr) {
         PDFSYNC_DDE_SERVICE = strconv::Utf8ToWstr(flags.pdfsync_dde_service);
-    } else {
-        PDFSYNC_DDE_SERVICE = strconv::Utf8ToWstr("SUMATRA");
     }
     logf("PDFSYNC_DDE_SERVICE : '%ls'\n", PDFSYNC_DDE_SERVICE);
     if(flags.pdfsync_dde_topic != nullptr) {
         PDFSYNC_DDE_TOPIC = strconv::Utf8ToWstr(flags.pdfsync_dde_topic);
-    } else {
-        PDFSYNC_DDE_TOPIC = strconv::Utf8ToWstr("control");
     }
     logf("PDFSYNC_DDE_TOPIC : '%ls'\n", PDFSYNC_DDE_TOPIC);
 
     // DDE Server/Topic name for UserApp
     if(flags.userapp_dde_service != nullptr) {
-        USERAPP_DDE_SERVICE = strconv::Utf8ToWstr(flags.userapp_dde_service);
-        logf("USERAPP_DDE_SERVICE : '%ls'\n", USERAPP_DDE_SERVICE);
-    } else {
-        // USERAPP_DDE_SERVICE = strconv::Utf8ToWstr("USERAPP");
+        cpslab::USERAPP_DDE_SERVICE = strconv::Utf8ToWstr(flags.userapp_dde_service);
     }
     if(flags.userapp_dde_topic != nullptr) {
-        USERAPP_DDE_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_topic);
-        logf("USERAPP_DDE_TOPIC : '%ls'\n", USERAPP_DDE_TOPIC);
-    } else {
-        // USERAPP_DDE_TOPIC = strconv::Utf8ToWstr("control");
+        cpslab::USERAPP_DDE_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_topic);
     }
     if(flags.userapp_dde_debug_topic != nullptr) {
-        USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_debug_topic);
-        logf("USERAPP_DDE_DEBUG_TOPIC : '%ls'\n", USERAPP_DDE_DEBUG_TOPIC);
-    } else {
-        // USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWstr("debug_control");
+        cpslab::USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_debug_topic);
     }
 
     if (flags.printDialog || flags.stressTestPath || gPluginMode) {

@@ -2465,22 +2465,6 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
         CrashIf(gPluginMode && !gWindows.Contains(win));
         // CPS Lab. file closed event
         cpslab::CloseEvent(tab);
-        /*
-        if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
-            char* path = tab->filePath;
-            if (path != nullptr) {
-                //str::WStr cmd;
-                //cmd.AppendFmt(L"[PDFClosed(\"%s\")]", path);
-                //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, cmd.Get());
-                str::Str cmd;
-                cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
-                const WCHAR* w = ToWstrTemp(cmd.Get());
-                //DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
-                //w = L"[PDFClosed(\"AAA\")]";
-                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
-            }
-        }
-        */
         RemoveTab(tab);
         delete tab;
     }
@@ -2588,20 +2572,6 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose) {
 
     // CPS Lab. file closed event
     cpslab::CloseEvent(win);
-    /*
-    if (USERAPP_DDE_SERVICE != nullptr && USERAPP_DDE_TOPIC != nullptr) {
-        for (auto& tab : win->Tabs()) {
-            char* path = tab->filePath;
-            if (path != nullptr) {
-                str::Str cmd;
-                cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
-                const WCHAR* w = ToWstrTemp(cmd.Get());
-                //w = L"[PDFClosed(\"AAA\")]";
-                DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
-            }
-        }
-    }
-    */
 
     bool lastWindow = (1 == gWindows.size());
     // RememberDefaultWindowPosition becomes a no-op once the window is hidden

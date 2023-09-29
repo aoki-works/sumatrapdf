@@ -24,12 +24,11 @@
 
 #include "CpsLabAnnot.h"
 
-// CPS Lab.
-extern WCHAR* USERAPP_DDE_SERVICE;
-extern WCHAR* USERAPP_DDE_TOPIC;
-extern WCHAR* USERAPP_DDE_DEBUG_TOPIC;
-
 namespace cpslab {
+
+WCHAR* USERAPP_DDE_SERVICE = nullptr;
+WCHAR* USERAPP_DDE_TOPIC = nullptr;
+WCHAR* USERAPP_DDE_DEBUG_TOPIC = nullptr;
 
 // =============================================================
 //
@@ -221,7 +220,7 @@ size_t Markers::getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result) {
 }
 
 
-void Markers::sendMessage(MainWindow* win) {
+void Markers::sendSelectMessage(MainWindow* win) {
     if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
         return;
     }
@@ -517,6 +516,122 @@ const char* MarkWords(MainWindow* win, StrVec& words) {
     }
     return MarkWords(win);
 }
+
+// =============================================================
+//
+// =============================================================
+char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI) {
+    Rect* coords;
+    const WCHAR* pageText = dm->textCache->GetTextForPage(pageNo, nullptr, &coords);
+    if (str::IsEmpty(pageText)) {
+        return nullptr;
+    }
+
+    str::WStr result;
+    int selected_words = 0;
+    for (const WCHAR* src = pageText; *src; ) {
+        if (*src == '\n') { ++src; continue; }
+        if (!isWordChar(*src)) { ++src; continue; }
+        /* check whether this 'letter' is intersect with the regionI */
+        Rect rect = coords[src - pageText]; // boundary rectangle of this 'letter'.
+        Rect isect = regionI.Intersect(rect);
+        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+            ++src;
+            continue;       // not intersected.
+        }
+        // backword search the begin letter of 'word'.
+        const WCHAR* begin = src;
+        for (; *begin; --begin) {if (!isWordChar(*begin)) break;}
+        if (!isWordChar(*begin)) begin++;
+        // forword search the end letter of 'word'.
+        const WCHAR* end = src;
+        for (; *end; ++end) {if (!isWordChar(*end)) break;}
+        /**/
+        rect = coords[begin - pageText];  // boundary rectangle of begin letter.
+        int px = rect.x + rect.dx / 2.0;
+        int py = rect.y + rect.dy / 2.0;
+        dm->textSelection->StartAt(pageNo, px, py);
+        /* */
+        rect = coords[end - pageText - 1];  // boundary rectangle of end letter.
+        px = rect.x + rect.dx ;
+        py = rect.y + rect.dy / 2.0;
+        dm->textSelection->SelectUpTo(pageNo, px, py, 0 < selected_words);
+        /* */
+        result.Append(begin, end - begin);  // append 'word' to result.
+        result.Append(L"\r\n", 2);
+        src = end;
+        selected_words++;
+    }
+    WCHAR* ws = result.Get();
+    return ToUtf8(ws);
+}
+
+// =============================================================
+//
+// =============================================================
+char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI) {
+    Rect* coords;
+    const WCHAR* pageText = dm->textCache->GetTextForPage(pageNo, nullptr, &coords);
+    if (str::IsEmpty(pageText)) {
+        return nullptr;
+    }
+
+    str::WStr result;
+    int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
+    float sqrr = pow(radius, 2);
+    int cx = regionI.x + regionI.dx / 2;
+    int cy = regionI.y + regionI.dy / 2;
+    int selected_words = 0;
+    for (const WCHAR* src = pageText; *src; ) {
+        if (*src == '\n') { ++src; continue; }
+        if (!isWordChar(*src)) { ++src; continue; }
+        /* check whether this 'letter' is intersect with the circle */
+        Rect rect = coords[src - pageText]; // boundary rectangle of this 'letter'.
+        Rect rc;
+        if (0 < rect.dx) rc = Rect(rect.x - radius, rect.y, rect.dx + 2 * radius, rect.dy);
+        else             rc = Rect(rect.x + radius, rect.y, rect.dx - 2 * radius, rect.dy);
+        Rect isect = regionI.Intersect(rc);
+        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+            ++src;
+            continue;
+        }
+        if (0 < rect.dy) rc = Rect(rect.x, rect.y - radius, rect.dx, rect.dy + 2 * radius);
+        else             rc = Rect(rect.x, rect.y + radius, rect.dx, rect.dy - 2 * radius);
+        isect = regionI.Intersect(rc);
+        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+            ++src;
+            continue;
+        }
+        if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
+        if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
+        if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
+        if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
+        // backword search the begin letter of 'word'.
+        const WCHAR* begin = src;
+        for (; *begin; --begin) {if (!isWordChar(*begin)) break;}
+        if (!isWordChar(*begin)) begin++;
+        // forword search the end letter of 'word'.
+        const WCHAR* end = src;
+        for (; *end; ++end) {if (!isWordChar(*end)) break;}
+        /**/
+        rect = coords[begin - pageText];  // boundary rectangle of begin letter.
+        int px = rect.x + rect.dx / 2.0;
+        int py = rect.y + rect.dy / 2.0;
+        dm->textSelection->StartAt(pageNo, px, py);
+        /* */
+        rect = coords[end - pageText - 1];  // boundary rectangle of end letter.
+        px = rect.x + rect.dx ;
+        py = rect.y + rect.dy / 2.0;
+        dm->textSelection->SelectUpTo(pageNo, px, py, 0 < selected_words);
+        /**/
+        result.Append(begin, end - begin);
+        result.Append(L"\r\n", 2);
+        src = end;
+        selected_words++;
+    }
+    WCHAR* ws = result.Get();
+    return ToUtf8(ws);
+}//
 
 } // end of namespace cpslab
 
