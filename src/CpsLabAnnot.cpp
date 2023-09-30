@@ -263,7 +263,7 @@ void Markers::sendSelectMessage(MainWindow* win) {
     }
     for (auto m : markerTable) { m->selected_words.Reset(); }
 
-    StrVec str_vec;
+    //StrVec str_vec;
     for (SelectionOnPage& sel : *tab_->selectionOnPage) {
         char* text;
         Rect regionI = sel.rect.Round();
@@ -282,15 +282,17 @@ void Markers::sendSelectMessage(MainWindow* win) {
             }
         }
         if (!str::IsEmpty(text)) {
-            str_vec.Append(text);
+            //str_vec.Append(text);
             str::Free(text);
         }
     }
+    UpdateTextSelection(win, false);
+    /*
     if (str_vec.size() == 0) {
         return;
     }
     char* selection = Join(str_vec, sep);
-    UpdateTextSelection(win, false);
+    */
     /*
     bool isS = true;
     char* selection = GetSelectedText(tab_, sep, isS);
@@ -302,9 +304,11 @@ void Markers::sendSelectMessage(MainWindow* win) {
     //
     //for (auto m : markerTable) { m->selected_words.Reset(); }
     //
+    /*
     StrVec words;
     bool collapse = true;
     Split(words, selection, sep, collapse);
+    */
     /*
     for (size_t i = 0; i < words.size(); ++i) {
         char* s = words.at(i);
@@ -327,17 +331,27 @@ void Markers::sendSelectMessage(MainWindow* win) {
         }
     }
     */
+    StrVec selected_words;
+    for (auto m : markerTable) {
+        if (m->selected_words.Size() == 0) {
+            continue;
+        }
+        for (auto s : m->selected_words) {
+            if (!selected_words.Contains(s)) {
+                selected_words.Append(s);
+            }
+        }
+    }
     str::Str cmd;
     cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
-    //for (int i = 0; i < selected_words.Size(); i++) {
-    for (int i = 0; i < words.Size(); i++) {
-        //auto s = selected_words.at(i);
-        auto s = words.at(i);
+    for (int i = 0; i < selected_words.Size(); i++) {
+        auto s = selected_words.at(i);
         cmd.AppendFmt(", \"%s\"", s);
     }
     cmd.AppendFmt(")]");
     DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
 }
+
 
 void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
     TextSel* first_word = nullptr;
