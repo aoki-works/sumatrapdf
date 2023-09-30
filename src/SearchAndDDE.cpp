@@ -973,19 +973,19 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
 
 /*
  CPS Lab.
-[MarkText("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
-[MarkText("<pdffilepath>", "<Text>", "<Text>", ...)]
+[MarkWord("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
+[MarkWord("<pdffilepath>", "<Text>", "<Text>", ...)]
 */
-static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
+static const char* HandleMarkWordCmd(const char* cmd, DDEACK& ack)
 {
     AutoFreeStr pdfFile ;
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
     // ---------------------------------------------
     //AutoFreeStr term;
-    const char* next = str::Parse(cmd, "[MarkText(\"%s\",%? ", &pdfFile);
+    const char* next = str::Parse(cmd, "[MarkWord(\"%s\",%? ", &pdfFile);
     if (!next) {
-        next = str::Parse(cmd, "[MarkText(\"%s\")]", &pdfFile);
+        next = str::Parse(cmd, "[MarkWord(\"%s\")]", &pdfFile);
     }
     if (!next) {
         return nullptr;
@@ -1044,6 +1044,54 @@ static const char* HandleMarkTextCmd(const char* cmd, DDEACK& ack)
 
 
 /*
+ CPS Lab.
+[Select("<pdffilepath>", "<Category>", "<Text>", "<Text>", ...)]
+*/
+static const char* HandleSelectCmd(const char* cmd, DDEACK& ack)
+{
+    AutoFreeStr pdfFile ;
+    float zoom = kInvalidZoom;
+    Point scroll(-1, -1);
+    // ---------------------------------------------
+    const char* next = str::Parse(cmd, "[Select(\"%s\",%? ", &pdfFile);
+    if (!next) {
+        return nullptr;
+    }
+    // ---------------------------------------------
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+    // ---------------------------------------------
+    AutoFreeStr wd ;
+    StrVec  words;
+    const char* curcmd = next;
+    while (true) {
+        next = str::Parse(curcmd, "\"%s\",%? ", &wd);
+        if (!next) {
+            next = str::Parse(curcmd, "\"%s\")]", &wd);
+        }
+        if (!next) { break; }
+        words.Append(wd.Get()); 
+        curcmd = next;
+    }
+    // -----------------------------------------------------
+    WindowTab* tab = win->CurrentTab();
+    tab->markers->selectWords(win, words);
+    // ---------------------------------------------
+    MainWindowRerender(win);
+    ack.fAck = 1;
+    return next;
+}
+
+
+/*
 Handle all commands as defined in Commands.h
 eg: [CmdClose]
 */
@@ -1092,7 +1140,10 @@ static void HandleDdeCmds(HWND hwnd, const char* cmd, DDEACK& ack) {
             nextCmd = HandleGetTextCmd(cmd, ack);
         }
         if (!nextCmd) {
-            nextCmd = HandleMarkTextCmd(cmd, ack);
+            nextCmd = HandleMarkWordCmd(cmd, ack);
+        }
+        if (!nextCmd) {
+            nextCmd = HandleSelectCmd(cmd, ack);
         }
         if (!nextCmd) {
             nextCmd = HandleCmdCommand(hwnd, cmd, ack);

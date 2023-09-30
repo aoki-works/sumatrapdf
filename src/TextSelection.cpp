@@ -287,10 +287,16 @@ void TextSelection::SelectUpTo(int pageNo, int glyphIx, bool conti) {
 void TextSelection::SelectWordAt(int pageNo, double x, double y) {
     int i = FindClosestGlyph(this, pageNo, x, y);
     int textLen;
-    const WCHAR* text = textCache->GetTextForPage(pageNo, &textLen);
+    Rect* coords;
+    const WCHAR* text = textCache->GetTextForPage(pageNo, &textLen, &coords);
+    Rect& coord = coords[i];
 
     for (; i > 0; i--) {
         if (!isWordChar(text[i - 1])) {
+            break;
+        }
+        Rect& r = coords[i - 1];
+        if (r.x != coord.x && r.y != coord.y) {
             break;
         }
     }
@@ -298,6 +304,10 @@ void TextSelection::SelectWordAt(int pageNo, double x, double y) {
 
     for (; i < textLen; i++) {
         if (!isWordChar(text[i])) {
+            break;
+        }
+        Rect& r = coords[i];
+        if (r.x != coord.x && r.y != coord.y) {
             break;
         }
     }

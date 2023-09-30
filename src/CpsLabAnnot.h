@@ -4,10 +4,14 @@
 struct MainWindow;
 struct WindowTab;
 struct Annotation;
+struct DisplayModel;
 struct TextSelection;
+struct TextSel;
 struct Rect;
 
 namespace cpslab {
+
+class Markers;
 
 extern WCHAR* USERAPP_DDE_SERVICE;
 extern WCHAR* USERAPP_DDE_TOPIC;
@@ -20,8 +24,8 @@ extern const char* MarkWords(MainWindow* win, const char* json_file);
 extern const char* MarkWords(MainWindow* win, StrVec& words);
 extern void CloseEvent(WindowTab* tab);
 extern void CloseEvent(MainWindow* win);
-extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI);
-extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI);
+extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
+extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
 
 
 class MarkerNode
@@ -42,6 +46,9 @@ class MarkerNode
   public:
     MarkerNode(WindowTab* tab);
     ~MarkerNode();
+
+  public:
+    TextSel* selectWords(DisplayModel* dm, StrVec& words, bool conti=false);
 };
 
 
@@ -59,6 +66,9 @@ class Markers
   public:
     void sendSelectMessage(MainWindow* win);
     void parse(const char* fname);
+  public:
+    void selectWords(MainWindow* win, const char* keyword, StrVec& words);
+    void selectWords(MainWindow* win, StrVec& words);
   public:
     void deleteAnnotations();
     MarkerNode* getMarker(const char* keyword);

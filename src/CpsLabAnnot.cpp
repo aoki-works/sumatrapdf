@@ -126,6 +126,30 @@ MarkerNode::~MarkerNode() {
     }
 }
 
+TextSel* MarkerNode::selectWords(DisplayModel* dm, StrVec& select_words, bool conti) {
+    TextSel* first_word = nullptr;
+    dm->textSearch->SetDirection(TextSearchDirection::Forward);
+    for(auto wd : select_words) {
+        for (size_t i = 0; i < words.size(); ++i) {
+            char* mkwd = words.at(i);
+            if (str::Eq(wd, mkwd)) {
+                TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(wd), nullptr, conti);
+                if (sel) {
+                    if (first_word == nullptr) {
+                        first_word = sel;
+                    }
+                    do {
+                        dm->textSelection->CopySelection(dm->textSearch, conti);
+                        conti = true;
+                        sel = dm->textSearch->FindNext(nullptr, conti);
+                    } while (sel);
+                }
+            }
+        }
+    }
+    return first_word;
+}
+
 // =============================================================
 //
 // =============================================================
@@ -224,48 +248,67 @@ void Markers::sendSelectMessage(MainWindow* win) {
     if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
         return;
     }
-    DisplayModel* dm = win->AsFixed();
-    //if (dm->textSelection->result.len == 0) { return; }
+
     const char* sep = "\r\n";
+    DisplayModel* dm = win->AsFixed();
+
+    if (!tab_->selectionOnPage) {
+        return;
+    }
+    if (tab_->selectionOnPage->size() == 0) {
+        return;
+    }
+    if (dm->GetEngine()->IsImageCollection()) {
+        return;
+    }
+    for (auto m : markerTable) { m->selected_words.Reset(); }
+
+    StrVec str_vec;
+    for (SelectionOnPage& sel : *tab_->selectionOnPage) {
+        char* text;
+        Rect regionI = sel.rect.Round();
+
+        bool isTextOnlySelectionOut = dm->textSelection->result.len > 0;
+        if (isTextOnlySelectionOut) {
+            WCHAR* s = dm->textSelection->ExtractText(sep);
+            text = ToUtf8(s);
+            str::Free(s);
+        } else {
+            if (gGlobalPrefs->circularSelectionRegion) {
+                text = GetWordsInCircle(dm, sel.pageNo, regionI, sep, this);
+
+            } else {
+                text = GetWordsInRegion(dm, sel.pageNo, regionI, sep, this);
+            }
+        }
+        if (!str::IsEmpty(text)) {
+            str_vec.Append(text);
+            str::Free(text);
+        }
+    }
+    if (str_vec.size() == 0) {
+        return;
+    }
+    char* selection = Join(str_vec, sep);
+    UpdateTextSelection(win, false);
+    /*
     bool isS = true;
     char* selection = GetSelectedText(tab_, sep, isS);
     UpdateTextSelection(win, false);
-    //RepaintAsync(win, 0);
-    /*
-    WCHAR* ws = dm->textSelection->ExtractText(" ");
-    char* selection = ToUtf8(ws);
-    str::Free(ws);
-    */
     if (str::IsEmpty(selection)) {
         return;
     }
+    */
     //
-    for (auto m : markerTable) { m->selected_words.Reset(); }
+    //for (auto m : markerTable) { m->selected_words.Reset(); }
     //
     StrVec words;
     bool collapse = true;
     Split(words, selection, sep, collapse);
-    //
     /*
-    str::Str cmd("[Select(");
-    for (size_t i = 0; i < words.size(); ++i) {
-        char* s = words.at(i);
-        if (0 < i) {
-            cmd.Append(",", 1);
-        }
-        cmd.AppendFmt("\"%s\"", s);
-    }
-    cmd.Append(")]", 2);
-    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
-    */
-    /* */
-    //
-    //str::Str cmd;
     for (size_t i = 0; i < words.size(); ++i) {
         char* s = words.at(i);
         Rect r = dm->textSelection->result.rects[i];
-        //cmd.AppendFmt("(%s %d %d %d %d)", s, r.x, r.y, r.dx, r.dy);
-        // tab->markers->getMarkersByWord(selection.Get(), result);
         Vec<MarkerNode*> result;
         getMarkersByRect(r, result);
         for (auto m : result) {
@@ -274,36 +317,188 @@ void Markers::sendSelectMessage(MainWindow* win) {
             }
         }
     }
-
-    /*{
-        cmd.AppendFmt("[MMM ");
-        for (int i = 0; i < dm->textSelection->result.len; ++i) {
-            Rect r = dm->textSelection->result.rects[i];
-            cmd.AppendFmt("(%d %d %d %d)", r.x, r.y, r.dx, r.dy);
-        }
-        cmd.AppendFmt(" = ");
-        for (auto p : markerTable) {
-            for (auto r : p->rects) {
-                cmd.AppendFmt("(%d %d %d %d)", r.x, r.y, r.dx, r.dy);
-            }
-        }
-        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
-    }*/
-
+    StrVec selected_words;
     for (auto m : markerTable) {
         if (m->selected_words.Size() == 0) {
             continue;
         }
-        str::Str cmd;
-        // cmd.AppendFmt("[Search(\"%ls\")]", selection.Get());
-        cmd.AppendFmt("[Select(\"%s\", \"%s\"", tab_->filePath.Get(), m->keyword.Get());
         for (auto s : m->selected_words) {
-            cmd.AppendFmt(", \"%s\"", s);
+            selected_words.Append(s);
         }
-        cmd.AppendFmt(")]");
-        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+    }
+    */
+    str::Str cmd;
+    cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
+    //for (int i = 0; i < selected_words.Size(); i++) {
+    for (int i = 0; i < words.Size(); i++) {
+        //auto s = selected_words.at(i);
+        auto s = words.at(i);
+        cmd.AppendFmt(", \"%s\"", s);
+    }
+    cmd.AppendFmt(")]");
+    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+}
+
+void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
+    TextSel* first_word = nullptr;
+    DisplayModel* dm = win->AsFixed();
+    DeleteOldSelectionInfo(win, true);
+    RepaintAsync(win, 0);
+    bool conti = false;
+    MarkerNode* node = getMarker(keyword);
+    if (node != nullptr) {
+        auto sel = node->selectWords(dm, words, conti);
+        if (sel != nullptr && first_word == nullptr) {
+            first_word = sel;
+        }
+        conti = true;
+    }
+    UpdateTextSelection(win, false);
+    if (first_word != nullptr) {
+        dm->ShowResultRectToScreen(first_word);
+    }
+}
+
+void Markers::selectWords(MainWindow* win, StrVec& words) {
+    TextSel* first_word = nullptr;
+    DisplayModel* dm = win->AsFixed();
+    DeleteOldSelectionInfo(win, true);
+    RepaintAsync(win, 0);
+    bool conti = false;
+    for (auto node : markerTable) {
+        auto sel = node->selectWords(dm, words);
+        if (sel != nullptr && first_word == nullptr) {
+            first_word = sel;
+        }
+        conti = true;
+    }
+    UpdateTextSelection(win, false);
+    if (first_word != nullptr) {
+        dm->ShowResultRectToScreen(first_word);
+    }
+}
+
+// =============================================================
+struct TmpAllocator : Allocator {
+    void* p;
+    size_t len;
+    TmpAllocator();
+    ~TmpAllocator();
+    void* Alloc(size_t size);
+    void* Realloc(void* men, size_t size);
+    void Free(const void*);
+};
+
+TmpAllocator::TmpAllocator() {
+    len = 100;
+    //p = ::AllocZero(len, sizeof(char));
+    p = malloc(len * sizeof(char));
+}
+TmpAllocator::~TmpAllocator() {
+    if (p != nullptr) {
+        // free(p);
+    }
+}
+
+void* TmpAllocator::Alloc(size_t size) {
+
+    if (len <= size) {
+        free(p);
+        len = size + 100;
+        //p = ::AllocZero(len, sizeof(char));
+        p = malloc(len * sizeof(char));
+    }
+    return p;
+}
+
+void* TmpAllocator::Realloc(void* men, size_t size)
+{
+    if (len <= size) {
+        void* tmp = realloc(men, size);
+        len = size;
+        free(p);
+        p = tmp;
+    }
+    return p;
+}
+
+void TmpAllocator::Free(const void*)
+{
+}
+
+
+// =============================================================
+//
+// =============================================================
+const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageText,
+                          const Rect* coords, const WCHAR* src, const WCHAR* lineSep,
+                          str::WStr& result,
+                          Markers* markers=nullptr) {
+    if (*src == '\n') {
+        return (src + 1);
+    }
+    if (!isWordChar(*src)) {
+        return (src + 1);
+    }
+    // backword search the begin letter of 'word'.
+    int lineSep_len = str::Len(lineSep);
+    const WCHAR* begin = src;
+    Rect rect = coords[begin - pageText];
+    for (; *begin; --begin) {
+        if (!isWordChar(*begin)) {
+            begin++;
+            break;
+        }
+        Rect r = coords[begin - pageText];
+        if (r.x != rect.x && r.y != rect.y) {
+            begin++;
+            break;
+        }
+    }
+    // forword search the end letter of 'word'.
+    const WCHAR* end = src;
+    for (; *end; ++end) {
+        if (!isWordChar(*end)) {
+            break;
+        }
+        Rect r = coords[end - pageText];
+        if (r.x != rect.x && r.y != rect.y) {
+            break;
+        }
     }
     /**/
+    rect = coords[begin - pageText]; // boundary rectangle of begin letter.
+    int px = rect.x + rect.dx / 2.0;
+    int py = rect.y + rect.dy / 2.0;
+    dm->textSelection->StartAt(pageNo, px, py);
+    /* */
+    rect = coords[end - pageText - 1]; // boundary rectangle of end letter.
+    px = rect.x + rect.dx;
+    py = rect.y + rect.dy / 2.0;
+    dm->textSelection->SelectUpTo(pageNo, px, py, !result.IsEmpty());
+    /* */
+    /* */
+    if (markers != nullptr) {
+        Rect r = dm->textSelection->result.rects[dm->textSelection->result.len - 1];
+        Vec<MarkerNode*> nodes;
+        markers->getMarkersByRect(r, nodes);
+        if (nodes.Size() == 0) {
+            dm->textSelection->result.len--;
+            return end;
+        } else {
+            for (auto m : nodes) {
+                char* s = ToUtf8(begin, end - begin);
+                if (!m->selected_words.Contains(s)) {
+                    m->selected_words.Append(s);
+                }
+                str::Free(s);
+            }
+        }
+    }
+    /* */
+    result.Append(begin, end - begin); // append 'word' to result.
+    result.Append(lineSep, lineSep_len);
+    return end;
 }
 
 // =============================================================
@@ -341,21 +536,61 @@ void CloseEvent(MainWindow* win) {
 //
 // =============================================================
 void SaveWordsToFile(MainWindow* win, const char* fname) {
+    StrVec word_vec;
     DisplayModel* dm = win->AsFixed();
+    int pageCount = dm->PageCount();
+    TmpAllocator alloc;
+    for (int pageNo = 1; pageNo <= pageCount; pageNo++) {
+        Rect* coords;
+        const WCHAR* pageText = dm->textCache->GetTextForPage(pageNo, nullptr, &coords);
+        if (str::IsEmpty(pageText)) {
+            continue;
+        }
+        for (const WCHAR* src = pageText; *src;) {
+            if (*src == '\n') {
+                src++;
+                continue;
+            }
+            if (!isWordChar(*src)) {
+                src++;
+                continue;
+            }
+            const WCHAR* begin = src;
+            Rect rect = coords[begin - pageText];
+            // forword search the end letter of 'word'.
+            const WCHAR* end = src;
+            for (; *end; ++end) {
+                if (!isWordChar(*end)) {
+                    break;
+                }
+                Rect r = coords[end - pageText];
+                if (r.x != rect.x && r.y != rect.y) {
+                    break;
+                }
+            }
+            char* w = strconv::WstrToUtf8(begin, end - begin, &alloc);
+            //char* w = ToUtf8(begin, end - begin);
+            word_vec.Append(w);
+            //str::Free(w);
+            src = end;
+        }
+    }
+    word_vec.Sort();
+    /*******************************************
     char* text = dm->GetText();
     if (text == nullptr) {
         return;
     }
-
     StrVec word_vec;
     char* ctx;
     const char* delim = ", \n";
     char* wd = strtok_s(text, delim, &ctx);
     while (wd) {
-        /* split only ascii characters */
+        // split only ascii characters
         char* begin = nullptr;
         for (auto c = wd; *c; c++) {
-            if (isascii(*c)) {
+            //if (isascii(*c)) {
+            if (isWordChar(*c)) {
                 if (begin == nullptr) {
                     begin = c;
                 }
@@ -373,6 +608,7 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
         wd = strtok_s(nullptr, delim, &ctx);
     }
     word_vec.Sort();
+    **************************************************/
 
     StrVec words;
     char* prev = nullptr;
@@ -393,7 +629,7 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
         }
         std::fclose(outFile);
     }
-    str::Free(text);
+    //str::Free(text);
 }
 
 // =============================================================
@@ -520,15 +756,15 @@ const char* MarkWords(MainWindow* win, StrVec& words) {
 // =============================================================
 //
 // =============================================================
-char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI) {
+char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep, Markers* markers) {
     Rect* coords;
     const WCHAR* pageText = dm->textCache->GetTextForPage(pageNo, nullptr, &coords);
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
 
+    const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
     str::WStr result;
-    int selected_words = 0;
     for (const WCHAR* src = pageText; *src; ) {
         if (*src == '\n') { ++src; continue; }
         if (!isWordChar(*src)) { ++src; continue; }
@@ -539,29 +775,35 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI) {
             ++src;
             continue;       // not intersected.
         }
+        src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers);
+        /*************************
         // backword search the begin letter of 'word'.
         const WCHAR* begin = src;
-        for (; *begin; --begin) {if (!isWordChar(*begin)) break;}
+        for (; *begin; --begin) {
+            if (!isWordChar(*begin)) break;
+        }
         if (!isWordChar(*begin)) begin++;
         // forword search the end letter of 'word'.
         const WCHAR* end = src;
         for (; *end; ++end) {if (!isWordChar(*end)) break;}
-        /**/
+        // ===
         rect = coords[begin - pageText];  // boundary rectangle of begin letter.
         int px = rect.x + rect.dx / 2.0;
         int py = rect.y + rect.dy / 2.0;
         dm->textSelection->StartAt(pageNo, px, py);
-        /* */
+        // ===
         rect = coords[end - pageText - 1];  // boundary rectangle of end letter.
         px = rect.x + rect.dx ;
         py = rect.y + rect.dy / 2.0;
-        dm->textSelection->SelectUpTo(pageNo, px, py, 0 < selected_words);
-        /* */
+        dm->textSelection->SelectUpTo(pageNo, px, py, !result.IsEmpty());
+        // ===
         result.Append(begin, end - begin);  // append 'word' to result.
-        result.Append(L"\r\n", 2);
+        int lineSep_len = std::strlen(lineSep);
+        result.Append(lineSep, lineSep_len);
         src = end;
-        selected_words++;
+        *********************/
     }
+    str::Free(wsep);
     WCHAR* ws = result.Get();
     return ToUtf8(ws);
 }
@@ -569,19 +811,20 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI) {
 // =============================================================
 //
 // =============================================================
-char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI) {
+char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep, Markers* markers) {
     Rect* coords;
     const WCHAR* pageText = dm->textCache->GetTextForPage(pageNo, nullptr, &coords);
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
 
+    const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
     str::WStr result;
     int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
     float sqrr = pow(radius, 2);
     int cx = regionI.x + regionI.dx / 2;
     int cy = regionI.y + regionI.dy / 2;
-    int selected_words = 0;
+    // int selected_words = 0;
     for (const WCHAR* src = pageText; *src; ) {
         if (*src == '\n') { ++src; continue; }
         if (!isWordChar(*src)) { ++src; continue; }
@@ -606,6 +849,8 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI) {
         if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
         if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
         if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
+        src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers);
+        /*************************************
         // backword search the begin letter of 'word'.
         const WCHAR* begin = src;
         for (; *begin; --begin) {if (!isWordChar(*begin)) break;}
@@ -613,25 +858,29 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI) {
         // forword search the end letter of 'word'.
         const WCHAR* end = src;
         for (; *end; ++end) {if (!isWordChar(*end)) break;}
-        /**/
+        // ===========
         rect = coords[begin - pageText];  // boundary rectangle of begin letter.
         int px = rect.x + rect.dx / 2.0;
         int py = rect.y + rect.dy / 2.0;
         dm->textSelection->StartAt(pageNo, px, py);
-        /* */
+        // ===========
         rect = coords[end - pageText - 1];  // boundary rectangle of end letter.
         px = rect.x + rect.dx ;
         py = rect.y + rect.dy / 2.0;
         dm->textSelection->SelectUpTo(pageNo, px, py, 0 < selected_words);
-        /**/
+        // ===========
         result.Append(begin, end - begin);
         result.Append(L"\r\n", 2);
         src = end;
         selected_words++;
+        **********************************************/
     }
+    str::Free(wsep);
     WCHAR* ws = result.Get();
     return ToUtf8(ws);
-}//
+}
+
+
 
 } // end of namespace cpslab
 
