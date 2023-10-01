@@ -133,19 +133,21 @@ TextSel* MarkerNode::selectWords(DisplayModel* dm, StrVec& select_words, bool co
     for(auto wd : select_words) {
         for (size_t i = 0; i < words.size(); ++i) {
             char* mkwd = words.at(i);
-            if (str::Eq(wd, mkwd)) {
-                TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(wd), nullptr, conti);
-                if (sel) {
-                    if (first_word == nullptr) {
-                        first_word = sel;
-                    }
-                    do {
-                        dm->textSelection->CopySelection(dm->textSearch, conti);
-                        conti = true;
-                        sel = dm->textSearch->FindNext(nullptr, conti);
-                    } while (sel);
-                }
+            if (!str::Eq(wd, mkwd)) {
+                continue;
             }
+            TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(wd), nullptr, conti);
+            if (sel == nullptr) {
+                continue;
+            }
+            if (first_word == nullptr) {
+                first_word = sel;
+            }
+            do {
+                dm->textSelection->CopySelection(dm->textSearch, conti);
+                conti = true;
+                sel = dm->textSearch->FindNext(nullptr, conti);
+            } while (sel);
         }
     }
     dm->textSearch->wordSearch = false;
@@ -188,10 +190,6 @@ MarkerNode* Markers::getMarker(const char* keyword) {
     }
     MarkerNode* marker_node = new MarkerNode(tab_);
     marker_node->keyword.SetCopy(keyword);
-    // marker_node->filePath.SetCopy(tab->filePath.Get());
-    // marker_node->mark_color;
-    // marker_node->select_color;
-    // MARKER_TABLE.Append(marker_node);
     markerTable.Append(marker_node);
     return marker_node;
 }
@@ -289,50 +287,7 @@ void Markers::sendSelectMessage(MainWindow* win) {
         }
     }
     UpdateTextSelection(win, false);
-    /*
-    if (str_vec.size() == 0) {
-        return;
-    }
-    char* selection = Join(str_vec, sep);
-    */
-    /*
-    bool isS = true;
-    char* selection = GetSelectedText(tab_, sep, isS);
-    UpdateTextSelection(win, false);
-    if (str::IsEmpty(selection)) {
-        return;
-    }
-    */
-    //
-    //for (auto m : markerTable) { m->selected_words.Reset(); }
-    //
-    /*
-    StrVec words;
-    bool collapse = true;
-    Split(words, selection, sep, collapse);
-    */
-    /*
-    for (size_t i = 0; i < words.size(); ++i) {
-        char* s = words.at(i);
-        Rect r = dm->textSelection->result.rects[i];
-        Vec<MarkerNode*> result;
-        getMarkersByRect(r, result);
-        for (auto m : result) {
-            if (!m->selected_words.Contains(s)) {
-                m->selected_words.Append(s);
-            }
-        }
-    }
-    StrVec selected_words;
-    for (auto m : markerTable) {
-        if (m->selected_words.Size() == 0) {
-            continue;
-        }
-        for (auto s : m->selected_words) {
-            selected_words.Append(s);
-        }
-    }
-    */
+
     StrVec selected_words;
     for (auto m : markerTable) {
         if (m->selected_words.Size() == 0) {
@@ -394,6 +349,8 @@ void Markers::selectWords(MainWindow* win, StrVec& words) {
     }
 }
 
+// =============================================================
+//
 // =============================================================
 struct TmpAllocator : Allocator {
     void* p;
@@ -547,7 +504,6 @@ const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageT
     py = rect.y + rect.dy / 2.0;
     dm->textSelection->SelectUpTo(pageNo, px, py, !result.IsEmpty());
     /* */
-    /* */
     if (markers != nullptr) {
         Rect r = dm->textSelection->result.rects[dm->textSelection->result.len - 1];
         Vec<MarkerNode*> nodes;
@@ -625,9 +581,9 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
                 src++;
                 continue;
             }
+            // forword search the end letter of 'word'.
             const WCHAR* begin = src;
             Rect rect = coords[begin - pageText];
-            // forword search the end letter of 'word'.
             const WCHAR* end = src;
             for (; *end; ++end) {
                 if (!isWordChar(*end)) {
@@ -646,40 +602,7 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
         }
     }
     word_vec.Sort();
-    /*******************************************
-    char* text = dm->GetText();
-    if (text == nullptr) {
-        return;
-    }
-    StrVec word_vec;
-    char* ctx;
-    const char* delim = ", \n";
-    char* wd = strtok_s(text, delim, &ctx);
-    while (wd) {
-        // split only ascii characters
-        char* begin = nullptr;
-        for (auto c = wd; *c; c++) {
-            //if (isascii(*c)) {
-            if (isWordChar(*c)) {
-                if (begin == nullptr) {
-                    begin = c;
-                }
-            } else {
-                if (begin != nullptr) {
-                    *c = 0;
-                    word_vec.Append(begin);
-                }
-                begin = nullptr;
-            }
-        }
-        if (begin != nullptr) {
-            word_vec.Append(begin);
-        }
-        wd = strtok_s(nullptr, delim, &ctx);
-    }
-    word_vec.Sort();
-    **************************************************/
-
+    //
     StrVec words;
     char* prev = nullptr;
     for (auto sel : word_vec) {
@@ -688,7 +611,7 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
             prev = sel;
         }
     }
-
+    //
     FILE* outFile = nullptr;
     WCHAR* tmpFileW = ToWstrTemp(fname);
     errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
@@ -699,7 +622,6 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
         }
         std::fclose(outFile);
     }
-    //str::Free(text);
 }
 
 // =============================================================
@@ -707,11 +629,16 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
 // =============================================================
 void SaveTextToFile(MainWindow* win, const char* fname) {
     DisplayModel* dm = win->AsFixed();
-    char* text = dm->GetText();
-    if (text == nullptr) {
-        return;
+    int pageCount = dm->PageCount();
+    str::WStr result;
+    for (int pageNo = 1; pageNo <= pageCount; pageNo++) {
+        const WCHAR* pageText = dm->textCache->GetTextForPage(pageNo);
+        if (str::IsEmpty(pageText)) {
+            continue;
+        }
+        result.Append(pageText, str::Len(pageText));
     }
-
+    char* text = ToUtf8(result.Get());
     FILE* outFile = nullptr;
     WCHAR* tmpFileW = ToWstrTemp(fname);
     errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
@@ -834,7 +761,6 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, c
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-
     const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
     str::WStr result;
     for (const WCHAR* src = pageText; *src; ) {
@@ -848,32 +774,6 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, c
             continue;       // not intersected.
         }
         src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers);
-        /*************************
-        // backword search the begin letter of 'word'.
-        const WCHAR* begin = src;
-        for (; *begin; --begin) {
-            if (!isWordChar(*begin)) break;
-        }
-        if (!isWordChar(*begin)) begin++;
-        // forword search the end letter of 'word'.
-        const WCHAR* end = src;
-        for (; *end; ++end) {if (!isWordChar(*end)) break;}
-        // ===
-        rect = coords[begin - pageText];  // boundary rectangle of begin letter.
-        int px = rect.x + rect.dx / 2.0;
-        int py = rect.y + rect.dy / 2.0;
-        dm->textSelection->StartAt(pageNo, px, py);
-        // ===
-        rect = coords[end - pageText - 1];  // boundary rectangle of end letter.
-        px = rect.x + rect.dx ;
-        py = rect.y + rect.dy / 2.0;
-        dm->textSelection->SelectUpTo(pageNo, px, py, !result.IsEmpty());
-        // ===
-        result.Append(begin, end - begin);  // append 'word' to result.
-        int lineSep_len = std::strlen(lineSep);
-        result.Append(lineSep, lineSep_len);
-        src = end;
-        *********************/
     }
     str::Free(wsep);
     WCHAR* ws = result.Get();
@@ -889,14 +789,12 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-
     const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
     str::WStr result;
     int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
     float sqrr = pow(radius, 2);
     int cx = regionI.x + regionI.dx / 2;
     int cy = regionI.y + regionI.dy / 2;
-    // int selected_words = 0;
     for (const WCHAR* src = pageText; *src; ) {
         if (*src == '\n') { ++src; continue; }
         if (!isWordChar(*src)) { ++src; continue; }
@@ -922,30 +820,6 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
         if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
         if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
         src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers);
-        /*************************************
-        // backword search the begin letter of 'word'.
-        const WCHAR* begin = src;
-        for (; *begin; --begin) {if (!isWordChar(*begin)) break;}
-        if (!isWordChar(*begin)) begin++;
-        // forword search the end letter of 'word'.
-        const WCHAR* end = src;
-        for (; *end; ++end) {if (!isWordChar(*end)) break;}
-        // ===========
-        rect = coords[begin - pageText];  // boundary rectangle of begin letter.
-        int px = rect.x + rect.dx / 2.0;
-        int py = rect.y + rect.dy / 2.0;
-        dm->textSelection->StartAt(pageNo, px, py);
-        // ===========
-        rect = coords[end - pageText - 1];  // boundary rectangle of end letter.
-        px = rect.x + rect.dx ;
-        py = rect.y + rect.dy / 2.0;
-        dm->textSelection->SelectUpTo(pageNo, px, py, 0 < selected_words);
-        // ===========
-        result.Append(begin, end - begin);
-        result.Append(L"\r\n", 2);
-        src = end;
-        selected_words++;
-        **********************************************/
     }
     str::Free(wsep);
     WCHAR* ws = result.Get();

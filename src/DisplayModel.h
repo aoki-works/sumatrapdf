@@ -169,8 +169,6 @@ struct DisplayModel : DocController {
        kZoomFitWidth or kZoomFitContent, whose real value depends on draw area size */
     void RotateBy(int rotation);
 
-    char* GetText() const;
-    char* GetText(int pageNo) const;
     char* GetTextInRegion(int pageNo, RectF region) const;
     bool IsOverText(Point pt);
     IPageElement* GetElementAtPos(Point pt, int* pageNoOut);
