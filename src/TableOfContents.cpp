@@ -711,7 +711,7 @@ void LoadTocTree(MainWindow* win) {
     HWND hwnd = treeView->hwnd;
     SetRtl(hwnd, isRTL);
 
-    UpdateTreeCtrlColors(win);
+    UpdateControlsColors(win);
     SetInitialExpandState(tocTree->root, tab->tocState);
     AutoExpandTopLevelItems(tocTree->root->child);
 
@@ -850,7 +850,7 @@ LRESULT TocTreeKeyDown2(TreeKeyDownEvent* ev) {
 }
 
 #ifdef DISPLAY_TOC_PAGE_NUMBERS
-static void TocTreeMsgFilter(__unused WndEvent* ev) {
+static void TocTreeMsgFilter(WndEvent*) {
     switch (msg) {
         case WM_SIZE:
         case WM_HSCROLL:
@@ -1002,10 +1002,9 @@ void CreateToc(MainWindow* win) {
 
     treeView->Create(args);
     CrashIf(!treeView->hwnd);
-    ;
     win->tocTreeView = treeView;
 
     SubclassToc(win);
 
-    UpdateTreeCtrlColors(win);
+    UpdateControlsColors(win);
 }

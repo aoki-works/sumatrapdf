@@ -31,6 +31,7 @@
 #include "Toolbar.h"
 #include "Translations.h"
 #include "Accelerators.h"
+#include "Theme.h"
 
 #include "utils/Log.h"
 
@@ -94,15 +95,6 @@ bool LoadSettings() {
         gGlobalPrefs = NewGlobalPrefs(prefsData);
         CrashAlwaysIf(!gGlobalPrefs);
         gprefs = gGlobalPrefs;
-
-        // in pre-release builds between 3.1.10079 and 3.1.10377,
-        // RestoreSession was a string with the additional option "auto"
-        // TODO: remove this after 3.2 has been released
-#if defined(DEBUG) || defined(PRE_RELEASE_VER)
-        if (!gprefs->restoreSession && prefsData && str::Find(prefsData, "\nRestoreSession = auto")) {
-            gprefs->restoreSession = true;
-        }
-#endif
         prefsData.Free();
     }
 
@@ -174,6 +166,7 @@ bool LoadSettings() {
     //    auto fontName = ToWstrTemp(gprefs->fixedPageUI.ebookFontName);
     //    SetDefaultEbookFont(fontName.Get(), gprefs->fixedPageUI.ebookFontSize);
 
+    SetCurrentThemeFromSettings();
     if (!file::Exists(settingsPath)) {
         SaveSettings();
     }
@@ -342,7 +335,7 @@ bool ReloadSettings() {
             ShowOrHideToolbar(win);
         }
         UpdateFavoritesTree(win);
-        UpdateTreeCtrlColors(win);
+        UpdateControlsColors(win);
     }
 
     UpdateDocumentColors();

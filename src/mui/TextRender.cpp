@@ -274,7 +274,7 @@ void TextRenderGdi::DrawTransparent(const WCHAR* s, size_t sLen, const RectF bb,
 #else
     uint opts = 0; // ETO_OPAQUE;
     if (isRtl) {
-        opts = opts | ETO_RTLREADING;
+        opts = ETO_RTLREADING;
     }
     ExtTextOut(memHdc, 0, 0, opts, nullptr, s, (uint)sLen, nullptr);
 #endif
@@ -458,7 +458,7 @@ void TextRenderHdc::Draw(const char* s, size_t sLen, const RectF bb, bool isRtl)
     return Draw(buf, strLen, bb, isRtl);
 }
 
-void TextRenderHdc::Draw(const WCHAR* s, size_t sLen, const RectF bb, __unused bool isRtl) {
+void TextRenderHdc::Draw(const WCHAR* s, size_t sLen, const RectF bb, bool /* isRtl */) {
     CrashIf(!hdc);
     int x = (int)bb.x;
     int y = (int)bb.y;

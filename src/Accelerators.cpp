@@ -55,6 +55,8 @@
     V(VK_SELECT, "Select")          \
     V(VK_VOLUME_DOWN, "VolumeDown") \
     V(VK_VOLUME_UP, "VolumeUp")     \
+    V(VK_XBUTTON1, "XButton1")      \
+    V(VK_XBUTTON2, "XButton2")      \
     V(VK_F1, "F1")                  \
     V(VK_F2, "F2")                  \
     V(VK_F3, "F3")                  \
@@ -144,6 +146,7 @@ ACCEL gBuiltInAccelerators[] = {
     {0, 'g', CmdGoToPage},
     {FCONTROL | FVIRTKEY, 'K', CmdCommandPalette},
     {FSHIFT | FCONTROL | FVIRTKEY, 'K', CmdCommandPaletteNoFiles},
+    {FALT | FVIRTKEY, 'K', CmdCommandPaletteOnlyTabs},
     {FSHIFT | FCONTROL | FVIRTKEY, 'S', CmdSaveAnnotations},
     {FCONTROL | FVIRTKEY, 'P', CmdPrint},
     {FCONTROL | FVIRTKEY, 'Q', CmdExit},
@@ -188,7 +191,6 @@ ACCEL gBuiltInAccelerators[] = {
     {FSHIFT | FCONTROL | FVIRTKEY, 'T', CmdReopenLastClosedFile},
     {FCONTROL | FVIRTKEY, VK_NEXT, CmdNextTab},
     {FCONTROL | FVIRTKEY, VK_PRIOR, CmdPrevTab},
-    {FCONTROL | FSHIFT | FVIRTKEY, 'D', CmdCycleTheme},
 
     // need 2 entries for 'a' and 'Shift + a'
     // TODO: maybe add CmdCreateAnnotHighlightAndOpenWindow (kind of clumsy)
@@ -201,7 +203,7 @@ ACCEL gBuiltInAccelerators[] = {
     {0, 'i', CmdInvertColors},
     {0, 'I', CmdTogglePageInfo},
 
-    {FVIRTKEY, VK_DELETE, CmdDeleteAnnotation},
+    {FCONTROL | FVIRTKEY, VK_DELETE, CmdDeleteAnnotation},
 
     {0, 'q', CmdCloseCurrentDocument},
     {0, 'r', CmdReloadDocument},
@@ -209,7 +211,7 @@ ACCEL gBuiltInAccelerators[] = {
     {0, 'f', CmdToggleFullscreen},
     {0, '[', CmdRotateLeft},
     {0, ']', CmdRotateRight},
-    {0, 'm', CmdShowCursorPosition},
+    {0, 'm', CmdToggleCursorPosition},
     {0, 'w', CmdPresentationWhiteBackground},
     // // for Logitech's wireless presenters which target PowerPoint's shortcuts
     {0, '.', CmdPresentationBlackBackground},
@@ -313,6 +315,10 @@ static const char* getVirt(BYTE key, bool isEng) {
     // https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
     // Note: might need to add if we add more shortcuts
     switch (key) {
+        case VK_XBUTTON1:
+            return "XButton1";
+        case VK_XBUTTON2:
+            return "XButton2";
         case VK_BACK:
             return "Backspace";
         case VK_TAB:
@@ -511,7 +517,7 @@ void AppendAccelKeyToMenuString(str::Str& str, const ACCEL& a) {
     // virtual codes overlap with some ascii chars like '-' is VK_INSERT
     // so for non-virtual assume it's a single char
     bool isAscii = (key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') || (key >= '0' && key <= '9');
-    static const char* otherAscii = "[]'`~@#$%^&*(){}\\|?<>!,.+-=_;:\"";
+    static const char* otherAscii = "[]'`~@#$%^&*(){}/\\|?<>!,.+-=_;:\"";
     if (str::FindChar(otherAscii, key)) {
         isAscii = true;
     }
@@ -561,6 +567,15 @@ static bool IsSafeAccel(const ACCEL& a) {
     if (a.fVirt == 0) {
         // regular keys like 'n', without any shift / alt modifier
         return false;
+    }
+
+    // whitelist Alt + Left, Alt + Right to enable document
+    // navigation when focus is in edit or tree control
+    // https://github.com/sumatrapdfreader/sumatrapdf/issues/3688#issuecomment-1728271753
+    if (a.fVirt == (FVIRTKEY | FALT)) {
+        if ((k == VK_LEFT) || (k == VK_RIGHT)) {
+            return true;
+        }
     }
 
     for (WORD notSafe : gNotSafeKeys) {

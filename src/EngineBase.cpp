@@ -327,10 +327,6 @@ RectF EngineBase::PageContentBox(int pageNo, RenderTarget) {
     return PageMediabox(pageNo);
 }
 
-bool EngineBase::SaveFileAsPDF(const char*) {
-    return false;
-}
-
 bool EngineBase::IsImageCollection() const {
     return isImageCollection;
 }
@@ -431,12 +427,11 @@ static const char* SkipMailProtocolTemp(const char* s) {
 
 // s could be in format "file://path.pdf#page=1"
 // We only want the "path.pdf"
-// caller must free
 // TODO: could also parse page=1 and return it so that
 // we can go to the right place
-char* CleanupFileURL(const char* s) {
+TempStr CleanupFileURLTemp(const char* s) {
     s = SkipFileProtocolTemp(s);
-    char* s2 = str::Dup(s);
+    char* s2 = str::DupTemp(s);
     char* s3 = str::FindChar(s2, '#');
     if (s3) {
         *s3 = 0;
@@ -446,10 +441,8 @@ char* CleanupFileURL(const char* s) {
 
 // s could be in format "file://path.pdf#page=1" or "mailto:foo@bar.com"
 // We only want the "path.pdf" / "foo@bar.com"
-// caller must free
-char* CleanupURLForClipbardCopy(const char* s) {
-    char* s2 = CleanupFileURL(s);
-    char* s3 = str::Dup(SkipMailProtocolTemp(s));
-    str::Free(s2);
-    return s3;
+TempStr CleanupURLForClipbardCopyTemp(const char* s) {
+    TempStr s2 = CleanupFileURLTemp(s);
+    s2 = (char*)SkipMailProtocolTemp(s2);
+    return s2;
 }

@@ -85,8 +85,43 @@ int EditIdealDy(HWND hwnd, bool hasBorder, int lines) {
     return dy;
 }
 
+// HWND should be Edit control
+// Should be called after user types Ctrl + Backspace to
+// delete word backwards from current cursor position
+void EditImplementCtrlBack(HWND hwnd) {
+    WCHAR* text = HwndGetTextWTemp(hwnd);
+    int selStart = LOWORD(Edit_GetSel(hwnd)), selEnd = selStart;
+    // remove the rectangle produced by Ctrl+Backspace
+    if (selStart > 0 && text[selStart - 1] == '\x7F') {
+        memmove(text + selStart - 1, text + selStart, str::Len(text + selStart - 1) * sizeof(WCHAR));
+        HwndSetText(hwnd, text);
+        selStart = selEnd = selStart - 1;
+    }
+    // remove the previous word (and any spacing after it)
+    for (; selStart > 0 && str::IsWs(text[selStart - 1]); selStart--) {
+        ;
+    }
+    for (; selStart > 0 && !str::IsWs(text[selStart - 1]); selStart--) {
+        ;
+    }
+    Edit_SetSel(hwnd, selStart, selEnd);
+    SendMessageW(hwnd, WM_CLEAR, 0, 0); // delete selected text
+}
+
 void ListBox_AppendString_NoSort(HWND hwnd, const WCHAR* txt) {
     ListBox_InsertString(hwnd, -1, txt);
+}
+
+// https://learn.microsoft.com/en-us/windows/win32/controls/lb-gettopindex
+int ListBoxGetTopIndex(HWND hwnd) {
+    auto res = ListBox_GetTopIndex(hwnd);
+    return res;
+}
+
+// https://learn.microsoft.com/en-us/windows/win32/controls/lb-settopindex
+bool ListBoxSetTopIndex(HWND hwnd, int idx) {
+    auto res = ListBox_SetTopIndex(hwnd, idx);
+    return res != LB_ERR;
 }
 
 void InitAllCommonControls() {
@@ -150,6 +185,12 @@ void HwndScreenToClient(HWND hwnd, Point& p) {
     ScreenToClient(hwnd, &pt);
     p.x = pt.x;
     p.y = pt.y;
+}
+
+// move window to top of Z order (i.e. make it visible to the user)
+// but without activation (i.e. capturing focus)
+void HwndMakeVisible(HWND hwnd) {
+    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
 }
 
 void MoveWindow(HWND hwnd, Rect rect) {
@@ -260,49 +301,41 @@ bool IsProcessAndOsArchSame() {
     return IsProcess64() == IsOs64();
 }
 
-void LogLastError(DWORD err) {
-    // allow to set a breakpoint in release builds
-    if (0 == err) {
-        err = GetLastError();
+TempStr GetLastErrorStrTemp(DWORD err) {
+    err = (err == 0) ? GetLastError() : err;
+    if (err == 0) {
+        return str::DupTemp("");
     }
-
     if (err == ERROR_INTERNET_EXTENDED_ERROR) {
         char buf[4096] = {0};
         DWORD bufSize = dimof(buf);
         // TODO: ignoring a case where buffer is too small. 4 kB should be enough for everybody
         InternetGetLastResponseInfoA(&err, buf, &bufSize);
         buf[4095] = 0;
-        logf("InternetGetLastResponseInfoA: %s\n", buf);
-        return;
+        return str::DupTemp(buf);
     }
-
     char* msgBuf = nullptr;
     DWORD flags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
     DWORD lang = MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT);
-    DWORD res = FormatMessageA(flags, nullptr, err, lang, (LPSTR)&msgBuf, 0, nullptr);
-    if (!res || !msgBuf) {
-        return;
+    DWORD ferr = FormatMessageA(flags, nullptr, err, lang, (LPSTR)&msgBuf, 0, nullptr);
+    if (!ferr || !msgBuf) {
+        return str::DupTemp("");
     }
-    logf("LogLastError: %s\n", msgBuf);
+    auto res = str::DupTemp(msgBuf);
     LocalFree(msgBuf);
+    return res;
+}
+
+void LogLastError(DWORD err) {
+    TempStr msg = GetLastErrorStrTemp(err);
+    if (str::Len(msg) > 0) {
+        logf("LogLastError: %s\n", msg);
+    }
 }
 
 void DbgOutLastError(DWORD err) {
-    if (0 == err) {
-        err = GetLastError();
-    }
-    if (0 == err) {
-        return;
-    }
-    char* msgBuf = nullptr;
-    DWORD flags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
-    DWORD lang = MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT);
-    DWORD res = FormatMessageA(flags, nullptr, err, lang, (LPSTR)&msgBuf, 0, nullptr);
-    if (!res || !msgBuf) {
-        return;
-    }
-    OutputDebugStringA(msgBuf);
-    LocalFree(msgBuf);
+    TempStr msg = GetLastErrorStrTemp(err);
+    OutputDebugStringA(msg);
 }
 
 // return true if a given registry key (path) exists
@@ -837,6 +870,7 @@ bool IsCtrlPressed() {
     return IsKeyPressed(VK_CONTROL);
 }
 
+#if 0
 // The result value contains major and minor version in the high resp. the low WORD
 DWORD GetFileVersion(const WCHAR* path) {
     DWORD fileVersion = 0;
@@ -853,6 +887,7 @@ DWORD GetFileVersion(const WCHAR* path) {
 
     return fileVersion;
 }
+#endif
 
 bool LaunchFile(const char* path, const char* params, const char* verb, bool hidden) {
     if (str::IsEmpty(path)) {
@@ -880,6 +915,25 @@ bool LaunchBrowser(const char* url) {
     return LaunchFile(url, nullptr, "open");
 }
 
+HANDLE LaunchProces(const char* exe, const char* cmdLine) {
+    PROCESS_INFORMATION pi = {nullptr};
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+
+    WCHAR* exeW = ToWstrTemp(exe);
+    // CreateProcess() might modify cmd line argument, so make a copy
+    // in case caller provides a read-only string
+    WCHAR* cmdLineW = ToWstrTemp(cmdLine);
+    BOOL ok = CreateProcessW(exeW, cmdLineW, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
+    if (!ok) {
+        return nullptr;
+    }
+
+    CloseHandle(pi.hThread);
+    return pi.hProcess;
+}
+
+// TODO: not sure why I decided to not use lpAplicationName arg to CreateProcessW()
 HANDLE LaunchProcess(const char* cmdLine, const char* currDir, DWORD flags) {
     PROCESS_INFORMATION pi = {nullptr};
     STARTUPINFOW si{};
@@ -1109,7 +1163,7 @@ Rect GetFullscreenRect(HWND hwnd) {
     return Rect(0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
 }
 
-static BOOL CALLBACK GetMonitorRectProc(__unused HMONITOR hMonitor, __unused HDC hdc, LPRECT rcMonitor, LPARAM data) {
+static BOOL CALLBACK GetMonitorRectProc(HMONITOR, HDC, LPRECT rcMonitor, LPARAM data) {
     Rect* rcAll = (Rect*)data;
     *rcAll = rcAll->Union(ToRect(*rcMonitor));
     return TRUE;
@@ -1192,7 +1246,7 @@ char* GetDefaultPrinterNameTemp() {
     return nullptr;
 }
 
-bool CopyTextToClipboard(const WCHAR* text, bool appendOnly) {
+static bool CopyOrAppendTextToClipboard(const WCHAR* text, bool appendOnly) {
     CrashIf(!text);
     if (!text) {
         return false;
@@ -1224,37 +1278,17 @@ bool CopyTextToClipboard(const WCHAR* text, bool appendOnly) {
     return handle != nullptr;
 }
 
-bool CopyTextToClipboard(const char* textA, bool appendOnly) {
-    CrashIf(!textA);
-    if (!textA) {
-        return false;
-    }
+static bool CopyOrAppendTextToClipboard(const char* s, bool appendOnly) {
+    WCHAR* ws = ToWstrTemp(s);
+    return CopyOrAppendTextToClipboard(ws, appendOnly);
+}
 
-    WCHAR* text = ToWstrTemp(textA);
-    if (!appendOnly) {
-        if (!OpenClipboard(nullptr)) {
-            return false;
-        }
-        EmptyClipboard();
-    }
+bool CopyTextToClipboard(const char* s) {
+    return CopyOrAppendTextToClipboard(s, false);
+}
 
-    size_t n = str::Len(text) + 1;
-    HGLOBAL handle = GlobalAlloc(GMEM_MOVEABLE, n * sizeof(WCHAR));
-    if (handle) {
-        WCHAR* globalText = (WCHAR*)GlobalLock(handle);
-        if (globalText) {
-            str::BufSet(globalText, n, text);
-        }
-        GlobalUnlock(handle);
-
-        SetClipboardData(CF_UNICODETEXT, handle);
-    }
-
-    if (!appendOnly) {
-        CloseClipboard();
-    }
-
-    return handle != nullptr;
+bool AppendTextToClipboard(const char* s) {
+    return CopyOrAppendTextToClipboard(s, true);
 }
 
 static bool SetClipboardImage(HBITMAP hbmp) {
@@ -1513,7 +1547,7 @@ void MenuSetText(HMENU m, int id, const WCHAR* s) {
     BOOL ok = SetMenuItemInfoW(m, id, FALSE, &mii);
     if (!ok) {
         const char* tmp = s ? ToUtf8Temp(s) : "(null)";
-        logf("SetText(): id=%d, s='%s'\n", id, tmp);
+        logf("MenuSetText(): id=%d, s='%s'\n", id, tmp);
         LogLastError();
         ReportIf(true);
     }
@@ -1528,13 +1562,13 @@ void MenuSetText(HMENU m, int id, const char* s) {
    (preserving all & so that they don't get swallowed)
    if no change is needed, the string is returned as is,
    else it's also saved in newResult for automatic freeing */
-char* MenuToSafeStringTemp(const char* s) {
+TempStr MenuToSafeStringTemp(const char* s) {
     auto str = str::DupTemp(s);
     if (!str::FindChar(str, '&')) {
         return str;
     }
-    AutoFreeStr safe = str::Replace(str, "&", "&&");
-    return str::DupTemp(safe.Get());
+    TempStr safe = str::ReplaceTemp(str, "&", "&&");
+    return safe;
 }
 
 HFONT CreateSimpleFont(HDC hdc, const char* fontName, int fontSize) {
@@ -1940,7 +1974,7 @@ void UpdateBitmapColors(HBITMAP hbmp, COLORREF textColor, COLORREF bgColor) {
     const int base[4] = {bt, gt, rt, 0};
     byte rb, gb, bb;
     UnpackColor(bgColor, rb, gb, bb);
-    int diff[4] = {(int)bb - base[0], (int)gb - base[1], (int)rb - base[2], 255};
+    int const diff[4] = {(int)bb - base[0], (int)gb - base[1], (int)rb - base[2], 255};
 
     DIBSECTION info{};
     int ret = GetObject(hbmp, sizeof(info), &info);
@@ -2251,13 +2285,11 @@ ByteSlice LoadDataResource(int resId) {
     return {(u8*)s, size};
 }
 
-static HDDEDATA CALLBACK DdeCallback(__unused UINT uType, __unused UINT uFmt, __unused HCONV hconv, __unused HSZ hsz1,
-                                     __unused HSZ hsz2, __unused HDDEDATA hdata, __unused ULONG_PTR dwData1,
-                                     __unused ULONG_PTR dwData2) {
+static HDDEDATA CALLBACK DdeCallback(UINT, UINT, HCONV, HSZ, HSZ, HDDEDATA, ULONG_PTR, ULONG_PTR) {
     return nullptr;
 }
 
-bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command, bool debug) {
+bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command) {
     DWORD inst = 0;
     HSZ hszServer = nullptr, hszTopic = nullptr;
     HCONV hconv = nullptr;
@@ -2287,14 +2319,12 @@ bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command, b
         logf("Failed \n");
         goto Exit;
     }
-    //if (debug) goto Exit;
     logf("DdeCreateStringHandle TopicName : %ls\n", topic);
     hszTopic = DdeCreateStringHandleW(inst, topic, CP_WINNEUTRAL);
     if (!hszTopic) {
         logf("Failed \n");
         goto Exit;
     }
-    //if (debug) goto Exit;
     logf("DdeConnect \n");
     hconv = DdeConnect(inst, hszServer, hszTopic, nullptr);
     if (!hconv) {

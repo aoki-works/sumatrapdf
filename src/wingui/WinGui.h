@@ -3,6 +3,10 @@
 
 //--- Wnd
 
+// global messages for wingui start at WM_APP + 0x300 to not
+// collide with values defined for the app
+const DWORD UWM_DELAYED_CTRL_BACK = WM_APP + 0x300 + 1;
+
 UINT_PTR NextSubclassId();
 
 const char* WinMsgName(UINT);
@@ -90,6 +94,7 @@ struct Wnd : public ILayout {
     virtual LRESULT OnMessageReflect(UINT msg, WPARAM wparam, LPARAM lparam);
 
     virtual void OnAttach();
+    virtual void OnFocus();
     virtual bool OnCommand(WPARAM wparam, LPARAM lparam);
     virtual void OnClose();
     virtual int OnCreate(CREATESTRUCT*);
@@ -258,12 +263,15 @@ struct Edit : Wnd {
     ~Edit() override;
 
     HWND Create(const EditCreateArgs&);
+    LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override;
     LRESULT OnMessageReflect(UINT msg, WPARAM wparam, LPARAM lparam) override;
     bool OnCommand(WPARAM wparam, LPARAM lparam) override;
 
     Size GetIdealSize() override;
 
     void SetSelection(int start, int end);
+    void SetCursorPosition(int pos);
+    void SetCursorPositionAtEnd();
     bool HasBorder();
 };
 
@@ -731,7 +739,7 @@ struct TabsCtrl : Wnd {
     int tabHighlighted = -1;
     int tabHighlightedClose = -1;
     int tabBeingClosed = -1;
-    Point lastMousePos;
+    Point lastMousePos{-1, -1};
     // where we grabbed the tab with a leftclick, in tab coordinates
     Point grabLocation;
 

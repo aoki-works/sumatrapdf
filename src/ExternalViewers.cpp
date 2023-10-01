@@ -160,8 +160,15 @@ static ExternalViewerInfo* FindExternalViewerInfoByCmd(int cmd) {
             return info;
         }
     }
-    CrashMe();
     return nullptr;
+}
+
+bool HasExternalViewerForCmd(int cmd) {
+    auto* v = FindExternalViewerInfoByCmd(cmd);
+    if (v == nullptr) {
+        return false;
+    }
+    return v->exeFullPath != nullptr;
 }
 
 static bool CanViewExternally(WindowTab* tab) {
@@ -182,7 +189,7 @@ static bool DetectExternalViewer(ExternalViewerInfo* ev) {
         return false;
     }
 
-    static int csidls[] = {CSIDL_PROGRAM_FILES, CSIDL_PROGRAM_FILESX86, CSIDL_WINDOWS, CSIDL_SYSTEM};
+    static int const csidls[] = {CSIDL_PROGRAM_FILES, CSIDL_PROGRAM_FILESX86, CSIDL_WINDOWS, CSIDL_SYSTEM};
     for (int csidl : csidls) {
         char* dir = GetSpecialFolderTemp(csidl);
         char* path = path::JoinTemp(dir, partialPath);

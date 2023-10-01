@@ -39,6 +39,7 @@ static i32 gBlacklistCommandsFromPalette[] = {
     CmdOpenWithLast,
     CmdCommandPalette,
     CmdCommandPaletteNoFiles,
+    CmdCommandPaletteOnlyTabs,
 
     // managing frequently list in home tab
     CmdOpenSelectedDocument,
@@ -61,6 +62,7 @@ static i32 gBlacklistCommandsFromPalette[] = {
     CmdOpenAttachment,
 
     CmdCreateShortcutToFile, // not sure I want this at all
+
 };
 
 // most commands are not valid when document is not opened
@@ -90,7 +92,7 @@ static i32 gDocumentNotOpenWhitelist[] = {
     CmdShowLog,
     CmdClearHistory,
     CmdReopenLastClosedFile,
-    CmdCycleTheme,
+    CmdSelectNextTheme,
 #if defined(DEBUG)
     CmdDebugCrashMe,
     CmdDebugCorruptMemory,
@@ -156,6 +158,8 @@ struct CommandPaletteWnd : Wnd {
     ListBox* listBox = nullptr;
     Static* staticHelp = nullptr;
 
+    int currTabPos = 0;
+
     void OnDestroy() override;
     bool PreTranslateMessage(MSG&) override;
     LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override;
@@ -164,7 +168,7 @@ struct CommandPaletteWnd : Wnd {
     void CollectStrings(MainWindow*);
     void FilterStringsForQuery(const char*, StrVec&);
 
-    bool Create(MainWindow* win, bool);
+    bool Create(MainWindow* win, const char* prefix);
     void QueryChanged();
     void ListDoubleClick();
 
@@ -185,24 +189,37 @@ struct CommandPaletteBuildCtx {
     bool cursorOnImage = false;
     bool hasToc = false;
     bool allowToggleMenuBar = false;
+    bool canCloseOtherTabs = false;
+    bool canCloseTabsToRight = true;
 
     ~CommandPaletteBuildCtx();
 };
 CommandPaletteBuildCtx::~CommandPaletteBuildCtx() {
-    delete annotationUnderCursor;
 }
 
-/* TODO:
-    CmdCloseOtherTabs
-    CmdCloseTabsToTheRight
-*/
+static bool IsOpenExternalViewerCommand(i32 cmdId) {
+    return ((cmdId >= CmdOpenWithExternalFirst) && (cmdId <= CmdOpenWithExternalLast)) ||
+           ((cmdId >= CmdOpenWithFirst) && (cmdId <= CmdOpenWithLast));
+}
+
 static bool AllowCommand(const CommandPaletteBuildCtx& ctx, i32 cmdId) {
     if (IsCmdInList(gBlacklistCommandsFromPalette)) {
         return false;
     }
 
+    if (CmdCloseOtherTabs == cmdId) {
+        return ctx.canCloseOtherTabs;
+    }
+    if (CmdCloseTabsToTheRight == cmdId) {
+        return ctx.canCloseTabsToRight;
+    }
+
     if (CmdReopenLastClosedFile == cmdId) {
         return RecentlyCloseDocumentsCount() > 0;
+    }
+
+    if (IsOpenExternalViewerCommand(cmdId)) {
+        return HasExternalViewerForCmd(cmdId);
     }
 
     if (!ctx.isDocLoaded) {
@@ -242,8 +259,8 @@ static bool AllowCommand(const CommandPaletteBuildCtx& ctx, i32 cmdId) {
         }
     }
 
-    if ((cmdId == CmdSaveAnnotations) && !ctx.hasUnsavedAnnotations) {
-        return false;
+    if ((cmdId == CmdSaveAnnotations) || (cmdId == CmdSaveAnnotationsNewFile)) {
+        return ctx.hasUnsavedAnnotations;
     }
 
     if ((cmdId == CmdCheckUpdate) && gIsStoreBuild) {
@@ -282,8 +299,8 @@ static bool AllowCommand(const CommandPaletteBuildCtx& ctx, i32 cmdId) {
     if (!ctx.cursorOnImage && (cmdId == CmdCopyImage)) {
         return false;
     }
-    if (!ctx.hasToc && (cmdId == CmdToggleBookmarks) || (cmdId == CmdToggleTableOfContents)) {
-        return false;
+    if ((cmdId == CmdToggleBookmarks) || (cmdId == CmdToggleTableOfContents)) {
+        return ctx.hasToc;
     }
     if ((cmdId == CmdToggleScrollbars) && !gGlobalPrefs->fixedPageUI.hideScrollbars) {
         return false;
@@ -311,17 +328,31 @@ static char* ConvertPathForDisplayTemp(const char* s) {
     return res;
 }
 
-void CommandPaletteWnd::CollectStrings(MainWindow* win) {
+void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
     CommandPaletteBuildCtx ctx;
-    ctx.isDocLoaded = win->IsDocLoaded();
-    WindowTab* tab = win->CurrentTab();
-    ctx.hasSelection = ctx.isDocLoaded && tab && win->showSelection && tab->selectionOnPage;
+    ctx.isDocLoaded = mainWin->IsDocLoaded();
+    WindowTab* tab = mainWin->CurrentTab();
+    ctx.hasSelection = ctx.isDocLoaded && tab && mainWin->showSelection && tab->selectionOnPage;
     ctx.canSendEmail = CanSendAsEmailAttachment(tab);
-    ctx.allowToggleMenuBar = !win->tabsInTitlebar;
+    ctx.allowToggleMenuBar = !mainWin->tabsInTitlebar;
 
-    Point cursorPos = HwndGetCursorPos(win->hwndCanvas);
+    int nTabs = mainWin->TabCount();
+    int currTabIdx = mainWin->GetTabIdx(tab);
+    ctx.canCloseTabsToRight = currTabIdx < (nTabs - 1);
+    for (int i = 0; i < nTabs; i++) {
+        WindowTab* t = mainWin->GetTab(i);
+        if (t->IsAboutTab()) {
+            continue;
+        }
+        if (t == tab) {
+            continue;
+        }
+        ctx.canCloseOtherTabs = true;
+    }
 
-    DisplayModel* dm = win->AsFixed();
+    Point cursorPos = HwndGetCursorPos(mainWin->hwndCanvas);
+
+    DisplayModel* dm = mainWin->AsFixed();
     if (dm) {
         auto engine = dm->GetEngine();
         ctx.supportsAnnots = EngineSupportsAnnotations(engine);
@@ -348,17 +379,25 @@ void CommandPaletteWnd::CollectStrings(MainWindow* win) {
         ctx.hasUnsavedAnnotations = false;
     }
 
-    ctx.hasToc = win->ctrl && win->ctrl->HasToc();
+    ctx.hasToc = mainWin->ctrl && mainWin->ctrl->HasToc();
 
     // append paths of opened files
-    for (MainWindow* w : gWindows) {
-        for (WindowTab* tab2 : win->Tabs()) {
-            if (!tab2->IsDocLoaded()) {
-                continue;
+    int tabPos = 0;
+    for (MainWindow* mw : gWindows) {
+        if (mw == mainWin) {
+            for (WindowTab* tab2 : mainWin->Tabs()) {
+                if (tab2->IsAboutTab()) {
+                    continue;
+                }
+                const char* name = tab2->filePath.Get();
+                name = path::GetBaseNameTemp(name);
+                filesInTabs.AppendIfNotExists(name);
+                // find current tab index
+                if (tab2 == mainWin->CurrentTab()) {
+                    currTabPos = tabPos;
+                }
+                tabPos++;
             }
-            const char* name = tab2->filePath.Get();
-            name = path::GetBaseNameTemp(name);
-            filesInTabs.AppendIfNotExists(name);
         }
     }
 
@@ -416,7 +455,7 @@ bool CommandPaletteWnd::PreTranslateMessage(MSG& msg) {
         } else if (msg.wParam == VK_DOWN) {
             dir = 1;
         }
-        if (!dir) {
+        if (dir == 0) {
             return false;
         }
         int n = listBox->GetCount();
@@ -432,6 +471,7 @@ bool CommandPaletteWnd::PreTranslateMessage(MSG& msg) {
             sel = 0;
         }
         listBox->SetCurrentSelection(sel);
+        return true;
     }
     return false;
 }
@@ -491,12 +531,17 @@ const char* SkipWS(const char* s) {
 void CommandPaletteWnd::FilterStringsForQuery(const char* filter, StrVec& strings) {
     filter = SkipWS(filter);
     bool skipFiles = (filter[0] == '>');
-    if (skipFiles) {
+    bool onlyTabs = (filter[0] == '@');
+    if (skipFiles || onlyTabs) {
         ++filter;
         filter = SkipWS(filter);
     }
     // for efficiency, reusing existing model
     strings.Reset();
+    if (onlyTabs) {
+        FilterStrings(filesInTabs, filter, strings);
+        return;
+    }
     if (!skipFiles) {
         FilterStrings(filesInTabs, filter, strings);
         FilterStrings(filesInHistory, filter, strings);
@@ -510,7 +555,11 @@ void CommandPaletteWnd::QueryChanged() {
     FilterStringsForQuery(filter, m->strings);
     listBox->SetModel(m);
     if (m->ItemsCount() > 0) {
-        listBox->SetCurrentSelection(0);
+        if (str::Eq(filter, "@")) {
+            listBox->SetCurrentSelection(currTabPos);
+        } else {
+            listBox->SetCurrentSelection(0);
+        }
     }
 }
 
@@ -538,7 +587,7 @@ void CommandPaletteWnd::ScheduleDelete() {
 static WindowTab* FindOpenedFile(const char* s) {
     for (MainWindow* win : gWindows) {
         for (WindowTab* tab : win->Tabs()) {
-            if (!tab->IsDocLoaded()) {
+            if (tab->IsAboutTab()) {
                 continue;
             }
             const char* name = tab->filePath.Get();
@@ -571,7 +620,24 @@ void CommandPaletteWnd::ExecuteCurrentSelection() {
 
     bool isFromTab = filesInTabs.Contains(s);
     if (isFromTab) {
-        WindowTab* tab = FindOpenedFile(s);
+        WindowTab* tab = nullptr;
+        // First find opened file in current window
+        for (WindowTab* winTab : win->Tabs()) {
+            if (winTab->IsAboutTab()) {
+                continue;
+            }
+            const char* name = winTab->filePath.Get();
+            name = path::GetBaseNameTemp(name);
+            if (str::Eq(name, s)) {
+                tab = winTab;
+            }
+        }
+
+        // If not found, find it in other windows
+        if (tab == nullptr) {
+            tab = FindOpenedFile(s);
+        }
+
         if (tab) {
             if (tab->win->CurrentTab() != tab) {
                 SelectTabInWindow(tab);
@@ -614,11 +680,11 @@ static void PositionCommandPalette(HWND hwnd, HWND hwndRelative) {
     int y = rRelative.y + (rRelative.dy / 2) - (r.dy / 2);
     r = {x, y, r.dx, r.dy};
     Rect r2 = ShiftRectToWorkArea(r, hwndRelative, true);
-    r2.y = rRelative.y + 32;
+    r2.y = rRelative.y + 42;
     SetWindowPos(hwnd, nullptr, r2.x, r2.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
 
-bool CommandPaletteWnd::Create(MainWindow* win, bool noFiles) {
+bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix) {
     CollectStrings(win);
     {
         CreateCustomArgs args;
@@ -695,9 +761,9 @@ bool CommandPaletteWnd::Create(MainWindow* win, bool noFiles) {
     LayoutAndSizeToContent(layout, dx, dy, hwnd);
     PositionCommandPalette(hwnd, win->hwndFrame);
 
-    if (noFiles) {
+    if (!str::IsEmpty(prefix)) {
         // this will trigger filtering
-        editQuery->SetText(">");
+        editQuery->SetText(prefix);
         editQuery->SetSelection(1, 1);
     }
 
@@ -706,7 +772,7 @@ bool CommandPaletteWnd::Create(MainWindow* win, bool noFiles) {
     return true;
 }
 
-void RunCommandPallette(MainWindow* win, bool noFiles) {
+void RunCommandPallette(MainWindow* win, const char* prefix) {
     CrashIf(gCommandPaletteWnd);
 
     if (!gCommandPaletteFont) {
@@ -723,7 +789,7 @@ void RunCommandPallette(MainWindow* win, bool noFiles) {
 
     auto wnd = new CommandPaletteWnd();
     wnd->win = win;
-    bool ok = wnd->Create(win, noFiles);
+    bool ok = wnd->Create(win, prefix);
     CrashIf(!ok);
     gCommandPaletteWnd = wnd;
     gHwndToActivateOnClose = win->hwndFrame;

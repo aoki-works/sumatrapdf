@@ -25,10 +25,10 @@ struct WindowTab;
 struct Annotation;
 struct ILinkHandler;
 
-/* Describes actions which can be performed by mouse */
+// Current action being performed with a mouse
 // clang-format off
 enum class MouseAction {
-    Idle = 0,
+    None = 0,
     Dragging,
     Selecting,
     Scrolling,
@@ -150,7 +150,7 @@ struct MainWindow {
 
     DoubleBuffer* buffer = nullptr;
 
-    MouseAction mouseAction = MouseAction::Idle;
+    MouseAction mouseAction = MouseAction::None;
     bool dragRightClick = false; // if true, drag was initiated with right mouse click
     bool dragStartPending = false;
 
@@ -160,6 +160,12 @@ struct MainWindow {
     Point dragPrevPos;
     /* when dragging, mouse x/y position when dragging was started */
     Point dragStart;
+
+    Size annotationBeingMovedSize;
+    Point annotationBeingMovedOffset;
+    HBITMAP bmpMovePattern = nullptr;
+    HBRUSH brMovePattern = nullptr;
+    Annotation* annotationBeingDragged = nullptr;
 
     /* when moving the document by smooth scrolling, this keeps track of
        the speed at which we should scroll, which depends on the distance
@@ -181,7 +187,7 @@ struct MainWindow {
     Vec<StaticLinkInfo*> staticLinks;
 
     bool isFullScreen = false;
-    PresentationMode presentation{PM_DISABLED};
+    PresentationMode presentation = PM_DISABLED;
     int windowStateBeforePresentation = 0;
 
     long nonFullScreenWindowStyle = 0;
@@ -202,11 +208,7 @@ struct MainWindow {
     ILinkHandler* linkHandler = nullptr;
     IPageElement* linkOnLastButtonDown = nullptr;
     AutoFreeStr urlOnLastButtonDown;
-    Annotation* annotationOnLastButtonDown = nullptr;
-    Size annotationBeingMovedSize;
-    Point annotationBeingMovedOffset;
-    HBITMAP bmpMovePattern = nullptr;
-    HBRUSH brMovePattern = nullptr;
+    Annotation* annotationUnderCursor = nullptr;
     HBRUSH brControlBgColor = nullptr;
 
     DocControllerCallback* cbHandler = nullptr;
@@ -239,6 +241,7 @@ struct MainWindow {
     void RedrawAllIncludingNonClient() const;
 
     void ChangePresentationMode(PresentationMode mode);
+    bool InPresentation() const;
 
     void Focus() const;
 
@@ -251,7 +254,7 @@ struct MainWindow {
     bool CreateUIAProvider();
 };
 
-void UpdateTreeCtrlColors(MainWindow*);
+void UpdateControlsColors(MainWindow*);
 void RepaintAsync(MainWindow*, int delay);
 void ClearFindBox(MainWindow*);
 void CreateMovePatternLazy(MainWindow*);

@@ -7,7 +7,14 @@ I'm using premake5 beta1 from https://premake.github.io/download.html#v5
 Note about nasm: when providing "-I foo/bar/" flag to nasm.exe, it must be
 "foo/bar/" and not just "foo/bar".
 
-Notes about asan in msvc: https://devblogs.microsoft.com/cppblog/addresssanitizer-asan-for-windows-with-msvc/
+Notes about asan in msvc:
+https://devblogs.microsoft.com/cppblog/addresssanitizer-asan-for-windows-with-msvc/
+https://devblogs.microsoft.com/cppblog/msvc-address-sanitizer-one-dll-for-all-runtime-configurations/
+
+Set this in debugger env properties:
+PATH=%PATH%;c:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.37.32822\bin\Hostx64\x64
+(see https://stackoverflow.com/questions/428085/how-do-i-set-a-path-in-visual-studio)
+Make sure you're targeting the righat Configuration / Platform
 
 Reference for warnings:
  4018 - signed/unsigned mismatch
@@ -331,7 +338,7 @@ workspace "SumatraPDF"
     kind "StaticLib"
     language "C"
     optconf()
-    disablewarnings { "4204", "4244", "4057", "4245", "4310" }
+    disablewarnings { "4204", "4244", "4057", "4245", "4310", "4701" }
     includedirs { "ext/libwebp" }
     libwebp_files()
 
@@ -680,6 +687,7 @@ workspace "SumatraPDF"
       "mupdf/resources/fonts/sil/CharisSIL-BoldItalic.cff",
       "mupdf/resources/fonts/noto/NotoSans-Regular.otf",
       "mupdf/resources/fonts/noto/NotoSerif-Regular.otf",
+      "mupdf/resources/fonts/noto/NotoSerifDevanagari-Regular.otf",
     }
 
     filter {'files:**.cff'}
@@ -996,6 +1004,9 @@ workspace "SumatraPDF"
     linkoptions { "/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll" }
     linkoptions { "/DELAYLOAD:urlmon.dll /DELAYLOAD:version.dll /DELAYLOAD:wininet.dll" }
     linkoptions { "/DELAYLOAD:uiautomationcore.dll" }
+    filter "platforms:x64_asan"
+      linkoptions { "/INFERASANLIBS" }
+    filter {}
     -- dependson { "PdfFilter", "PdfPreview", "test_util" }
 
   -- a dll version where most functionality is in libmupdf.dll

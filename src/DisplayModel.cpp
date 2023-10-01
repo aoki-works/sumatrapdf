@@ -212,8 +212,8 @@ void DisplayModel::RepaintDisplay() {
     cb->Repaint();
 }
 
-bool DisplayModel::GetPresentationMode() const {
-    return presentationMode;
+bool DisplayModel::InPresentation() const {
+    return inPresentation;
 }
 
 void DisplayModel::GetDisplayState(FileState* fs) {
@@ -222,13 +222,13 @@ void DisplayModel::GetDisplayState(FileState* fs) {
 
     fs->useDefaultState = !gGlobalPrefs->rememberStatePerDocument;
 
-    str::ReplaceWithCopy(&fs->displayMode, DisplayModeToString(presentationMode ? presDisplayMode : GetDisplayMode()));
-    ZoomToString(&fs->zoom, presentationMode ? presZoomVirtual : zoomVirtual, fs);
+    str::ReplaceWithCopy(&fs->displayMode, DisplayModeToString(inPresentation ? presDisplayMode : GetDisplayMode()));
+    ZoomToString(&fs->zoom, inPresentation ? presZoomVirtual : zoomVirtual, fs);
 
     ScrollState ss = GetScrollState();
     fs->pageNo = ss.page;
     fs->scrollPos = PointF();
-    if (!presentationMode) {
+    if (!inPresentation) {
         fs->scrollPos = PointF((float)ss.x, (float)ss.y);
     }
     fs->rotation = rotation;
@@ -1056,8 +1056,7 @@ IPageElement* DisplayModel::GetElementAtPos(Point pt, int* pageNoOut) {
     return engine->GetElementAtPos(pageNo, pos);
 }
 
-// caller must delete
-Annotation* DisplayModel::GetAnnotationAtPos(Point pt, AnnotationType* allowedAnnots) {
+Annotation* DisplayModel::GetAnnotationAtPos(Point pt, Annotation* annot) {
     int pageNo = GetPageNoByPoint(pt);
     if (!ValidPageNo(pageNo)) {
         return nullptr;
@@ -1068,7 +1067,7 @@ Annotation* DisplayModel::GetAnnotationAtPos(Point pt, AnnotationType* allowedAn
     }
 
     PointF pos = CvtFromScreen(pt, pageNo);
-    return EngineGetAnnotationAtPos(engine, pageNo, pos, allowedAnnots);
+    return EngineGetAnnotationAtPos(engine, pageNo, pos, annot);
 }
 
 // note: returns false for pages that haven't been rendered yet
@@ -1315,33 +1314,33 @@ void DisplayModel::SetDisplayMode(DisplayMode newDisplayMode, bool keepContinuou
     GoToPage(currPageNo, 0);
 }
 
-void DisplayModel::SetPresentationMode(bool enable) {
-    presentationMode = enable;
-    if (enable) {
+void DisplayModel::SetInPresentation(bool inPres) {
+    inPresentation = inPres;
+    if (inPresentation) {
         presDisplayMode = displayMode;
         presZoomVirtual = zoomVirtual;
         // disable the window margin during presentations
         windowMargin.top = windowMargin.right = windowMargin.bottom = windowMargin.left = 0;
         SetDisplayMode(DisplayMode::SinglePage);
         SetZoomVirtual(kZoomFitPage, nullptr);
-    } else {
-        if (engine && engine->IsImageCollection()) {
-            windowMargin = gGlobalPrefs->comicBookUI.windowMargin;
-        } else {
-            windowMargin = gGlobalPrefs->fixedPageUI.windowMargin;
-        }
-#ifdef DRAW_PAGE_SHADOWS
-        windowMargin.top += 3;
-        windowMargin.bottom += 5;
-        windowMargin.right += 3;
-        windowMargin.left += 1;
-#endif
-        SetDisplayMode(presDisplayMode);
-        if (!IsValidZoom(presZoomVirtual)) {
-            presZoomVirtual = zoomVirtual;
-        }
-        SetZoomVirtual(presZoomVirtual, nullptr);
+        return;
     }
+    if (engine && engine->IsImageCollection()) {
+        windowMargin = gGlobalPrefs->comicBookUI.windowMargin;
+    } else {
+        windowMargin = gGlobalPrefs->fixedPageUI.windowMargin;
+    }
+#ifdef DRAW_PAGE_SHADOWS
+    windowMargin.top += 3;
+    windowMargin.bottom += 5;
+    windowMargin.right += 3;
+    windowMargin.left += 1;
+#endif
+    SetDisplayMode(presDisplayMode);
+    if (!IsValidZoom(presZoomVirtual)) {
+        presZoomVirtual = zoomVirtual;
+    }
+    SetZoomVirtual(presZoomVirtual, nullptr);
 }
 
 /* In continuous mode just scrolls to the next page. In single page mode
@@ -1723,13 +1722,16 @@ bool DisplayModel::ShowResultRectToScreen(TextSel* res) {
         Rect rc = CvtToScreen(res->pages[i], ToRectF(res->rects[i]));
         extremes = extremes.Union(rc);
     }
+    return ScrollScreenToRect(res->pages[0], extremes);
+}
 
+bool DisplayModel::ScrollScreenToRect(int pageNo, Rect extremes) {
     // don't scroll if the whole result is already visible
     if (Rect(Point(), viewPort.Size()).Intersect(extremes) == extremes) {
         return false;
     }
 
-    PageInfo* pageInfo = GetPageInfo(res->pages[0]);
+    PageInfo* pageInfo = GetPageInfo(pageNo);
     int sx = 0, sy = 0;
 
     // vertically, we try to position the search result between 40%

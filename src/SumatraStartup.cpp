@@ -144,9 +144,21 @@ void FileExistenceChecker::Run() {
     });
 }
 
-static void MakePluginWindow(MainWindow* win, HWND hwndParent) {
-    CrashIf(!IsWindow(hwndParent));
+// return false if failed in a way that should abort the app
+static NO_INLINE bool MaybeMakePluginWindow(MainWindow* win, HWND hwndParent) {
+    if (!hwndParent) {
+        return true;
+    }
+    logfa("MakePluginWindow: win: 0x%p, hwndParent: 0x%x (isWindow: %d), gPluginURL: %s\n", win, hwndParent,
+          (int)IsWindow(hwndParent), gPluginURL ? gPluginURL : "<nulL>");
     CrashIf(!gPluginMode);
+
+    if (!IsWindow(hwndParent)) {
+        // we validated hwndParent for validity at startup but I'm seeing cases
+        // in crash reports were it's not valid here
+        // I assume the window went away so we just abort
+        return false;
+    }
 
     auto hwndFrame = win->hwndFrame;
     long ws = GetWindowLong(hwndFrame, GWL_STYLE);
@@ -161,6 +173,7 @@ static void MakePluginWindow(MainWindow* win, HWND hwndParent) {
 
     // from here on, we depend on the plugin's host to resize us
     SetFocus(hwndFrame);
+    return true;
 }
 
 static bool RegisterWinClass() {
@@ -265,8 +278,9 @@ static MainWindow* LoadOnStartup(const char* filePath, const Flags& flags, bool 
             win->ctrl->GoToPage(flags.pageNumber, false);
         }
     }
-    if (flags.hwndPluginParent) {
-        MakePluginWindow(win, flags.hwndPluginParent);
+    bool ok = MaybeMakePluginWindow(win, flags.hwndPluginParent);
+    if (!ok) {
+        return nullptr;
     }
     if (!win->IsDocLoaded() || !isFirstWin) {
         return win;
@@ -306,18 +320,12 @@ static MainWindow* LoadOnStartup(const char* filePath, const Flags& flags, bool 
     return win;
 }
 
-static void RestoreTabOnStartup(MainWindow* win, TabState* state, bool lazyload = true) {
-    logf("RestoreTabOnStartup: state->filePath: '%s'\n", state->filePath);
-    LoadArgs args(state->filePath, win);
-    args.noSavePrefs = true;
-    if (!LoadDocument(&args, lazyload, false)) {
-        return;
-    }
-    WindowTab* tab = win->CurrentTab();
+void SetTabState(WindowTab* tab, TabState* state) {
     if (!tab || !tab->ctrl) {
         return;
     }
 
+    auto win = tab->win;
     DocController* ctrl = tab->ctrl;
     DisplayModel* dm = tab->AsFixed();
 
@@ -357,6 +365,24 @@ static void RestoreTabOnStartup(MainWindow* win, TabState* state, bool lazyload 
         } else {
             ctrl->SetZoomVirtual(zoom, nullptr);
         }
+    }
+}
+
+// TODO: when files are lazy loaded, they do not restore TabState. Need to remember
+// it in LoadArgs and call SetTabState() if present after loading
+static void RestoreTabOnStartup(MainWindow* win, TabState* state, bool lazyLoad = true) {
+    logf("RestoreTabOnStartup: state->filePath: '%s'\n", state->filePath);
+    LoadArgs args(state->filePath, win);
+    args.noSavePrefs = true;
+    if (lazyLoad) {
+        args.tabState = state;
+    }
+    if (!LoadDocument(&args, lazyLoad, false)) {
+        return;
+    }
+    WindowTab* tab = win->CurrentTab();
+    if (!lazyLoad) {
+        SetTabState(tab, state);
     }
 }
 
@@ -776,13 +802,12 @@ constexpr const char* kInstallerHelpTmpl = R"(${appName} installer options:
 
 static void ShowInstallerHelp() {
     // Note: translation services aren't initialized at this point, so English only
-    str::Str msg{kInstallerHelpTmpl};
-    str::Replace(msg, "${appName}", kAppName);
+    TempStr msg = str::ReplaceTemp(kInstallerHelpTmpl, "${appName}", kAppName);
 
     bool ok = RedirectIOToExistingConsole();
     if (ok) {
         // if we're launched from console, print help to consle window
-        printf("%s\n%s\n", msg.Get(), "See more at https://www.sumatrapdfreader.org/docs/Installer-cmd-line-arguments");
+        printf("%s\n%s\n", msg, "See more at https://www.sumatrapdfreader.org/docs/Installer-cmd-line-arguments");
         return;
     }
 
@@ -796,7 +821,7 @@ static void ShowInstallerHelp() {
     }
     dialogConfig.cbSize = sizeof(TASKDIALOGCONFIG);
     dialogConfig.pszWindowTitle = title;
-    dialogConfig.pszMainInstruction = ToWstrTemp(msg.Get());
+    dialogConfig.pszMainInstruction = ToWstrTemp(msg);
     dialogConfig.pszContent =
         LR"(<a href="https://www.sumatrapdfreader.org/docs/Installer-cmd-line-arguments">Read more on website</a>)";
     dialogConfig.nDefaultButton = IDOK;
@@ -934,8 +959,7 @@ static void ForceStartupLeaks() {
     }
 }
 
-int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __unused LPSTR cmdLine,
-                     __unused int nCmdShow) {
+int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     int exitCode = 1; // by default it's error
     int nWithDde = 0;
     MainWindow* win = nullptr;
@@ -945,6 +969,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     HWND existingHwnd = nullptr;
     WindowTab* tabToSelect = nullptr;
     const char* logFilePath = nullptr;
+    Vec<SessionData*>* sessionData = nullptr;
 
     CrashIf(hInstance != GetInstance());
 
@@ -1171,7 +1196,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     gCrashOnOpen = flags.crashOnOpen;
 
     GetDocumentColors(gRenderCache.textColor, gRenderCache.backgroundColor);
-    logfa("retrieved doc colors in WinMain: 0x%x 0x%x\n", gRenderCache.textColor, gRenderCache.backgroundColor);
+    // logfa("retrieved doc colors in WinMain: 0x%x 0x%x\n", gRenderCache.textColor, gRenderCache.backgroundColor);
 
     gIsStartup = true;
     if (!RegisterWinClass()) {
@@ -1181,6 +1206,14 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     CrashIf(hInstance != GetModuleHandle(nullptr));
     if (!InstanceInit()) {
         goto Exit;
+    }
+
+    if (flags.hwndPluginParent) {
+        // check early to avoid a crash in MakePluginWindow()
+        if (!IsWindow(flags.hwndPluginParent)) {
+            MessageBoxA(nullptr, "-plugin argument is not a valid window handle (hwnd)", "Error", MB_OK | MB_ICONERROR);
+            goto Exit;
+        }
     }
 
     if (flags.hwndPluginParent) {
@@ -1247,7 +1280,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         SendMyselfDDE(flags.dde, existingHwnd);
         // TODO: should exit?
     }
-
     if (existingHwnd) {
         size_t nFiles = flags.fileNames.size();
         // we allow -new-window on its own if no files given
@@ -1273,7 +1305,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     }
 
 ContinueOpenWindow:
-    if (gGlobalPrefs->sessionData->size() > 0 && !gPluginURL) {
+    // keep this data alive until the end of program and ensure it's not
+    // over-written by re-loading settings file while we're using it
+    // and also to keep TabState forever for lazy loading of tabs
+    sessionData = gGlobalPrefs->sessionData;
+    gGlobalPrefs->sessionData = new Vec<SessionData*>();
+    if (sessionData->size() > 0 && !gPluginURL) {
         restoreSession = gGlobalPrefs->restoreSession;
     }
 
@@ -1289,18 +1326,13 @@ ContinueOpenWindow:
     }
 
     if (restoreSession) {
-        for (SessionData* data : *gGlobalPrefs->sessionData) {
+        for (SessionData* data : *sessionData) {
             win = CreateAndShowMainWindow(data);
             for (TabState* state : *data->tabStates) {
                 if (str::IsEmpty(state->filePath)) {
                     logf("WinMain: skipping RestoreTabOnStartup() because state->filePath is empty\n");
                     continue;
                 }
-                // TODO: if SaveSettings() is called, it deletes gGlobalPrefs->sessionData
-                // we're currently iterating (happened e.g. if the file is deleted)
-                // the current fix is to not call SaveSettings() below but maybe there's a better way
-                // maybe make a copy of TabState so that it isn't invalidated
-                // https://github.com/sumatrapdfreader/sumatrapdf/issues/1674
                 RestoreTabOnStartup(win, state, gEnableLazyLoad);
             }
             TabsSelect(win, data->tabIndex - 1);
@@ -1309,7 +1341,6 @@ ContinueOpenWindow:
             }
         }
     }
-    ResetSessionState(gGlobalPrefs->sessionData);
 
     for (const char* path : flags.fileNames) {
         if (restoreSession) {
@@ -1417,6 +1448,10 @@ Exit:
     }
     str::Free(logFilePath);
 
+    if (sessionData) {
+        DeleteVecMembers(*sessionData);
+        delete sessionData;
+    }
     FreeExternalViewers();
     while (gWindows.size() > 0) {
         DeleteMainWindow(gWindows.at(0));

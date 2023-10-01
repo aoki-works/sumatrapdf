@@ -29,7 +29,7 @@
 #include "Translations.h"
 #include "uia/Provider.h"
 
-SelectionOnPage::SelectionOnPage(int pageNo, RectF* rect) {
+SelectionOnPage::SelectionOnPage(int pageNo, const RectF* const rect) {
     this->pageNo = pageNo;
     if (rect) {
         this->rect = *rect;
@@ -348,9 +348,8 @@ void CopySelectionToClipboard(MainWindow* win) {
         selText = GetSelectedText(tab, "\r\n", isTextOnlySelectionOut);
     }
 
-    // don't copy empty text
     if (!str::IsEmpty(selText)) {
-        CopyTextToClipboard(selText, true);
+        AppendTextToClipboard(selText);
     }
     str::Free(selText);
 
@@ -453,7 +452,7 @@ void OnSelectionEdgeAutoscroll(MainWindow* win, int x, int y) {
     }
 }
 
-void OnSelectionStart(MainWindow* win, int x, int y, __unused WPARAM key) {
+void OnSelectionStart(MainWindow* win, int x, int y, WPARAM) {
     CrashIf(!win->AsFixed());
     DeleteOldSelectionInfo(win, true);
 

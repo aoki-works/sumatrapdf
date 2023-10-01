@@ -2,6 +2,7 @@
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
+#include "utils/BitManip.h"
 #include "utils/WinDynCalls.h"
 #include "utils/Dpi.h"
 #include "utils/FileUtil.h"
@@ -53,8 +54,10 @@
 
 #include "utils/Log.h"
 
+Kind kNotifGroupAnnotation = "notifAnnotation";
+
 // Timer for mouse wheel smooth scrolling
-#define MW_SMOOTHSCROLL_TIMER_ID 6
+constexpr UINT_PTR kSmoothScrollTimerID = 6;
 
 // Smooth scrolling factor. This is a value between 0 and 1.
 // Each step, we scroll the needed delta times this factor.
@@ -142,7 +145,7 @@ static void OnVScroll(MainWindow* win, WPARAM wp) {
     if (si.nPos != currPos || msg == SB_THUMBTRACK) {
         if (gGlobalPrefs->smoothScroll) {
             win->scrollTargetY = si.nPos;
-            SetTimer(win->hwndCanvas, MW_SMOOTHSCROLL_TIMER_ID, USER_TIMER_MINIMUM, nullptr);
+            SetTimer(win->hwndCanvas, kSmoothScrollTimerID, USER_TIMER_MINIMUM, nullptr);
         } else {
             win->AsFixed()->ScrollYTo(si.nPos);
         }
@@ -222,14 +225,14 @@ static void StartMouseDrag(MainWindow* win, int x, int y, bool right = false) {
 
 // return true if this was annotation dragging
 static bool StopDraggingAnnotation(MainWindow* win, int x, int y, bool aborted) {
-    Annotation* annot = win->annotationOnLastButtonDown;
+    Annotation* annot = win->annotationBeingDragged;
     if (!annot) {
         return false;
     }
     DrawMovePattern(win, win->dragPrevPos, win->annotationBeingMovedSize);
+
+    win->annotationBeingDragged = nullptr;
     if (aborted) {
-        delete annot;
-        win->annotationOnLastButtonDown = nullptr;
         return true;
     }
 
@@ -248,13 +251,10 @@ static bool StopDraggingAnnotation(MainWindow* win, int x, int y, bool aborted) 
         // logf("prev rect: x=%.2f, y=%.2f, dx=%.2f, dy=%.2f\n", ar.x, ar.y, ar.dx, ar.dy);
         // logf(" new rect: x=%.2f, y=%.2f, dx=%.2f, dy=%.2f\n", r.x, r.y, r.dx, r.dy);
         SetRect(annot, r);
+        NotifyAnnotationsChanged(win->CurrentTab()->editAnnotsWindow);
         MainWindowRerender(win);
         ToolbarUpdateStateForWindow(win, true);
-        StartEditAnnotations(win->CurrentTab(), annot);
-    } else {
-        delete annot;
     }
-    win->annotationOnLastButtonDown = nullptr;
     return true;
 }
 
@@ -284,12 +284,13 @@ void CancelDrag(MainWindow* win) {
     auto pt = win->dragPrevPos;
     auto [x, y] = pt;
     StopMouseDrag(win, x, y, true);
-    win->mouseAction = MouseAction::Idle;
+    win->mouseAction = MouseAction::None;
     win->linkOnLastButtonDown = nullptr;
+    win->annotationBeingDragged = nullptr;
     SetCursorCached(IDC_ARROW);
 }
 
-bool IsDrag(int x1, int x2, int y1, int y2) {
+bool IsDragDistance(int x1, int x2, int y1, int y2) {
     int dx = abs(x1 - x2);
     int dragDx = GetSystemMetrics(SM_CXDRAG);
     if (dx > dragDx) {
@@ -301,10 +302,13 @@ bool IsDrag(int x1, int x2, int y1, int y2) {
     return dy > dragDy;
 }
 
-static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
-    CrashIf(!win->AsFixed());
+static bool gShowAnnotationNotification = true;
 
-    if (win->presentation != PM_DISABLED) {
+static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
+    DisplayModel* dm = win->AsFixed();
+    CrashIf(!dm);
+
+    if (win->InPresentation()) {
         if (PM_BLACK_SCREEN == win->presentation || PM_WHITE_SCREEN == win->presentation) {
             // logf("OnMouseMove: hiding cursor because black screen or white screen\n");
             SetCursor((HCURSOR) nullptr);
@@ -313,14 +317,14 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
 
         bool showingCursor = (GetCursor() != nullptr);
         bool sameAsLastPos = win->dragPrevPos.Eq(x, y);
-        // logf("OnMouseMove(): win->presentation != PM_DISABLED (%d, %d) showingCursor: %d, same as last pos: %d\n", x,
+        // logf("OnMouseMove(): win->InPresentation() (%d, %d) showingCursor: %d, same as last pos: %d\n", x,
         // y,
         //     (int)showingCursor, (int)sameAsLastPos);
         if (!sameAsLastPos) {
             // shortly display the cursor if the mouse has moved and the cursor is hidden
             if (!showingCursor) {
                 // logf("OnMouseMove: temporary showing cursor\n");
-                if (win->mouseAction == MouseAction::Idle) {
+                if (win->mouseAction == MouseAction::None) {
                     SetCursorCached(IDC_ARROW);
                 } else {
                     SendMessageW(win->hwndCanvas, WM_SETCURSOR, 0, 0);
@@ -336,30 +340,66 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
         }
     }
 
+    Point pos{x, y};
+    NotificationWnd* cursorPosNotif = GetNotificationForGroup(win->hwndCanvas, kNotifGroupCursorPos);
+
     if (win->dragStartPending) {
-        if (!IsDrag(x, win->dragStart.x, y, win->dragStart.y)) {
+        if (!IsDragDistance(x, win->dragStart.x, y, win->dragStart.y)) {
             return;
         }
         win->dragStartPending = false;
         win->linkOnLastButtonDown = nullptr;
     }
 
-    DisplayModel* dm = win->AsFixed(); // CPS Lab.
     int dx, dy;  // CPS Lab.
     Point prevPos = win->dragPrevPos;
-    Point pos{x, y};
-    Annotation* annot = win->annotationOnLastButtonDown;
     switch (win->mouseAction) {
-        case MouseAction::Scrolling:
+        case MouseAction::None: {
+            Annotation* annot = dm->GetAnnotationAtPos(pos, nullptr);
+            Annotation* prev = win->annotationUnderCursor;
+            if (annot != prev) {
+#if 0
+                TempStr name = annot ? AnnotationReadableNameTemp(annot->type) : (TempStr) "none";
+                TempStr prevName = prev ? AnnotationReadableNameTemp(prev->type) : (TempStr) "none";
+                logf("different annot under cursor. prev: %s, new: %s\n", prevName, name);
+#endif
+                if (gShowAnnotationNotification) {
+                    if (annot) {
+                        // auto r = annot->bounds;
+                        // logf("new pos: %d-%d, size: %d-%d\n", (int)r.x, (int)r.y, (int)r.dx, (int)r.dy);
+                        RemoveNotificationsForGroup(win->hwndCanvas, kNotifGroupAnnotation);
+                        NotificationCreateArgs args;
+                        args.hwndParent = win->hwndCanvas;
+                        args.groupId = kNotifGroupAnnotation;
+                        args.font = GetDefaultGuiFont();
+                        args.timeoutMs = -1;
+                        TempStr name = annot ? AnnotationReadableNameTemp(annot->type) : (TempStr) "none";
+                        args.msg =
+                            str::FormatTemp(_TRN("%s annotation. Ctrl+click to select. Ctrl+dbl click to edit."), name);
+                        ShowNotification(args);
+                    }
+                }
+            }
+            if (!annot) {
+                RemoveNotificationsForGroup(win->hwndCanvas, kNotifGroupAnnotation);
+            }
+            win->annotationUnderCursor = annot;
+            break;
+        }
+
+        case MouseAction::Scrolling: {
+            win->annotationUnderCursor = nullptr;
             win->yScrollSpeed = (y - win->dragStart.y) / SMOOTHSCROLL_SLOW_DOWN_FACTOR;
             win->xScrollSpeed = (x - win->dragStart.x) / SMOOTHSCROLL_SLOW_DOWN_FACTOR;
             break;
+        }
         case MouseAction::SelectingText:
             if (GetCursor()) {
                 SetCursorCached(IDC_IBEAM);
             }
             [[fallthrough]];
-        case MouseAction::Selecting:
+        case MouseAction::Selecting: {
+            win->annotationUnderCursor = nullptr;
             if (gGlobalPrefs->circularSelectionRegion and dm->textSelection->result.len == 0) {
                 // CPS Lab.
                 dx = (x - win->selectionRect.x) - win->selectionRect.dx;
@@ -372,10 +412,13 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
                 win->selectionRect.dx = x - win->selectionRect.x;
                 win->selectionRect.dy = y - win->selectionRect.y;
             }
+            win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
             OnSelectionEdgeAutoscroll(win, x, y);
             RepaintAsync(win, 0);
             break;
-        case MouseAction::Dragging:
+        }
+        case MouseAction::Dragging: {
+            Annotation* annot = win->annotationBeingDragged;
             if (annot) {
                 Size size = win->annotationBeingMovedSize;
                 DrawMovePattern(win, prevPos, size);
@@ -384,78 +427,28 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
                 win->MoveDocBy(win->dragPrevPos.x - x, win->dragPrevPos.y - y);
             }
             break;
+        }
     }
     win->dragPrevPos = pos;
 
-    NotificationWnd* wnd = GetNotificationForGroup(win->hwndCanvas, kNotifGroupCursorPos);
-    if (!wnd) {
-        return;
+    if (cursorPosNotif) {
+        UpdateCursorPositionHelper(win, pos, cursorPosNotif);
     }
-
-    if (MouseAction::Selecting == win->mouseAction) {
-        win->selectionMeasure = win->AsFixed()->CvtFromScreen(win->selectionRect).Size();
-    }
-    UpdateCursorPositionHelper(win, pos, wnd);
 }
 
-// clang-format off
-static AnnotationType moveableAnnotations[] = {
-    AnnotationType::Text,
-    AnnotationType::Link,
-    AnnotationType::FreeText,
-    AnnotationType::Line,
-    AnnotationType::Square,
-    AnnotationType::Circle,
-    AnnotationType::Polygon,
-    AnnotationType::PolyLine,
-    //AnnotationType::Highlight,
-    //AnnotationType::Underline,
-    //AnnotationType::Squiggly,
-    //AnnotationType::StrikeOut,
-    //AnnotationType::Redact,
-    AnnotationType::Stamp,
-    AnnotationType::Caret,
-    AnnotationType::Ink,
-    AnnotationType::Popup,
-    AnnotationType::FileAttachment,
-    AnnotationType::Sound,
-    AnnotationType::Movie,
-    //AnnotationType::Widget, // TODO: maybe moveble?
-    AnnotationType::Screen,
-    AnnotationType::PrinterMark,
-    AnnotationType::TrapNet,
-    AnnotationType::Watermark,
-    AnnotationType::ThreeD,
-    AnnotationType::Unknown,
-};
-// clang-format on
-
-static void SetObjectUnderMouse(MainWindow* win, int x, int y) {
-    CrashIf(win->linkOnLastButtonDown);
-    CrashIf(win->annotationOnLastButtonDown);
+static void StartAnnotationDrag(MainWindow* win, Annotation* annot, Point& pt) {
+    win->annotationBeingDragged = annot;
     DisplayModel* dm = win->AsFixed();
-    Point pt{x, y};
-
-    Annotation* annot = dm->GetAnnotationAtPos(pt, moveableAnnotations);
-    if (annot) {
-        win->annotationOnLastButtonDown = annot;
-        CreateMovePatternLazy(win);
-        RectF r = GetRect(annot);
-        int pageNo = dm->GetPageNoByPoint(pt);
-        Rect rScreen = dm->CvtToScreen(pageNo, r);
-        win->annotationBeingMovedSize = {rScreen.dx, rScreen.dy};
-        int offsetX = rScreen.x - pt.x;
-        int offsetY = rScreen.y - pt.y;
-        win->annotationBeingMovedOffset = Point{offsetX, offsetY};
-        DrawMovePattern(win, pt, win->annotationBeingMovedSize);
-    }
-
-    IPageElement* pageEl = dm->GetElementAtPos(pt, nullptr);
-    if (pageEl) {
-        if (pageEl->Is(kindPageElementDest)) {
-            win->linkOnLastButtonDown = pageEl;
-        }
-    }
+    CreateMovePatternLazy(win);
+    RectF r = GetRect(annot);
+    int pageNo = dm->GetPageNoByPoint(pt);
+    Rect rScreen = dm->CvtToScreen(pageNo, r);
+    win->annotationBeingMovedSize = {rScreen.dx, rScreen.dy};
+    int offsetX = rScreen.x - pt.x;
+    int offsetY = rScreen.y - pt.y;
+    win->annotationBeingMovedOffset = Point{offsetX, offsetY};
+    DrawMovePattern(win, pt, win->annotationBeingMovedSize);
+    return;
 }
 
 static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
@@ -465,26 +458,41 @@ static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
     }
 
     if (MouseAction::Scrolling == win->mouseAction) {
-        win->mouseAction = MouseAction::Idle;
+        win->mouseAction = MouseAction::None;
         return;
     }
 
-    if (win->mouseAction != MouseAction::Idle) {
+    if (win->mouseAction != MouseAction::None) {
         // this can be MouseAction::SelectingText (4)
         // can't reproduce it so far
         logf("OnMouseLeftButtonDown: win->mouseAction=%d\n", (int)win->mouseAction);
         // ReportIf(win->mouseAction != MouseAction::Idle);
-        win->mouseAction = MouseAction::Idle;
+        win->mouseAction = MouseAction::None;
         return;
     }
     ReportIf(!win->AsFixed());
 
     SetFocus(win->hwndFrame);
 
-    SetObjectUnderMouse(win, x, y);
+    DisplayModel* dm = win->AsFixed();
+    Point pt{x, y};
+
+    WindowTab* tab = win->CurrentTab();
+    Annotation* annot = dm->GetAnnotationAtPos(pt, tab->selectedAnnotation);
+    bool isMoveableAnnot = annot && (annot == tab->selectedAnnotation) && IsMoveableAnnotation(annot->type);
+    if (isMoveableAnnot) {
+        StartAnnotationDrag(win, annot, pt);
+    } else {
+        CrashIf(win->linkOnLastButtonDown);
+        IPageElement* pageEl = dm->GetElementAtPos(pt, nullptr);
+        if (pageEl) {
+            if (pageEl->Is(kindPageElementDest)) {
+                win->linkOnLastButtonDown = pageEl;
+            }
+        }
+    }
 
     win->dragStartPending = true;
-    Point pt{x, y};
     win->dragStart = pt;
 
     // - without modifiers, clicking on text starts a text selection
@@ -497,8 +505,7 @@ static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
     bool isCtrl = IsCtrlPressed();
     bool canCopy = HasPermission(Perm::CopySelection);
     bool isOverText = win->AsFixed()->IsOverText(pt);
-    Annotation* annot = win->annotationOnLastButtonDown;
-    if (annot || !canCopy || (isShift || !isOverText) && !isCtrl) {
+    if (isMoveableAnnot || !canCopy || (isShift || !isOverText) && !isCtrl) {
         StartMouseDrag(win, x, y);
     } else {
         OnSelectionStart(win, x, y, key);
@@ -509,13 +516,13 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     DisplayModel* dm = win->AsFixed();
     CrashIf(!dm);
     auto ma = win->mouseAction;
-    if (MouseAction::Idle == ma || IsRightDragging(win)) {
+    if (MouseAction::None == ma || IsRightDragging(win)) {
         return;
     }
     CrashIf(MouseAction::Selecting != ma && MouseAction::SelectingText != ma && MouseAction::Dragging != ma);
 
     // TODO: should IsDrag() ever be true here? We should get mouse move first
-    bool didDragMouse = !win->dragStartPending || IsDrag(x, win->dragStart.x, y, win->dragStart.y);
+    bool didDragMouse = !win->dragStartPending || IsDragDistance(x, win->dragStart.x, y, win->dragStart.y);
     if (MouseAction::Dragging == ma) {
         StopMouseDrag(win, x, y, !didDragMouse);
     } else {
@@ -528,7 +535,7 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         tab->markers->sendSelectMessage(win);
     }
 
-    win->mouseAction = MouseAction::Idle;
+    win->mouseAction = MouseAction::None;
 
     Point pt(x, y);
     int pageNo = dm->GetPageNoByPoint(pt);
@@ -547,6 +554,11 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     if (PM_BLACK_SCREEN == win->presentation || PM_WHITE_SCREEN == win->presentation) {
         /* return from white/black screens in presentation mode */
         win->ChangePresentationMode(PM_ENABLED);
+        return;
+    }
+
+    if (IsCtrlPressed() && win->annotationUnderCursor) {
+        SetSelectedAnnotation(tab, win->annotationUnderCursor);
         return;
     }
 
@@ -596,44 +608,55 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
 
 static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
     // lf("Left button clicked on %d %d", x, y);
-    if (win->presentation && !(key & ~MK_LBUTTON)) {
-        // in presentation mode, left clicks turn the page,
-        // make two quick left clicks (AKA one double-click) turn two pages
-        OnMouseLeftButtonDown(win, x, y, key);
+    auto isLeft = bit::IsMaskSet(key, (WPARAM)MK_LBUTTON);
+    if (isLeft && (win->presentation || win->isFullScreen)) {
+        // note: before 3.5 used to turn 2 pages
+        // OnMouseLeftButtonDown(win, x, y, key);
+        ExitFullScreen(win);
         return;
     }
 
-    bool dontSelect = false;
-    if (gGlobalPrefs->enableTeXEnhancements && !(key & ~MK_LBUTTON)) {
-        dontSelect = OnInverseSearch(win, x, y);
-    }
-    if (dontSelect) {
-        return;
+    if (gGlobalPrefs->enableTeXEnhancements && isLeft) {
+        bool dontSelect = OnInverseSearch(win, x, y);
+        if (dontSelect) {
+            return;
+        }
     }
 
+    Point mousePos = Point(x, y);
     DisplayModel* dm = win->AsFixed();
-    if (dm->IsOverText(Point(x, y))) {
-        int pageNo = dm->GetPageNoByPoint(Point(x, y));
+    int elementPageNo = -1;
+    IPageElement* pageEl = dm->GetElementAtPos(mousePos, &elementPageNo);
+
+    WindowTab* tab = win->CurrentTab();
+    if (IsCtrlPressed() && win->annotationUnderCursor) {
+        ShowEditAnnotationsWindow(tab);
+        SetSelectedAnnotation(tab, win->annotationUnderCursor);
+        return;
+    }
+
+    if (dm->IsOverText(mousePos)) {
+        int pageNo = dm->GetPageNoByPoint(mousePos);
         if (win->ctrl->ValidPageNo(pageNo)) {
-            PointF pt = dm->CvtFromScreen(Point(x, y), pageNo);
+            PointF pt = dm->CvtFromScreen(mousePos, pageNo);
             dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y);
             UpdateTextSelection(win, false);
             RepaintAsync(win, 0);
             /* callback to user application via DDE. CPS Lab.*/
-            WindowTab* tab = win->CurrentTab();
             tab->markers->sendSelectMessage(win);
         }
         return;
     }
 
-    int pageNo = -1;
-    IPageElement* pageEl = dm->GetElementAtPos(Point(x, y), &pageNo);
-    if (pageEl && pageEl->Is(kindPageElementDest)) {
+    if (!pageEl) {
+        return;
+    }
+    if (pageEl->Is(kindPageElementDest)) {
         // speed up navigation in a file where navigation links are in a fixed position
         OnMouseLeftButtonDown(win, x, y, key);
-    } else if (pageEl && pageEl->Is(kindPageElementImage)) {
+    } else if (pageEl->Is(kindPageElementImage)) {
         // select an image that could be copied to the clipboard
-        Rect rc = dm->CvtToScreen(pageNo, pageEl->GetRect());
+        Rect rc = dm->CvtToScreen(elementPageNo, pageEl->GetRect());
 
         DeleteOldSelectionInfo(win, true);
         win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
@@ -646,7 +669,7 @@ static void OnMouseMiddleButtonDown(MainWindow* win, int x, int y, WPARAM) {
     // Handle message by recording placement then moving document as mouse moves.
 
     switch (win->mouseAction) {
-        case MouseAction::Idle:
+        case MouseAction::None:
             win->mouseAction = MouseAction::Scrolling;
 
             // record current mouse position, the farther the mouse is moved
@@ -656,7 +679,7 @@ static void OnMouseMiddleButtonDown(MainWindow* win, int x, int y, WPARAM) {
             break;
 
         case MouseAction::Scrolling:
-            win->mouseAction = MouseAction::Idle;
+            win->mouseAction = MouseAction::None;
             break;
     }
 }
@@ -664,8 +687,8 @@ static void OnMouseMiddleButtonDown(MainWindow* win, int x, int y, WPARAM) {
 static void OnMouseRightButtonDown(MainWindow* win, int x, int y) {
     // lf("Right button clicked on %d %d", x, y);
     if (MouseAction::Scrolling == win->mouseAction) {
-        win->mouseAction = MouseAction::Idle;
-    } else if (win->mouseAction != MouseAction::Idle) {
+        win->mouseAction = MouseAction::None;
+    } else if (win->mouseAction != MouseAction::None) {
         return;
     }
     CrashIf(!win->AsFixed());
@@ -684,11 +707,11 @@ static void OnMouseRightButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         return;
     }
 
-    int isDragXOrY = IsDrag(x, win->dragStart.x, y, win->dragStart.y);
+    int isDragXOrY = IsDragDistance(x, win->dragStart.x, y, win->dragStart.y);
     bool didDragMouse = !win->dragStartPending || isDragXOrY;
     StopMouseDrag(win, x, y, !didDragMouse);
 
-    win->mouseAction = MouseAction::Idle;
+    win->mouseAction = MouseAction::None;
 
     if (didDragMouse) {
         /* pass */;
@@ -830,6 +853,36 @@ static void GetGradientColor(COLORREF a, COLORREF b, float perc, TRIVERTEX* tv) 
     tv->Blue = (COLOR16)((ab + perc * (bb - ab)) * 256);
 }
 
+// Draw a border around selected annotation
+NO_INLINE static void PaintCurrentEditAnnotationMark(WindowTab* tab, HDC hdc, DisplayModel* dm) {
+    if (!tab) {
+        return;
+    }
+    Annotation* annot = tab->selectedAnnotation;
+    if (!annot) {
+        return;
+    }
+    int pageNo = annot->pageNo;
+    if (!dm->PageVisible(pageNo)) {
+        // CvtToScreen() might not work if page is not visible because
+        // it might not have zoom etc. calculated yet
+        return;
+    }
+
+    Rect rect = dm->CvtToScreen(pageNo, GetRect(annot));
+    if (!tab->didScrollToSelectedAnnotation) {
+        dm->ScrollScreenToRect(pageNo, rect);
+        tab->didScrollToSelectedAnnotation = true;
+    }
+
+    Gdiplus::Color col = GdiRgbFromCOLORREF(gCurrentTheme->document.textColor);
+    Gdiplus::Pen pen(col, 5);
+    Gdiplus::Graphics gs(hdc);
+    // TODO: maybe make the rectangle a bit bigger and draw line
+    // using a pattern
+    Gdiplus::Status stat = gs.DrawRectangle(&pen, rect.x, rect.y, rect.dx, rect.dy);
+}
+
 static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
     CrashIf(!win->AsFixed());
     if (!win->AsFixed()) {
@@ -937,7 +990,7 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
         if (renderDelay != 0) {
             AutoDeleteFont fontRightTxt(CreateSimpleFont(hdc, "MS Shell Dlg", 14));
             HGDIOBJ hPrevFont = SelectObject(hdc, fontRightTxt);
-            auto col = currentTheme->mainWindow.textColor;
+            auto col = gCurrentTheme->mainWindow.textColor;
             SetTextColor(hdc, col);
             if (renderDelay != RENDER_DELAY_FAILED) {
                 if (renderDelay < REPAINT_MESSAGE_DELAY_IN_MS) {
@@ -972,6 +1025,9 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
         StretchBlt(hdc, x, y, dxDest, dyDest, bmpDC, 0, 0, 16, 16, SRCCOPY);
         DeleteDC(bmpDC);
     }
+
+    WindowTab* tab = win->CurrentTab();
+    PaintCurrentEditAnnotationMark(tab, hdc, dm);
 
     if (win->showSelection) {
         PaintSelection(win, hdc);
@@ -1018,7 +1074,7 @@ static void SetTextOrArrorCursor(DisplayModel* dm, Point pt) {
 }
 
 // TODO: this gets called way too often
-static LRESULT OnSetCursorMouseIdle(MainWindow* win, HWND hwnd) {
+static LRESULT OnSetCursorMouseNone(MainWindow* win, HWND hwnd) {
     DisplayModel* dm = win->AsFixed();
     Point pt = HwndGetCursorPos(hwnd);
     if (!dm || !GetCursor() || pt.IsEmpty()) {
@@ -1027,6 +1083,13 @@ static LRESULT OnSetCursorMouseIdle(MainWindow* win, HWND hwnd) {
     }
     if (GetNotificationForGroup(win->hwndCanvas, kNotifGroupCursorPos)) {
         SetCursorCached(IDC_CROSS);
+        return TRUE;
+    }
+
+    Annotation* selected = win->CurrentTab()->selectedAnnotation;
+    Annotation* annot = dm->GetAnnotationAtPos(pt, selected);
+    if (annot && (annot == selected) && IsMoveableAnnotation(annot->type)) {
+        SetCursorCached(IDC_HAND);
         return TRUE;
     }
 
@@ -1060,7 +1123,7 @@ static LRESULT OnSetCursorMouseIdle(MainWindow* win, HWND hwnd) {
 
 static LRESULT OnSetCursor(MainWindow* win, HWND hwnd) {
     CrashIf(win->hwndCanvas != hwnd);
-    if (win->mouseAction != MouseAction::Idle) {
+    if (win->mouseAction != MouseAction::None) {
         win->DeleteToolTip();
     }
 
@@ -1076,8 +1139,8 @@ static LRESULT OnSetCursor(MainWindow* win, HWND hwnd) {
             return TRUE;
         case MouseAction::Selecting:
             break;
-        case MouseAction::Idle:
-            return OnSetCursorMouseIdle(win, hwnd);
+        case MouseAction::None:
+            return OnSetCursorMouseNone(win, hwnd);
     }
     return win->presentation ? TRUE : FALSE;
 }
@@ -1111,7 +1174,7 @@ static LRESULT CanvasOnMouseWheel(MainWindow* win, UINT msg, WPARAM wp, LPARAM l
 
         // Kill the smooth scroll timer when zooming
         // We don't want to move to the new updated y offset after zooming
-        KillTimer(win->hwndCanvas, MW_SMOOTHSCROLL_TIMER_ID);
+        KillTimer(win->hwndCanvas, kSmoothScrollTimerID);
 
         return 0;
     }
@@ -1588,7 +1651,7 @@ static void OnTimer(MainWindow* win, HWND hwnd, WPARAM timerId) {
         case kHideCursorTimerID:
             // logf("got kHideCursorTimerID\n");
             KillTimer(hwnd, kHideCursorTimerID);
-            if (win->presentation != PM_DISABLED) {
+            if (win->InPresentation()) {
                 // logf("hiding cursor because win->presentations\n");
                 SetCursor((HCURSOR) nullptr);
             }
@@ -1607,14 +1670,20 @@ static void OnTimer(MainWindow* win, HWND hwnd, WPARAM timerId) {
             }
             break;
 
-        case AUTO_RELOAD_TIMER_ID:
+        case AUTO_RELOAD_TIMER_ID: {
             KillTimer(hwnd, AUTO_RELOAD_TIMER_ID);
-            if (win->CurrentTab() && win->CurrentTab()->reloadOnFocus) {
-                ReloadDocument(win, true);
+            auto tab = win->CurrentTab();
+            if (tab && tab->reloadOnFocus) {
+                if (tab->ignoreNextAutoReload) {
+                    tab->ignoreNextAutoReload = false;
+                } else {
+                    ReloadDocument(win, true);
+                }
             }
             break;
+        }
 
-        case MW_SMOOTHSCROLL_TIMER_ID:
+        case kSmoothScrollTimerID:
             DisplayModel* dm = win->AsFixed();
 
             int current = dm->yOffset();
@@ -1622,7 +1691,7 @@ static void OnTimer(MainWindow* win, HWND hwnd, WPARAM timerId) {
             int delta = target - current;
 
             if (delta == 0) {
-                KillTimer(hwnd, MW_SMOOTHSCROLL_TIMER_ID);
+                KillTimer(hwnd, kSmoothScrollTimerID);
             } else {
                 // logf("Smooth scrolling from %d to %d (delta %d)\n", current, target, delta);
 

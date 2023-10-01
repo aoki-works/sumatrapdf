@@ -31,7 +31,7 @@ static void OnPaintAbout(MainWindow* win) {
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(win->hwndCanvas, &ps);
 
-    auto txtCol = currentTheme->mainWindow.textColor;
+    auto txtCol = gCurrentTheme->mainWindow.textColor;
     auto bgCol = GetMainWindowBackgroundColor();
     if (HasPermission(Perm::SavePreferences | Perm::DiskAccess) && gGlobalPrefs->rememberOpenedFiles &&
         gGlobalPrefs->showStartPage) {
@@ -105,7 +105,7 @@ static void OnMouseRightButtonDownAbout(MainWindow* win, int x, int y, WPARAM) {
 }
 
 static void OnMouseRightButtonUpAbout(MainWindow* win, int x, int y, WPARAM) {
-    int isDrag = IsDrag(x, win->dragStart.x, y, win->dragStart.y);
+    int isDrag = IsDragDistance(x, win->dragStart.x, y, win->dragStart.y);
     if (isDrag) {
         return;
     }

@@ -45,7 +45,7 @@
 #include "utils/Log.h"
 
 // SumatraPDF.cpp
-extern Vec<Annotation*> MakeAnnotationFromSelection(WindowTab* tab, AnnotationType annotType);
+extern Annotation* MakeAnnotationsFromSelection(WindowTab* tab, AnnotationType annotType);
 
 struct BuildMenuCtx {
     WindowTab* tab = nullptr;
@@ -60,7 +60,6 @@ struct BuildMenuCtx {
 };
 
 BuildMenuCtx::~BuildMenuCtx() {
-    delete annotationUnderCursor;
 }
 
 // value associated with menu item for owner-drawn purposes
@@ -416,6 +415,28 @@ static MenuDef menuDefZoom[] = {
 };
 //] ACCESSKEY_GROUP Zoom Menu
 
+// TODO: build this dynamically
+//[ ACCESSKEY_GROUP Themes Menu
+MenuDef menuDefThemes[] = {
+    {
+        _TRN("Light"),
+        CmdThemeFirst,
+    },
+    {
+        _TRN("Dark"),
+        CmdThemeFirst+1,
+    },
+    {
+        _TRN("Darker"),
+        CmdThemeFirst+2,
+    },
+    {
+        nullptr,
+        0,
+    },
+};
+//] ACCESSKEY_GROUP Favorites Menu
+
 //[ ACCESSKEY_GROUP Settings Menu
 static MenuDef menuDefSettings[] = {
     {
@@ -433,6 +454,10 @@ static MenuDef menuDefSettings[] = {
     {
         _TRN("&Advanced Options..."),
         CmdAdvancedOptions,
+    },
+    {
+        _TRN("&Theme"),
+        (UINT_PTR)menuDefThemes,
     },
     {
         nullptr,
@@ -733,14 +758,6 @@ static MenuDef menuDefContext[] = {
         kMenuSeparatorID,
     },
     {
-        _TRN("Select Annotation in Editor"),
-        CmdSelectAnnotation,
-    },
-    {
-        _TRN("Delete Annotation\tDel"),
-        CmdDeleteAnnotation,
-    },
-    {
         _TRN("Edit Annotations"),
         CmdEditAnnotations,
     },
@@ -751,6 +768,10 @@ static MenuDef menuDefContext[] = {
     {
         _TRN("Create Annotation &Under Cursor"),
         (UINT_PTR)menuDefCreateAnnotUnderCursor,
+    },
+    {
+        _TRN("Delete Annotation"),
+        CmdDeleteAnnotation,
     },
     {
         _TRN("Save Annotations to existing PDF"),
@@ -916,7 +937,6 @@ UINT_PTR removeIfNoDiskAccessPerm[] = {
     CmdClose, // ???
     CmdShowInFolder,
     CmdSaveAs,
-    CmdSaveAnnotations,
     CmdRenameFile,
     CmdSendByEmail, // ???
     CmdContributeTranslation, // ???
@@ -925,21 +945,15 @@ UINT_PTR removeIfNoDiskAccessPerm[] = {
     CmdFavoriteAdd,
     CmdFavoriteDel,
     CmdFavoriteToggle,
-    CmdSaveAnnotations,
-    CmdSelectAnnotation,
-    CmdDeleteAnnotation,
-    CmdEditAnnotations,
     CmdOpenSelectedDocument,
     CmdPinSelectedDocument,
     CmdForgetSelectedDocument,
-
-    (UINT_PTR)menuDefCreateAnnotFromSelection,
-    (UINT_PTR)menuDefCreateAnnotUnderCursor,
     0,
 };
 
 UINT_PTR removeIfAnnotsNotSupported[] = {
     CmdSaveAnnotations,
+    CmdSaveAnnotationsNewFile,
     CmdSelectAnnotation,
     CmdEditAnnotations,
     CmdDeleteAnnotation,
@@ -1015,7 +1029,7 @@ static void AddFileMenuItem(HMENU menuFile, const char* filePath, int index) {
         str::Free(newStr);
     }
 
-    char* fileName = MenuToSafeStringTemp(menuString);
+    TempStr fileName = MenuToSafeStringTemp(menuString);
     int menuIdx = (int)((index + 1) % 10);
     menuString = str::Format("&%d) %s", menuIdx, fileName);
     uint menuId = CmdFileHistoryFirst + index;
@@ -1062,7 +1076,7 @@ void FillBuildMenuCtx(WindowTab* tab, BuildMenuCtx* ctx, Point pt) {
     ctx->canSendEmail = CanSendAsEmailAttachment(tab);
 
     DisplayModel* dm = tab->AsFixed();
-    if (dm) {
+    if (dm && ctx->supportsAnnotations) {
         int pageNoUnderCursor = dm->GetPageNoByPoint(pt);
         if (pageNoUnderCursor > 0) {
             ctx->isCursorOnPage = true;
@@ -1253,6 +1267,8 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
         }
         if (!HasPermission(Perm::DiskAccess)) {
             removeMenu |= cmdIdInList(removeIfNoDiskAccessPerm);
+            // editing annotations also requires disk access
+            removeMenu |= cmdIdInList(removeIfAnnotsNotSupported);
             if (cmdId >= CmdOpenWithFirst && cmdId <= CmdOpenWithLast) {
                 removeMenu = true;
             }
@@ -1533,10 +1549,8 @@ static void MenuUpdateStateForWindow(MainWindow* win) {
         MenuSetEnabled(win->menu, CmdRenameFile, false);
     }
 
-#if defined(ENABLE_THEME)
-    CheckMenuRadioItem(win->menu, IDM_CHANGE_THEME_FIRST, IDM_CHANGE_THEME_LAST,
-                       IDM_CHANGE_THEME_FIRST + GetCurrentThemeIndex(), MF_BYCOMMAND);
-#endif
+    int themeCmdId = CmdThemeFirst + GetCurrentThemeIndex();
+    CheckMenuRadioItem(win->menu, CmdThemeFirst, CmdThemeLast, themeCmdId, MF_BYCOMMAND);
 
     MenuSetChecked(win->menu, CmdDebugShowLinks, gDebugShowLinks);
 }
@@ -1659,6 +1673,14 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
     MenuSetEnabled(popup, CmdFavoriteToggle, HasFavorites());
     MenuSetChecked(popup, CmdFavoriteToggle, gGlobalPrefs->showFavorites);
 
+    if (buildCtx.annotationUnderCursor) {
+        // change from generic "Edit Annotations" to more specific
+        // "Edit ${annotType} Annotation"
+        TempStr t = AnnotationReadableNameTemp(buildCtx.annotationUnderCursor->type);
+        TempStr s = str::FormatTemp(_TRN("Edit %s Annotation"), t);
+        MenuSetText(popup, CmdEditAnnotations, s);
+    }
+
     const char* filePath = win->ctrl->GetFilePath();
     bool favsSupported = HasPermission(Perm::SavePreferences) && HasPermission(Perm::DiskAccess);
     if (favsSupported) {
@@ -1711,7 +1733,7 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
     }
 
     AnnotationType annotType = (AnnotationType)(cmd - CmdCreateAnnotText);
-    Vec<Annotation*> createdAnnots;
+    Annotation* annot = nullptr;
     switch (cmd) {
         case CmdCopySelection:
         case CmdTranslateSelectionWithGoogle:
@@ -1728,32 +1750,35 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         case CmdToggleToolbar:
         case CmdToggleScrollbars:
         case CmdSaveAnnotations:
+        case CmdSaveAnnotationsNewFile:
         case CmdFavoriteAdd:
         case CmdToggleFullscreen:
             // handle in FrameOnCommand() in SumatraPDF.cpp
             HwndSendCommand(win->hwndFrame, cmd);
             break;
+
+        // note: those are duplicated in SumatraPDF.cpp to enable keyboard shortcuts for them
         case CmdSelectAnnotation:
             CrashIf(!buildCtx.annotationUnderCursor);
 
             [[fallthrough]];
         case CmdEditAnnotations:
-            StartEditAnnotations(tab, nullptr);
-            SelectAnnotationInEditWindow(tab->editAnnotsWindow, buildCtx.annotationUnderCursor);
+            ShowEditAnnotationsWindow(tab);
+            SetSelectedAnnotation(tab, buildCtx.annotationUnderCursor);
             break;
-        case CmdDeleteAnnotation:
-            DeleteAnnotationAndUpdateUI(tab, tab->editAnnotsWindow, buildCtx.annotationUnderCursor);
+        case CmdDeleteAnnotation: {
+            DeleteAnnotationAndUpdateUI(tab, buildCtx.annotationUnderCursor);
             break;
+        }
         case CmdCopyLinkTarget: {
-            char* tmp = CleanupURLForClipbardCopy(value);
+            TempStr tmp = CleanupURLForClipbardCopyTemp(value);
             CopyTextToClipboard(tmp);
-            str::Free(tmp);
         } break;
         case CmdCopyComment:
             CopyTextToClipboard(value);
             break;
 
-        case CmdCopyImage:
+        case CmdCopyImage: {
             if (pageEl) {
                 RenderedBitmap* bmp = dm->GetEngine()->GetImageForPageElement(pageEl);
                 if (bmp) {
@@ -1762,9 +1787,12 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
                 delete bmp;
             }
             break;
-        case CmdFavoriteDel:
+        }
+        case CmdFavoriteDel: {
             DelFavorite(filePath, pageNoUnderCursor);
             break;
+        }
+
         // Note: duplicated in OnWindowContextMenu because slightly different handling
         case CmdCreateAnnotText:
         case CmdCreateAnnotFreeText:
@@ -1773,37 +1801,35 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         case CmdCreateAnnotSquare:
         case CmdCreateAnnotLine:
         case CmdCreateAnnotCircle: {
-            auto annot = EngineMupdfCreateAnnotation(engine, annotType, pageNoUnderCursor, ptOnPage);
-            if (annot) {
-                MainWindowRerender(win);
-                ToolbarUpdateStateForWindow(win, true);
-                createdAnnots.Append(annot);
-            }
-        } break;
-        case CmdCreateAnnotHighlight:
-            createdAnnots = MakeAnnotationFromSelection(tab, AnnotationType::Highlight);
+            annot = EngineMupdfCreateAnnotation(engine, annotType, pageNoUnderCursor, ptOnPage);
+            UpdateAnnotationsList(tab->editAnnotsWindow);
             break;
-        case CmdCreateAnnotSquiggly:
-            createdAnnots = MakeAnnotationFromSelection(tab, AnnotationType::Squiggly);
+        }
+        case CmdCreateAnnotHighlight: {
+            annot = MakeAnnotationsFromSelection(tab, AnnotationType::Highlight);
             break;
-        case CmdCreateAnnotStrikeOut:
-            createdAnnots = MakeAnnotationFromSelection(tab, AnnotationType::StrikeOut);
+        }
+        case CmdCreateAnnotSquiggly: {
+            annot = MakeAnnotationsFromSelection(tab, AnnotationType::Squiggly);
             break;
-        case CmdCreateAnnotUnderline:
-            createdAnnots = MakeAnnotationFromSelection(tab, AnnotationType::Underline);
+        }
+        case CmdCreateAnnotStrikeOut: {
+            annot = MakeAnnotationsFromSelection(tab, AnnotationType::StrikeOut);
             break;
+        }
+        case CmdCreateAnnotUnderline: {
+            annot = MakeAnnotationsFromSelection(tab, AnnotationType::Underline);
+            break;
+        }
         case CmdCreateAnnotInk:
         case CmdCreateAnnotPolyLine:
             // TODO: implement me
             break;
     }
-    if (!createdAnnots.empty()) {
-        // TODO: leaking createdAnnots?
-        StartEditAnnotations(tab, createdAnnots);
+    if (annot) {
+        ShowEditAnnotationsWindow(tab);
+        SetSelectedAnnotation(tab, annot);
     }
-    // TODO: should delete it?
-    // delete buildCtx.annotationUnderCursor;
-
     /*
         { _TR("Line"), CmdCreateAnnotLine, },
         { _TR_TODON("Highlight"), CmdCreateAnnotHighlight, },
@@ -1899,7 +1925,7 @@ void FreeMenuOwnerDrawInfoData(HMENU hmenu) {
     };
 }
 void MarkMenuOwnerDraw(HMENU hmenu) {
-    if (!currentTheme->colorizeControls) {
+    if (!gCurrentTheme->colorizeControls) {
         return;
     }
     WCHAR buf[1024];
@@ -1945,7 +1971,7 @@ void MarkMenuOwnerDraw(HMENU hmenu) {
 constexpr int kMenuPaddingY = 2;
 constexpr int kMenuPaddingX = 2;
 
-void MenuOwnerDrawnMesureItem(HWND hwnd, MEASUREITEMSTRUCT* mis) {
+void MenuCustomDrawMesureItem(HWND hwnd, MEASUREITEMSTRUCT* mis) {
     if (ODT_MENU != mis->CtlType) {
         return;
     }
@@ -1982,7 +2008,15 @@ void MenuOwnerDrawnMesureItem(HWND hwnd, MEASUREITEMSTRUCT* mis) {
 }
 
 // https://gist.github.com/kjk/1df108aa126b7d8e298a5092550a53b7
-void MenuOwnerDrawnDrawItem(__unused HWND hwnd, DRAWITEMSTRUCT* dis) {
+// TODO: improve how we paint the menu:
+// - position text the right way (not just DT_CENTER)
+//   taking into account LTR mode
+// - paint shortcut (part after \t if exists) separately
+// - paint MFS_DISABLED state
+// - paint icons for system menus
+// - for submenus, the triangle on the right doesn't draw in the right color
+//   I don't know who's drawing it
+void MenuCustomDrawItem(HWND hwnd, DRAWITEMSTRUCT* dis) {
     if (ODT_MENU != dis->CtlType) {
         return;
     }
@@ -2000,10 +2034,8 @@ void MenuOwnerDrawnDrawItem(__unused HWND hwnd, DRAWITEMSTRUCT* dis) {
     // ???
     // bool isMenuBarBreak = bit::IsMaskSet(modi->fType, (uint)MFT_MENUBARBREAK);
 
-    // ??
+    // ???
     // bool isMenuBreak = bit::IsMaskSet(modi->fType, (uint)MFT_MENUBREAK);
-
-    // bool isRadioCheck = bit::IsMaskSet(modi->fType, (uint)MFT_RADIOCHECK);
 
     bool isSeparator = bit::IsMaskSet(modi->fType, (uint)MFT_SEPARATOR);
 
@@ -2016,16 +2048,21 @@ void MenuOwnerDrawnDrawItem(__unused HWND hwnd, DRAWITEMSTRUCT* dis) {
     // don't know what that means
     // bool isHilited = bit::IsMaskSet(modi->fState, (uint)MFS_HILITE);
 
-    // checked/unchecked state for check and radio menus?
-    // uses hbmpChecked, otherwise use hbmpUnchecked ?
-    // bool isChecked = bit::IsMaskSet(modi->fState, (uint)MFS_CHECKED);
+    // checked/unchecked state for check and radio menus
+    bool isChecked = bit::IsMaskSet(modi->fState, (uint)MFS_CHECKED);
+
+    // if isChecked, show as radio button (i.e. circle)
+    bool isRadioCheck = bit::IsMaskSet(modi->fType, (uint)MFT_RADIOCHECK);
 
     auto hdc = dis->hDC;
     HFONT font = GetMenuFont();
-    auto prevFont = SelectObject(hdc, font);
+    ScopedSelectFont restoreFont(hdc, font);
 
     COLORREF bgCol = GetMainWindowBackgroundColor();
-    COLORREF txtCol = currentTheme->mainWindow.textColor;
+    COLORREF txtCol = gCurrentTheme->mainWindow.textColor;
+    // TODO: if isDisabled, pick a color that represents disabled
+    // either add it to theme definition or auto-generate
+    // (lighter if dark color, darker if light color)
 
     bool isSelected = bit::IsMaskSet(dis->itemState, (uint)ODS_SELECTED);
     if (isSelected) {
@@ -2034,19 +2071,32 @@ void MenuOwnerDrawnDrawItem(__unused HWND hwnd, DRAWITEMSTRUCT* dis) {
     }
 
     RECT rc = dis->rcItem;
+    int rcDy = RectDy(rc);
 
     int padY = DpiScale(hwnd, kMenuPaddingY);
     int padX = DpiScale(hwnd, kMenuPaddingX);
     int dxCheckMark = DpiScale(hwnd, GetSystemMetrics(SM_CXMENUCHECK));
 
-    auto hbr = CreateSolidBrush(bgCol);
-    FillRect(hdc, &rc, hbr);
-    DeleteObject(hbr);
+    COLORREF prevTxtCol = SetTextColor(hdc, txtCol);
+    COLORREF prevBgCol = SetBkColor(hdc, bgCol);
+    defer {
+        SetTextColor(hdc, prevTxtCol);
+        SetBkColor(hdc, prevBgCol);
+    };
+
+    auto brBg = CreateSolidBrush(bgCol);
+    FillRect(hdc, &rc, brBg);
+    auto brTxt = CreateSolidBrush(txtCol);
+
+    defer {
+        DeleteObject(brBg);
+        DeleteObject(brTxt);
+    };
 
     if (isSeparator) {
         CrashIf(modi->text);
         int sx = rc.left + dxCheckMark;
-        int y = rc.top + (RectDy(rc) / 2);
+        int y = rc.top + (rcDy / 2);
         int ex = rc.right - padX;
         auto pen = CreatePen(PS_SOLID, 1, txtCol);
         auto prevPen = SelectObject(hdc, pen);
@@ -2065,16 +2115,6 @@ void MenuOwnerDrawnDrawItem(__unused HWND hwnd, DRAWITEMSTRUCT* dis) {
     MenuText mt;
     ParseMenuText((WCHAR*)modi->text, mt);
 
-    // TODO: improve how we paint the menu:
-    // - paint checkmark if this is checkbox menu
-    // - position text the right way (not just DT_CENTER)
-    //   taking into account LTR mode
-    // - paint shortcut (part after \t if exists) separately
-    // - paint disabled state better
-    // - paint icons for system menus
-    SetTextColor(hdc, txtCol);
-    SetBkColor(hdc, bgCol);
-
     // DrawTextEx handles & => underscore drawing
     rc.top += padY;
     rc.left += dxCheckMark;
@@ -2085,7 +2125,33 @@ void MenuOwnerDrawnDrawItem(__unused HWND hwnd, DRAWITEMSTRUCT* dis) {
         rc.right -= (padX + dxCheckMark / 2);
         DrawTextExW(hdc, mt.shortcutText, mt.shortcutTextLen, &rc, DT_RIGHT, nullptr);
     }
-    SelectObject(hdc, prevFont);
+
+    constexpr int kRadioCircleDx = 6;
+    if (isChecked) {
+        rc = dis->rcItem;
+        // draw radio check indicator (a circle)
+        if (isRadioCheck) {
+            int dx = DpiScale(hwnd, kRadioCircleDx);
+            int offX = DpiScale(hwnd, 1); // why? beause it looks better
+            rc.left = rc.left + offX + (dxCheckMark / 2) - (dx / 2);
+            rc.right = rc.left + dx;
+            rc.top = rc.top + (rcDy / 2) - (dx / 2);
+            rc.bottom = rc.top + dx;
+            ScopedSelectObject restoreBrush(hdc, brTxt);
+            Ellipse(hdc, rc.left, rc.top, rc.right, rc.bottom);
+            return;
+        }
+
+        // draw a checkmark
+        AutoDeletePen pen(CreatePen(PS_SOLID, 2, txtCol));
+        ScopedSelectPen restorePen(hdc, pen);
+        POINT points[3];
+        int offX = DpiScale(hwnd, 6); // 6 is chosen experimentally
+        points[0] = {rc.left + offX, rc.top + (rcDy / 2)};
+        points[1] = {rc.left + (dxCheckMark / 2), rc.bottom - (padY * 3)};
+        points[2] = {rc.left + dxCheckMark - offX, rc.top + (padY * 3)};
+        Polyline(hdc, points, dimof(points));
+    }
 }
 
 HMENU BuildMenu(MainWindow* win) {
@@ -2095,18 +2161,6 @@ HMENU BuildMenu(MainWindow* win) {
     FillBuildMenuCtx(tab, &buildCtx, Point{0, 0});
 
     HMENU mainMenu = BuildMenuFromMenuDef(menuDefMenubar, CreateMenu(), &buildCtx);
-
-#if defined(ENABLE_THEME) && 0
-    // Build the themes sub-menu of the settings menu
-    MenuDef menuDefTheme[THEME_COUNT + 1];
-    static_assert(IDM_CHANGE_THEME_LAST - IDM_CHANGE_THEME_FIRST + 1 >= THEME_COUNT,
-                  "Too many themes. Either remove some or update IDM_CHANGE_THEME_LAST");
-    for (int i = 0; i < THEME_COUNT; i++) {
-        menuDefTheme[i] = {GetThemeByIndex(i)->name, IDM_CHANGE_THEME_FIRST + i, 0};
-    }
-    HMENU m2 = BuildMenuFromMenuDef(menuDefTheme, CreateMenu(), filter);
-    AppendMenuW(m, MF_POPUP | MF_STRING, (UINT_PTR)m2, _TR("&Theme"));
-#endif
 
     MarkMenuOwnerDraw(mainMenu);
     return mainMenu;

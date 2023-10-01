@@ -55,7 +55,7 @@ static char* BuildSymbolsUrl() {
         // assuming this is release version
         urlBase = "https://www.sumatrapdfreader.org/dl/rel/SumatraPDF-" QM(CURR_VERSION);
     }
-    const char* suff = ".pdb.lzsa";
+    const char* suff = "-32.pdb.lzsa";
 #if IS_ARM_64 == 1
     suff = "-arm64.pdb.lzsa";
 #elif IS_INTEL_64 == 1
@@ -343,7 +343,7 @@ void _uploadDebugReport(const char* condStr) {
 // so only allow once submition in a given session
 static bool didSubmitDebugReport = false;
 
-void _uploadDebugReportIfFunc(bool cond, __unused const char* condStr) {
+void _uploadDebugReportIfFunc(bool cond, const char* condStr) {
     if (!cond || didSubmitDebugReport) {
         return;
     }

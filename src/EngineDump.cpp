@@ -18,7 +18,7 @@
 #include "EngineAll.h"
 #include "PdfCreator.h"
 
-void _uploadDebugReportIfFunc(__unused bool cond, __unused const char* condStr) {
+void _uploadDebugReportIfFunc(bool, const char*) {
     // no-op implementation to satisfy SubmitBugReport()
 }
 
@@ -130,7 +130,7 @@ static char* Escape(const char* str) {
 
 void DumpProperties(EngineBase* engine, bool fullDump) {
     Out1("\t<Properties\n");
-    AutoFreeStr str = Escape(engine->FileName());
+    AutoFreeStr str = Escape(engine->FilePath());
     Out("\t\tFilePath=\"%s\"\n", str.Get());
     str = Escape(engine->GetProperty(DocumentProperty::Title));
     if (str.Get()) {
@@ -463,24 +463,13 @@ static bool RenderDocument(EngineBase* engine, const char* renderPath, float zoo
         return file::WriteFile(txtFilePath, textUTF8BOM);
     }
 
-    if (str::EndsWithI(renderPath, ".pdf")) {
-        if (silent) {
-            return false;
-        }
-        AutoFreeStr pdfFilePath(str::Format(renderPath, 0));
-        if (engine->SaveFileAsPDF(pdfFilePath)) {
-            return true;
-        }
-        return PdfCreator::RenderToFile(pdfFilePath, engine);
-    }
-
     bool success = true;
     for (int pageNo = 1; pageNo <= engine->PageCount(); pageNo++) {
         RenderPageArgs args(pageNo, zoom, 0);
         RenderedBitmap* bmp = engine->RenderPage(args);
         success &= bmp != nullptr;
         if (!bmp && !silent) {
-            ErrOut("Error: Failed to render page %d for %s!", pageNo, engine->FileName());
+            ErrOut("Error: Failed to render page %d for %s!", pageNo, engine->FilePath());
         }
         if (!bmp || silent) {
             delete bmp;
@@ -517,13 +506,12 @@ class PasswordHolder : public PasswordUI {
   public:
     explicit PasswordHolder(const char* password) : password(password) {
     }
-    char* GetPassword(__unused const char* fileName, __unused u8* fileDigest, __unused u8 decryptionKeyOut[32],
-                      __unused bool* saveKey) override {
+    char* GetPassword(const char*, u8*, __unused u8 decryptionKeyOut[32], bool*) override {
         return str::Dup(password);
     }
 };
 
-int main(__unused int argc, __unused char** argv) {
+int main(int, char**) {
     setlocale(LC_ALL, "C");
     DisableDataExecution();
 

@@ -17,8 +17,11 @@ Rect MapRectToWindow(Rect, HWND hwndFrom, HWND hwndTo);
 
 void EditSelectAll(HWND);
 int EditIdealDy(HWND, bool hasBorder, int lines = 1);
+void EditImplementCtrlBack(HWND hwnd);
 
 void ListBox_AppendString_NoSort(HWND, const WCHAR*);
+int ListBoxGetTopIndex(HWND);
+bool ListBoxSetTopIndex(HWND, int);
 
 bool IsValidHandle(HANDLE);
 bool SafeCloseHandle(HANDLE*);
@@ -36,6 +39,7 @@ bool GetOsVersion(OSVERSIONINFOEX& ver);
 TempStr OsNameFromVerTemp(const OSVERSIONINFOEX& ver);
 TempStr GetWindowsVerTemp();
 
+TempStr GetLastErrorStrTemp(DWORD err = 0);
 void LogLastError(DWORD err = 0);
 void DbgOutLastError(DWORD err = 0);
 
@@ -70,9 +74,9 @@ int FileTimeDiffInSecs(const FILETIME& ft1, const FILETIME& ft2);
 char* ResolveLnkTemp(const char* path);
 bool CreateShortcut(const char* shortcutPath, const char* exePath, const char* args = nullptr,
                     const char* description = nullptr, int iconIndex = 0);
-DWORD GetFileVersion(const char* path);
 IDataObject* GetDataObjectForFile(const char* filePath, HWND hwnd = nullptr);
 
+HANDLE LaunchProces(const char* exe, const char* cmdLine);
 HANDLE LaunchProcess(const char* cmdLine, const char* currDir = nullptr, DWORD flags = 0);
 bool CreateProcessHelper(const char* exe, const char* args);
 bool LaunchFile(const char* path, const char* params = nullptr, const char* verb = nullptr, bool hidden = false);
@@ -119,12 +123,15 @@ bool IsCursorOverWindow(HWND);
 Point HwndGetCursorPos(HWND hwnd);
 int MapWindowPoints(HWND, HWND, Point*, int);
 void HwndScreenToClient(HWND, Point&);
+void HwndMakeVisible(HWND);
+
 bool IsMouseOverRect(HWND hwnd, const Rect& r);
 void CenterDialog(HWND hDlg, HWND hParent = nullptr);
+
 char* GetDefaultPrinterNameTemp();
 
-bool CopyTextToClipboard(const WCHAR* text, bool appendOnly = false);
-bool CopyTextToClipboard(const char* textA, bool appendOnly = false);
+bool CopyTextToClipboard(const char*);
+bool AppendTextToClipboard(const char*);
 
 bool CopyImageToClipboard(HBITMAP hbmp, bool appendOnly);
 
@@ -185,7 +192,7 @@ void MenuRemove(HMENU m, int id);
 void MenuEmpty(HMENU m);
 void MenuSetText(HMENU m, int id, const WCHAR* s);
 void MenuSetText(HMENU m, int id, const char* s);
-char* MenuToSafeStringTemp(const char* s);
+TempStr MenuToSafeStringTemp(const char* s);
 
 struct DoubleBuffer {
     HWND hTarget = nullptr;
@@ -268,7 +275,7 @@ double GetProcessRunningTime();
 void RunNonElevated(const char* exePath);
 void VariantInitBstr(VARIANT& urlVar, const WCHAR* s);
 ByteSlice LoadDataResource(int resId);
-bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command, bool debug=false);
+bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command);
 
 void RectInflateTB(RECT& r, int top, int bottom);
 void DivideRectH(const RECT& r, int y, int dy, RECT& r1, RECT& r2, RECT& r3);

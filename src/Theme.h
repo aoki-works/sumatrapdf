@@ -4,7 +4,7 @@ License: GPLv3 */
 #include "utils/BaseUtil.h"
 
 // The number of themes
-#define THEME_COUNT 3
+constexpr const int kThemeCount = 3;
 
 struct MainWindowStyle {
     // Background color of recently added, about, and properties menus
@@ -39,41 +39,6 @@ struct NotificationStyle {
     COLORREF progressColor;
 };
 
-struct TabCloseStyle {
-    // Color of the X button
-    COLORREF xColor;
-    // Color of the circle surrounding the X button
-    COLORREF circleColor;
-};
-
-struct TabStyle {
-    // Background color of the tab
-    COLORREF backgroundColor;
-    // Text color of the tab
-    COLORREF textColor;
-    // Style of the close (X button) by default
-    TabCloseStyle close;
-};
-
-struct TabTheme {
-    // Height of the tab bar
-    int height;
-    // Style of the selected tab
-    TabStyle selected;
-    // Style of background tabs
-    TabStyle background;
-    // Style of the highlighted tab (hovered over)
-    TabStyle highlighted;
-    // Whether or not the circle around the tab X is displayed on hover
-    bool closeCircleEnabled;
-    // The width of the pen drawing the tab X
-    float closePenWidth;
-    // Style of the close (X button) when the mouse hovers over it
-    TabCloseStyle hoveredClose;
-    // Style of the close (X button) when the mouse is clicked down over it
-    TabCloseStyle clickedClose;
-};
-
 struct Theme {
     // Name of the theme
     const char* name;
@@ -81,23 +46,18 @@ struct Theme {
     MainWindowStyle mainWindow;
     // Style of documents
     DocumentStyle document;
-    // Style of tabs
-    TabTheme tab;
     // Style of notifications
     NotificationStyle notifications;
     // Whether or not we colorize standard Windows controls and window areas
     bool colorizeControls;
 };
 
-extern Theme* currentTheme;
-void CycleNextTheme();
+extern Theme* gCurrentTheme;
+void SelectNextTheme();
+void SetThemeByIndex(int);
 
-// Function definitions
-Theme* GetThemeByName(char* name);
-Theme* GetThemeByIndex(int index);
-Theme* GetCurrentTheme();
+void SetCurrentThemeFromSettings();
 
-int GetThemeIndex(Theme* theme);
 int GetCurrentThemeIndex();
 
 // These functions take into account both gPrefs and the theme.
@@ -105,3 +65,7 @@ int GetCurrentThemeIndex();
 // configured through themes.
 void GetDocumentColors(COLORREF& text, COLORREF& bg);
 COLORREF GetMainWindowBackgroundColor();
+
+constexpr COLORREF RgbToCOLORREF(COLORREF rgb) {
+    return ((rgb & 0x0000FF) << 16) | (rgb & 0x00FF00) | ((rgb & 0xFF0000) >> 16);
+}

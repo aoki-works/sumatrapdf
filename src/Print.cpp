@@ -340,7 +340,7 @@ static bool PrintToDevice(const PrintData& pd) {
         ClosePrinter(hPrinter);
     }
 
-    AutoDeleteDC hdc = CreateDCW(nullptr, printerName, nullptr, devMode);
+    AutoDeleteDC hdc{CreateDCW(nullptr, printerName, nullptr, devMode)};
     if (!hdc) {
         logf("PrintToDevice: CreateDCW('%s') failed\n", pd.printer->name);
         return false;
@@ -799,7 +799,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     HRESULT res = PrintDlgEx(&pdex);
     if (res != S_OK) {
         logf("OnMenuPrint: PrintDlgEx failed\n");
-        MessageBoxWarning(win->hwndFrame, _TR("Couldn't initialize printer"), _TR("Printing problem."));
+        MessageBoxWarning(win->hwndFrame, _TRA("Couldn't initialize printer"), _TRA("Printing problem."));
     }
     auto action = pdex.dwResultAction;
     if (action != PD_RESULT_PRINT) {
@@ -808,7 +808,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     }
 
     if (!pdex.hDevNames) {
-        MessageBoxWarning(win->hwndFrame, _TR("Couldn't get printer name"), _TR("Printing problem."));
+        MessageBoxWarning(win->hwndFrame, _TRA("Couldn't get printer name"), _TRA("Printing problem."));
         goto Exit;
     }
 
@@ -825,7 +825,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     }
 
     if (!printer) {
-        MessageBoxWarning(win->hwndFrame, _TR("Couldn't initialize printer"), _TR("Printing problem."));
+        MessageBoxWarning(win->hwndFrame, _TRA("Couldn't initialize printer"), _TRA("Printing problem."));
         goto Exit;
     }
 
@@ -1190,8 +1190,6 @@ bool PrintFile2(EngineBase* engine, char* printerName, bool displayErrors, const
     bool ok = false;
     Printer* printer = nullptr;
 
-    logf("PrintFile2: file: '%s', printer: '%s'\n", engine->FilePath(), printerName);
-
     if (!HasPermission(Perm::PrinterAccess)) {
         return false;
     }
@@ -1204,8 +1202,11 @@ bool PrintFile2(EngineBase* engine, char* printerName, bool displayErrors, const
 
     if (!engine) {
         MessageBoxWarningCond(displayErrors, _TRA("Cannot print this file"), _TRA("Printing problem."));
+        logf("PrintFile2: engine is null\n");
         return false;
     }
+
+    logf("PrintFile2: file: '%s', printer: '%s'\n", engine->FilePath(), printerName);
 
     if (printerName) {
         printer = NewPrinter(printerName);

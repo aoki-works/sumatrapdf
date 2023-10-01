@@ -327,13 +327,13 @@ void NotificationWnd::OnPaint(HDC hdcIn, PAINTSTRUCT* ps) {
 
     ScopedSelectObject fontPrev(hdc, font);
 
-    COLORREF colBg = currentTheme->notifications.backgroundColor;
+    COLORREF colBg = gCurrentTheme->notifications.backgroundColor;
     COLORREF colBorder = MkGray(0xdd);
-    COLORREF colTxt = currentTheme->notifications.textColor;
+    COLORREF colTxt = gCurrentTheme->notifications.textColor;
     if (highlight) {
-        colBg = currentTheme->notifications.highlightColor;
+        colBg = gCurrentTheme->notifications.highlightColor;
         colBorder = colBg;
-        colTxt = currentTheme->notifications.highlightTextColor;
+        colTxt = gCurrentTheme->notifications.highlightTextColor;
     }
     // COLORREF colBg = MkRgb(0xff, 0xff, 0x5c);
     // COLORREF colBg = MkGray(0xff);
@@ -375,7 +375,7 @@ void NotificationWnd::OnPaint(HDC hdcIn, PAINTSTRUCT* ps) {
         rc = rProgress;
         int progressWidth = rc.dx;
 
-        COLORREF col = currentTheme->notifications.progressColor;
+        COLORREF col = gCurrentTheme->notifications.progressColor;
         Pen pen(GdiRgbFromCOLORREF(col));
         grc = {rc.x, rc.y, rc.dx, rc.dy};
         graphics.DrawRectangle(&pen, grc);
@@ -507,6 +507,18 @@ NotificationWnd* ShowTemporaryNotification(HWND hwnd, const char* msg, int timeo
     NotificationCreateArgs args;
     args.hwndParent = hwnd;
     args.msg = msg;
+    args.timeoutMs = timeoutMs;
+    return ShowNotification(args);
+}
+
+NotificationWnd* ShowWarningNotification(HWND hwndParent, const char* msg, int timeoutMs) {
+    if (timeoutMs < 0) {
+        timeoutMs = kNotifDefaultTimeOut;
+    }
+    NotificationCreateArgs args;
+    args.hwndParent = hwndParent;
+    args.msg = msg;
+    args.warning = true;
     args.timeoutMs = timeoutMs;
     return ShowNotification(args);
 }

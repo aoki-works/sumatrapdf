@@ -633,6 +633,12 @@
     <ClCompile Include="..\src\mui\TextRender.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="dav1d.vcxproj">
+      <Project>{f5bf470f-61d4-6fc0-2a56-132096296cf1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="libheif.vcxproj">
+      <Project>{380d6779-a4ec-e514-ad04-71eb19634c76}</Project>
+    </ProjectReference>
     <ProjectReference Include="zlib.vcxproj">
       <Project>{16CFA17C-0206-A30D-ABF2-881097081F0F}</Project>
     </ProjectReference>

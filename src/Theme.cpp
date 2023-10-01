@@ -2,8 +2,8 @@
 License: GPLv3 */
 
 /* Adding themes instructions:
-Add one to THEME_COUNT (Theme.h)
-If THEME_COUNT > 20, you will have to update IDM_CHANGE_THEME_LAST (resource.h)
+Add one to kThemeCount (Theme.h)
+If kThemeCount > 20, you will have to update IDM_CHANGE_THEME_LAST (resource.h)
 Copy one of the theme declarations below
 Rename it to whatever and change all of the properties as desired
 Add a pointer to your new struct to the g_themes array below
@@ -25,20 +25,13 @@ Note: Colors are in format 0xBBGGRR, recommended to use RgbToCOLORREF
 #include "GlobalPrefs.h"
 #include "Translations.h"
 
-// Color definitions
-#define COL_BLACK 0x000000
-#define COL_WHITE 0xFFFFFF
-#define COL_WHITEISH 0xEBEBF9
-#define COL_DARK_GRAY 0x424242
-
-// Theme definition helper functions
-static COLORREF RgbToCOLORREF(COLORREF rgb) {
-    return ((rgb & 0x0000FF) << 16) | (rgb & 0x00FF00) | ((rgb & 0xFF0000) >> 16);
-}
+constexpr COLORREF kColBlack = 0x000000;
+constexpr COLORREF kColWhite = 0xFFFFFF;
+// #define kColWhiteish 0xEBEBF9
+// #define kColDarkGray 0x424242
 
 // clang-format off
-// Themes
-Theme g_themeLight = {
+static Theme gThemeLight = {
     // Theme Name
     _TRN("Light"),
     // Main window theme
@@ -57,9 +50,9 @@ Theme g_themeLight = {
         // most PDFs have white background.
         RgbToCOLORREF(0xF2F2F2),
         // Control background Color
-        COL_WHITE,
+        kColWhite,
         // Main Text Color
-        COL_BLACK,
+        kColBlack,
         // Main Link Color
         RgbToCOLORREF(0x0020A0)
     },
@@ -68,85 +61,28 @@ Theme g_themeLight = {
         // Canvas Color
         RgbToCOLORREF(0x999999),
         // Background Color
-        COL_WHITE,
+        kColWhite,
         // Text color
-        COL_BLACK
-    },
-    // Tabs
-    {
-        // Height
-        24,
-        // Selected style
-        {
-            // Background color
-            COL_WHITE,
-            // Text color
-            COL_DARK_GRAY,
-            // Default close style
-            {
-                // X color
-                AdjustLightness2(g_themeLight.tab.selected.backgroundColor, -60),
-                // Circle color
-                RgbToCOLORREF(0xC13535)
-            }
-        },
-        // Background style
-        {
-            // Background color
-            //AdjustLightness2(g_themeLight.tab.selected.backgroundColor, -25),
-            RgbToCOLORREF(0xCECECE),
-            // Text color
-            COL_DARK_GRAY,
-            // Default close style
-            g_themeLight.tab.selected.close
-        },
-        // Highlighted style
-        {
-            // Background color
-            // AdjustLightness2(g_themeLight.tab.selected.backgroundColor, 15),
-            RgbToCOLORREF(0xBBBBBB),
-            // Text color
-            COL_BLACK,
-            // Default close style
-            g_themeLight.tab.selected.close
-        },
-        // Tab Close Circle Enabled
-        true,
-        // Tab Close Pen Width
-        1.0f,
-        // Hovered close style
-        {
-            // X color
-            COL_WHITEISH,
-            // Circle color
-            g_themeLight.tab.selected.close.circleColor
-        },
-        // Clicked close style
-        {
-            // X color
-            g_themeLight.tab.hoveredClose.xColor,
-            // Circle color
-            AdjustLightness2(g_themeLight.tab.selected.close.circleColor, -10)
-        }
+        kColBlack
     },
     // Notifications
     {
         // Background color
-        COL_WHITE,
+        kColWhite,
         // Text color
-        g_themeLight.mainWindow.textColor,
+        gThemeLight.mainWindow.textColor,
         // Highlight color
         RgbToCOLORREF(0xFFEE70),
         // Highlight text color
         RgbToCOLORREF(0x8d0801),
         // Progress bar color
-        g_themeLight.mainWindow.linkColor
+        gThemeLight.mainWindow.linkColor
     },
     // Colorize standard controls
     false
 };
 
-Theme g_themeDark = {
+static Theme gThemeDark = {
     // Theme Name
     _TRN("Dark"),
     // Main window theme
@@ -156,7 +92,7 @@ Theme g_themeDark = {
          // Control background Color
         RgbToCOLORREF(0x263238),
         // Main Text Color
-        COL_WHITE,
+        kColWhite,
         // Main Link Color
         RgbToCOLORREF(0x80CBAD)
        
@@ -166,74 +102,28 @@ Theme g_themeDark = {
         // Canvas Color
         RgbToCOLORREF(0x1E272C),
         // Background Color
-        g_themeDark.mainWindow.backgroundColor,
+        gThemeDark.mainWindow.backgroundColor,
         // Text color
-        g_themeDark.mainWindow.textColor
-    },
-    // Tabs
-    {
-        // Height
-        24,
-        // Selected style
-        {
-            // Background color
-            RgbToCOLORREF(0x009688),
-            // Text color
-            COL_WHITE,
-            // Default close style
-            {
-                // X color
-                RgbToCOLORREF(0x99D5CF)
-            }
-        },
-        // Background style
-        {
-            // Background color
-            AdjustLightness2(g_themeDark.tab.selected.backgroundColor, -10),
-            // Text color
-            COL_WHITE,
-            // Default close style
-            g_themeDark.tab.selected.close
-        },
-        // Highlighted style
-        {
-            // Background color
-            AdjustLightness2(g_themeDark.tab.selected.backgroundColor, 10),
-            // Text color
-            COL_WHITE,
-            // Default close style
-            g_themeDark.tab.selected.close
-        },
-        // Tab Close Circle Enabled
-        false,
-        // Tab Close Pen Width
-        1.0f,
-        // Hovered close style
-        {
-            // X color
-            COL_WHITEISH
-        },
-        // Clicked close style
-        g_themeDark.tab.hoveredClose
+        gThemeDark.mainWindow.textColor
     },
     // Notifications
     {
         // Background color
-        AdjustLightness2(g_themeDark.mainWindow.backgroundColor, 10),
+        AdjustLightness2(gThemeDark.mainWindow.backgroundColor, 10),
         // Text color
-        g_themeDark.mainWindow.textColor,
+        gThemeDark.mainWindow.textColor,
         // Highlight color
         AdjustLightness2(RgbToCOLORREF(0x33434B), 10),
         // Highlight text color
-        g_themeDark.mainWindow.textColor,
+        gThemeDark.mainWindow.textColor,
         // Progress bar color
-        g_themeDark.mainWindow.linkColor
+        gThemeDark.mainWindow.linkColor
     },
     // Colorize standard controls
     true
 };
 
-Theme g_themeDarker = {
+static Theme gThemeDarker = {
     // Theme Name
     _TRN("Darker"),
     // Main window theme
@@ -243,7 +133,7 @@ Theme g_themeDarker = {
          // Control background Color
         RgbToCOLORREF(0x2D2D30),
         // Main Text Color
-        COL_WHITE,
+        kColWhite,
         // Main Link Color
         RgbToCOLORREF(0x3081D4)
     },
@@ -252,126 +142,88 @@ Theme g_themeDarker = {
         // Canvas Color
         RgbToCOLORREF(0x1E1E1E),
         // Background Color
-        g_themeDarker.mainWindow.backgroundColor,
+        gThemeDarker.mainWindow.backgroundColor,
         // Text color
-        g_themeDarker.mainWindow.textColor
-    },
-    // Tabs
-    {
-        // Height
-        24,
-        // Selected style
-        {
-            // Background color
-            RgbToCOLORREF(0x007ACC),
-            // Text color
-            COL_WHITE,
-            // Default close style
-            {
-                // X color
-                RgbToCOLORREF(0xD0E6F5),
-                // Circle color
-                COL_BLACK
-            }
-        },
-        // Background style
-        {
-            // Background color
-            RgbToCOLORREF(0xEAEAEA),
-            // Text color
-            COL_BLACK,
-            // Default close style
-            {
-                // X color
-                COL_BLACK,
-                // Circle color
-                COL_BLACK
-            }
-        },
-        // Highlighted style
-        {
-            // Background color
-            RgbToCOLORREF(0x1C97EA),
-            // Text color
-            COL_WHITE,
-            // Default close style
-            g_themeDarker.tab.selected.close
-        },
-        // Tab Close Circle Enabled
-        false,
-        // Tab Close Pen Width
-        2.0f,
-        // Hovered close style
-        {
-            // X color
-            COL_WHITE,
-            // Circle color
-            COL_BLACK
-        },
-        // Clicked close style
-        g_themeDarker.tab.hoveredClose
+        gThemeDarker.mainWindow.textColor
     },
     // Notifications
     {
         // Background color
-        AdjustLightness2(g_themeDarker.mainWindow.backgroundColor, 10),
+        AdjustLightness2(gThemeDarker.mainWindow.backgroundColor, 10),
         // Text color
-        g_themeDarker.mainWindow.textColor,
+        gThemeDarker.mainWindow.textColor,
         // Highlight color
         AdjustLightness2(RgbToCOLORREF(0x3E3E42), 10),
         // Highlight text color
-        g_themeDarker.mainWindow.textColor,
+        gThemeDarker.mainWindow.textColor,
         // Progress bar color
-        g_themeDarker.mainWindow.linkColor
+        gThemeDarker.mainWindow.linkColor
     },
     // Colorize standard controls
     true
 };
 // clang-format on
 
-// Master themes list
-Theme* g_themes[THEME_COUNT] = {
-    &g_themeLight,
-    &g_themeDark,
-    &g_themeDarker,
+static Theme* gThemes[kThemeCount] = {
+    &gThemeLight,
+    &gThemeDark,
+    &gThemeDarker,
 };
 
-// Current theme caching
-Theme* currentTheme = &g_themeLight;
-int currentThemeIndex = 0;
+Theme* gCurrentTheme = &gThemeLight;
+static int currentThemeIndex = 0;
 
-void SwitchTheme(int index) {
-    CrashIf(index < 0 || index >= THEME_COUNT);
-    currentThemeIndex = index;
-    currentTheme = g_themes[index];
+int GetCurrentThemeIndex() {
+    return currentThemeIndex;
 }
 
-void CycleNextTheme() {
-    ++currentThemeIndex;
-    if (currentThemeIndex >= THEME_COUNT) {
-        currentThemeIndex = 0;
-    }
-    SwitchTheme(currentThemeIndex);
+extern void UpdateAfterThemeChange();
+
+void SetThemeByIndex(int themeIdx) {
+    CrashIf((themeIdx < 0) || (themeIdx >= kThemeCount));
+    currentThemeIndex = themeIdx;
+    gCurrentTheme = gThemes[currentThemeIndex];
+    str::ReplaceWithCopy(&gGlobalPrefs->theme, gCurrentTheme->name);
+#if 0
+    // for light theme set invertColors
+    // don't invert for light theme, invert for dark themes
+    gGlobalPrefs->fixedPageUI.invertColors = (themeIdx == 0);
+#endif
+    UpdateAfterThemeChange();
+};
+
+void SelectNextTheme() {
+    int newIdx = (currentThemeIndex + 1) % kThemeCount;
+    SetThemeByIndex(newIdx);
 }
 
-Theme* GetThemeByName(char* name) {
-    for (int i = 0; i < THEME_COUNT; i++) {
-        if (str::Eq(g_themes[i]->name, name)) {
-            return g_themes[i];
+// not case sensitive
+static Theme* GetThemeByName(const char* name, int& idx) {
+    for (int i = 0; i < kThemeCount; i++) {
+        if (str::EqI(gThemes[i]->name, name)) {
+            idx = i;
+            return gThemes[i];
         }
     }
-    return NULL;
+    return nullptr;
 }
 
-Theme* GetThemeByIndex(int index) {
-    CrashIf(index < 0 || index >= THEME_COUNT);
-    return g_themes[index];
+// call after loading settings
+void SetCurrentThemeFromSettings() {
+    const char* name = gGlobalPrefs->theme;
+    int idx = 0;
+    auto theme = GetThemeByName(name, idx);
+    if (!theme) {
+        // invalid name, reset to light theme
+        str::ReplaceWithCopy(&gGlobalPrefs->theme, gThemeLight.name);
+        return;
+    }
+    SetThemeByIndex(idx);
 }
 
 void GetDocumentColors(COLORREF& text, COLORREF& bg) {
-    // Special behavior for light theme.
-    // TODO: migrate from prefs to theme.
     if (currentThemeIndex == 0) {
+        // for backwards compat light theme respects the old customization colors
         ParsedColor* parsedCol;
         if (gGlobalPrefs->fixedPageUI.invertColors) {
             parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.textColor);
@@ -385,14 +237,18 @@ void GetDocumentColors(COLORREF& text, COLORREF& bg) {
             parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.textColor);
         }
         text = parsedCol->col;
-    } else {
-        bg = currentTheme->document.backgroundColor;
-        text = currentTheme->document.textColor;
+        return;
+    }
+
+    bg = gCurrentTheme->document.backgroundColor;
+    text = gCurrentTheme->document.textColor;
+    if (gGlobalPrefs->fixedPageUI.invertColors) {
+        std::swap(bg, text);
     }
 }
 
 COLORREF GetMainWindowBackgroundColor() {
-    COLORREF bgColor = currentTheme->mainWindow.backgroundColor;
+    COLORREF bgColor = gCurrentTheme->mainWindow.backgroundColor;
     // Special behavior for light theme.
     // TODO: migrate from prefs to theme.
     if (currentThemeIndex == 0) {
@@ -406,35 +262,3 @@ COLORREF GetMainWindowBackgroundColor() {
     }
     return bgColor;
 }
-
-#if 0
-
-Theme* GetCurrentTheme() {
-    if (currentTheme == NULL || !str::Eq(currentTheme->name, gGlobalPrefs->themeName)) {
-        currentTheme = GetThemeByName(gGlobalPrefs->themeName);
-        if (currentTheme == NULL) {
-            str::ReplaceWithCopy(&gGlobalPrefs->themeName, g_themeLight.name);
-            currentTheme = &g_themeLight;
-        }
-        currentThemeIndex = GetThemeIndex(currentTheme);
-    }
-    return currentTheme;
-}
-
-int GetThemeIndex(Theme* theme) {
-    for (int i = 0; i < THEME_COUNT; i++) {
-        if (g_themes[i] == theme) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-int GetCurrentThemeIndex() {
-    if (currentTheme == NULL || !str::Eq(currentTheme->name, gGlobalPrefs->themeName)) {
-        GetCurrentTheme();
-    }
-    return currentThemeIndex;
-}
-
-#endif

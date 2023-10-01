@@ -122,6 +122,7 @@ void ReloadDocument(MainWindow* win, bool autoRefresh);
 void ToggleFullScreen(MainWindow* win, bool presentation = false);
 void RelayoutWindow(MainWindow* win);
 void DuplicateTabInNewWindow(WindowTab* tab);
+void CopyFilePath(WindowTab*);
 
 // note: background tabs are only searched if focusTab is true
 MainWindow* FindMainWindowByFile(const char* file, bool focusTab);
@@ -163,6 +164,8 @@ struct LoadArgs {
 
     FileArgs* fileArgs = nullptr;
 
+    TabState* tabState = nullptr;
+
   private:
     AutoFreeStr fileName;
 };
@@ -177,7 +180,6 @@ DocController* CreateControllerForEngineOrFile(EngineBase* engine, const char* p
                                                MainWindow* win);
 
 uint MbRtlReadingMaybe();
-void MessageBoxWarning(HWND hwnd, const WCHAR* msg, const WCHAR* title = nullptr);
 void MessageBoxWarning(HWND hwnd, const char* msg, const char* title = nullptr);
 void UpdateCursorPositionHelper(MainWindow* win, Point pos, NotificationWnd* wnd);
 bool DocumentPathExists(const char* path);
@@ -192,3 +194,5 @@ LRESULT CALLBACK WndProcSumatraFrame(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void ShutdownCleanup();
 bool DocIsSupportedFileType(Kind);
 char* GetLogFilePath();
+void ShowSavedAnnotationsNotification(HWND hwndParent, const char* path);
+void ShowSavedAnnotationsFailedNotification(HWND hwndParent, const char* path, const char* mupdfErr);

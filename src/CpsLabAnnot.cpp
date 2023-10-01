@@ -539,7 +539,7 @@ void CloseEvent(WindowTab* tab) {
         str::Str cmd;
         cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
         const WCHAR* w = ToWstrTemp(cmd.Get());
-        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w);
     }
 }
 
@@ -553,7 +553,7 @@ void CloseEvent(MainWindow* win) {
             str::Str cmd;
             cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
             const WCHAR* w = ToWstrTemp(cmd.Get());
-            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w, true);
+            DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w);
         }
     }
 }

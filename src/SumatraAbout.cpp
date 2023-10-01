@@ -166,7 +166,6 @@ static Size CalcSumatraVersionSize(HWND hwnd, HDC hdc) {
 static void DrawSumatraVersion(HWND hwnd, HDC hdc, Rect rect) {
     AutoDeleteFont fontSumatraTxt(CreateSimpleFont(hdc, kSumatraTxtFont, kSumatraTxtFontSize));
     AutoDeleteFont fontVersionTxt(CreateSimpleFont(hdc, kVersionTxtFont, kVersionTxtFontSize));
-    HGDIOBJ oldFont = SelectObject(hdc, fontSumatraTxt);
 
     SetBkMode(hdc, TRANSPARENT);
 
@@ -176,22 +175,20 @@ static void DrawSumatraVersion(HWND hwnd, HDC hdc, Rect rect) {
     Rect mainRect(rect.x + (rect.dx - txtSize.cx) / 2, rect.y + (rect.dy - txtSize.cy) / 2, txtSize.cx, txtSize.cy);
     DrawAppName(hdc, mainRect.TL());
 
-    SetTextColor(hdc, WIN_COL_BLACK);
-    SelectObject(hdc, fontVersionTxt);
+    SetTextColor(hdc, gCurrentTheme->mainWindow.textColor);
+    ScopedSelectFont restoreFont(hdc, fontVersionTxt);
     Point pt(mainRect.x + mainRect.dx + DpiScale(hwnd, kInnerPadding), mainRect.y);
 
     char* ver = GetAppVersionTemp();
     TextOutUtf8(hdc, pt.x, pt.y, ver, (int)str::Len(ver));
     txt = VERSION_SUB_TXT;
     TextOutUtf8(hdc, pt.x, pt.y + DpiScale(hwnd, 13), txt, (int)str::Len(txt));
-
-    SelectObject(hdc, oldFont);
 }
 
 // draw on the bottom right
 static Rect DrawHideFrequentlyReadLink(HWND hwnd, HDC hdc, const char* txt) {
     AutoDeleteFont fontLeftTxt(CreateSimpleFont(hdc, "MS Shell Dlg", 16));
-    auto col = currentTheme->mainWindow.linkColor;
+    auto col = gCurrentTheme->mainWindow.linkColor;
     AutoDeletePen penLinkLine(CreatePen(PS_SOLID, 1, col));
     ScopedSelectObject font(hdc, fontLeftTxt);
 
@@ -221,10 +218,10 @@ static Rect DrawHideFrequentlyReadLink(HWND hwnd, HDC hdc, const char* txt) {
    It transcribes the design I did in graphics software - hopeless
    to understand without seeing the design. */
 static void DrawAbout(HWND hwnd, HDC hdc, Rect rect, Vec<StaticLinkInfo*>& staticLinks) {
-    auto col = currentTheme->mainWindow.textColor;
+    auto col = gCurrentTheme->mainWindow.textColor;
     AutoDeletePen penBorder(CreatePen(PS_SOLID, ABOUT_LINE_OUTER_SIZE, col));
     AutoDeletePen penDivideLine(CreatePen(PS_SOLID, ABOUT_LINE_SEP_SIZE, col));
-    col = currentTheme->mainWindow.linkColor;
+    col = gCurrentTheme->mainWindow.linkColor;
     AutoDeletePen penLinkLine(CreatePen(PS_SOLID, ABOUT_LINE_SEP_SIZE, col));
 
     AutoDeleteFont fontLeftTxt(CreateSimpleFont(hdc, kLeftTextFont, kLeftTextFontSize));
@@ -259,7 +256,7 @@ static void DrawAbout(HWND hwnd, HDC hdc, Rect rect, Vec<StaticLinkInfo*>& stati
     DrawSumatraVersion(hwnd, hdc, titleRect);
 
     /* render attribution box */
-    col = currentTheme->mainWindow.textColor;
+    col = gCurrentTheme->mainWindow.textColor;
     SetTextColor(hdc, col);
     SetBkMode(hdc, TRANSPARENT);
 
@@ -280,9 +277,9 @@ static void DrawAbout(HWND hwnd, HDC hdc, Rect rect, Vec<StaticLinkInfo*>& stati
     for (AboutLayoutInfoEl* el = gAboutLayoutInfo; el->leftTxt; el++) {
         bool hasUrl = HasPermission(Perm::DiskAccess) && el->url;
         if (hasUrl) {
-            col = currentTheme->mainWindow.linkColor;
+            col = gCurrentTheme->mainWindow.linkColor;
         } else {
-            col = currentTheme->mainWindow.textColor;
+            col = gCurrentTheme->mainWindow.textColor;
         }
         SetTextColor(hdc, col);
         size_t txtLen = str::Len(el->rightTxt);
@@ -620,10 +617,10 @@ void DrawAboutPage(MainWindow* win, HDC hdc) {
 
 void DrawStartPage(MainWindow* win, HDC hdc, FileHistory& fileHistory, COLORREF textColor, COLORREF backgroundColor) {
     HWND hwnd = win->hwndFrame;
-    auto col = currentTheme->mainWindow.textColor;
+    auto col = gCurrentTheme->mainWindow.textColor;
     AutoDeletePen penBorder(CreatePen(PS_SOLID, DOCLIST_SEPARATOR_DY, col));
     AutoDeletePen penThumbBorder(CreatePen(PS_SOLID, DOCLIST_THUMBNAIL_BORDER_W, col));
-    col = currentTheme->mainWindow.linkColor;
+    col = gCurrentTheme->mainWindow.linkColor;
     AutoDeletePen penLinkLine(CreatePen(PS_SOLID, 1, col));
 
     AutoDeleteFont fontSumatraTxt(CreateSimpleFont(hdc, "MS Shell Dlg", 24));
@@ -653,7 +650,7 @@ void DrawStartPage(MainWindow* win, HDC hdc, FileHistory& fileHistory, COLORREF 
     /* render recent files list */
     SelectObject(hdc, penThumbBorder);
     SetBkMode(hdc, TRANSPARENT);
-    col = currentTheme->mainWindow.textColor;
+    col = gCurrentTheme->mainWindow.textColor;
     SetTextColor(hdc, col);
 
     rc.y += titleBox.dy;
@@ -725,7 +722,9 @@ void DrawStartPage(MainWindow* win, HDC hdc, FileHistory& fileHistory, COLORREF 
                 }
                 HRGN clip = CreateRoundRectRgn(page.x, page.y, page.x + page.dx, page.y + page.dy, 10, 10);
                 SelectClipRgn(hdc, clip);
-                RenderedBitmap* clone = state->thumbnail->Clone();
+                // note: we used to invert bitmaps in dark theme but that doesn't
+                // make sense for thumbnails
+                RenderedBitmap* clone = nullptr; // state->thumbnail->Clone();
                 if (clone) {
                     UpdateBitmapColors(clone->GetBitmap(), textColor, backgroundColor);
                     clone->Blit(hdc, page);
@@ -768,7 +767,7 @@ void DrawStartPage(MainWindow* win, HDC hdc, FileHistory& fileHistory, COLORREF 
         DOCLIST_MARGIN_TOP + height * kThumbnailDy + (height - 1) * DOCLIST_MARGIN_BETWEEN_Y + DOCLIST_MARGIN_BOTTOM;
     rc.dy = DOCLIST_BOTTOM_BOX_DY;
 
-    col = currentTheme->mainWindow.linkColor;
+    col = gCurrentTheme->mainWindow.linkColor;
     SetTextColor(hdc, col);
     SelectObject(hdc, penLinkLine);
 

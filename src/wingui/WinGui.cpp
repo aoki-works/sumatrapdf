@@ -21,6 +21,8 @@
 
 Kind kindWnd = "wnd";
 
+constexpr bool gLogTabs = false;
+
 static LONG gSubclassId = 0;
 
 UINT_PTR NextSubclassId() {
@@ -344,6 +346,9 @@ LRESULT Wnd::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 void Wnd::OnAttach() {
 }
 
+void Wnd::OnFocus() {
+}
+
 // Override this to handle WM_COMMAND messages
 bool Wnd::OnCommand(WPARAM wparam, LPARAM lparam) {
     //  UINT id = LOWORD(wparam);
@@ -432,7 +437,7 @@ LRESULT Wnd::OnMouseEvent(UINT msg, WPARAM wparam, LPARAM lparam) {
     return -1;
 }
 
-void Wnd::OnMove(LPPOINTS pts) {
+void Wnd::OnMove(POINTS*) {
 }
 
 // Processes notification (WM_NOTIFY) messages from a child window.
@@ -739,6 +744,11 @@ LRESULT Wnd::WndProcDefault(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         case WM_DESTROY: {
             OnDestroy();
             break; // Note: Some controls require default processing.
+        }
+
+        case WM_SETFOCUS: {
+            OnFocus();
+            break;
         }
 
         case WM_NOTIFY: {
@@ -1657,6 +1667,16 @@ void Edit::SetSelection(int start, int end) {
     Edit_SetSel(hwnd, start, end);
 }
 
+void Edit::SetCursorPosition(int pos) {
+    SetSelection(pos, pos);
+}
+
+void Edit::SetCursorPositionAtEnd() {
+    WCHAR* s = HwndGetTextWTemp(hwnd);
+    int pos = str::Len(s);
+    SetCursorPosition(pos);
+}
+
 HWND Edit::Create(const EditCreateArgs& editArgs) {
     // https://docs.microsoft.com/en-us/windows/win32/controls/edit-control-styles
     CreateControlArgs args;
@@ -1690,6 +1710,26 @@ HWND Edit::Create(const EditCreateArgs& editArgs) {
         EditSetCueText(hwnd, editArgs.cueText);
     }
     return hwnd;
+}
+
+LRESULT Edit::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+        case WM_KEYDOWN: {
+            bool isCtrlBack = (VK_BACK == wp) && IsCtrlPressed() && !IsShiftPressed();
+            if (isCtrlBack) {
+                PostMessageW(hwnd, UWM_DELAYED_CTRL_BACK, 0, 0);
+                return true;
+            }
+            break;
+        }
+
+        case UWM_DELAYED_CTRL_BACK: {
+            EditImplementCtrlBack(hwnd);
+            return true;
+        }
+    }
+    return WndProcDefault(hwnd, msg, wp, lp);
+    // return FinalWindowProc(msg, wp, lp);
 }
 
 bool Edit::HasBorder() {
@@ -3019,9 +3059,11 @@ void PopulateTreeItem(TreeView* treeView, TreeItem item, HTREEITEM parent) {
     int n = tm->ChildCount(item);
     TreeItem tmp[256];
     TreeItem* a = &tmp[0];
+    void* toFree = nullptr;
     if (n > dimof(tmp)) {
         size_t nBytes = (size_t)n * sizeof(TreeItem);
-        a = (TreeItem*)malloc(nBytes);
+        toFree = malloc(nBytes);
+        a = (TreeItem*)toFree;
     }
     // ChildAt() is optimized for sequential access and we need to
     // insert backwards, so gather the items in v first
@@ -3041,9 +3083,7 @@ void PopulateTreeItem(TreeView* treeView, TreeItem item, HTREEITEM parent) {
         }
     }
 
-    if (a != &tmp[0]) {
-        free(a);
-    }
+    free(toFree);
 }
 
 static void PopulateTree(TreeView* treeView, TreeModel* tm) {
@@ -3099,7 +3139,7 @@ TreeItemState TreeView::GetItemState(TreeItem ti) {
 // sets pt to screen position (for context menu coordinates)
 TreeItem GetOrSelectTreeItemAtPos(ContextMenuEvent* args, POINT& pt) {
     TreeView* treeView = (TreeView*)args->w;
-    TreeModel* tm = treeView->treeModel;
+    // TreeModel* tm = treeView->treeModel;
     HWND hwnd = treeView->hwnd;
 
     TreeItem ti;
@@ -3178,7 +3218,7 @@ LRESULT TreeView::OnNotifyReflect(WPARAM wp, LPARAM lp) {
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/tvn-selchanged
     if (code == TVN_SELCHANGED) {
-        log("tv: TVN_SELCHANGED\n");
+        // log("tv: TVN_SELCHANGED\n");
         if (!onTreeSelectionChanged) {
             return 0;
         }
@@ -3199,7 +3239,7 @@ LRESULT TreeView::OnNotifyReflect(WPARAM wp, LPARAM lp) {
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/nm-click-tree-view
     if (code == NM_CLICK || code == NM_DBLCLK) {
-        log("tv: NM_CLICK\n");
+        // log("tv: NM_CLICK\n");
         if (!onTreeClick) {
             return 0;
         }
@@ -3383,6 +3423,11 @@ Gdiplus::Color GdipCol(COLORREF c) {
     return GdiRgbFromCOLORREF(c);
 }
 
+// if true, on hover we paint the background of tab close (X) button
+constexpr bool closeCircleEnabled = true;
+constexpr float closePenWidth = 1.0f;
+constexpr COLORREF circleColor = RgbToCOLORREF(0xC13535);
+
 void TabsCtrl::Paint(HDC hdc, RECT& rc) {
     TabMouseState tabState = TabStateFromMousePosition(lastMousePos);
     int tabUnderMouse = tabState.tabIdx;
@@ -3403,7 +3448,8 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
     gfx.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     gfx.SetPageUnit(UnitPixel);
 
-    SolidBrush br(GdipCol(currentTheme->mainWindow.controlBackgroundColor));
+    Theme* theme = gCurrentTheme;
+    SolidBrush br(GdipCol(theme->mainWindow.controlBackgroundColor));
 
     Font f(hdc, GetDefaultGuiFont());
 
@@ -3420,17 +3466,26 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
     Rect r;
     Gdiplus::RectF rTxt;
 
+    COLORREF textColor = theme->mainWindow.textColor;
+    COLORREF tabBgSelected = theme->mainWindow.controlBackgroundColor;
+    COLORREF tabBgHighlight;
+    COLORREF tabBgBackground;
+    if (IsLightColor(tabBgSelected)) {
+        tabBgBackground = AdjustLightness2(tabBgSelected, -15);
+        tabBgHighlight = AdjustLightness2(tabBgSelected, -25);
+    } else {
+        tabBgBackground = AdjustLightness2(tabBgSelected, 15);
+        tabBgHighlight = AdjustLightness2(tabBgSelected, 25);
+    }
+
+    COLORREF tabBgCol;
     for (int i = 0; i < n; i++) {
         // Get the correct colors based on the state and the current theme
-        TabStyle tabStyle = currentTheme->tab.background;
+        tabBgCol = tabBgBackground;
         if (tabSelected == i) {
-            tabStyle = currentTheme->tab.selected;
+            tabBgCol = tabBgSelected;
         } else if (tabUnderMouse == i) {
-            tabStyle = currentTheme->tab.highlighted;
-        }
-        TabCloseStyle tabCloseStyle = tabStyle.close;
-        if ((tabUnderMouse == i) && overClose) {
-            tabCloseStyle = currentTheme->tab.hoveredClose;
+            tabBgCol = tabBgHighlight;
         }
 
         ti = GetTab(i);
@@ -3439,24 +3494,24 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
         gfx.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
 
         // draw background
-        br.SetColor(GdipCol(tabStyle.backgroundColor));
+        br.SetColor(GdipCol(tabBgCol));
         gr = ToGdipRect(ti->r);
         gfx.FillRectangle(&br, gr);
 
         if (ti->canClose) {
             r = ti->rClose;
-            if (i == tabUnderMouse && overClose && currentTheme->tab.closeCircleEnabled) {
+            if (i == tabUnderMouse && overClose && closeCircleEnabled) {
                 // draw bacground of X
                 Rect cr = r;
                 cr.Inflate(3, 3);
                 gr = ToGdipRect(cr);
-                br.SetColor(GdipCol(tabCloseStyle.circleColor));
+                br.SetColor(GdipCol(circleColor));
                 gfx.FillRectangle(&br, gr);
             }
 
             // draw X
-            br.SetColor(GdipCol(tabCloseStyle.xColor));
-            Pen penX(&br, currentTheme->tab.closePenWidth);
+            br.SetColor(GdipCol(textColor));
+            Pen penX(&br, closePenWidth);
             Gdiplus::Point p1(r.x, r.y);
             Gdiplus::Point p2(r.x + r.dx, r.y + r.dy);
             gfx.DrawLine(&penX, p1, p2);
@@ -3470,7 +3525,7 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
         rTxt = ToGdipRectF(ti->r);
         rTxt.X += 8;
         rTxt.Width -= (8 + r.dx + 8);
-        br.SetColor(GdipCol(tabStyle.textColor));
+        br.SetColor(GdipCol(textColor));
         WCHAR* ws = ToWstrTemp(ti->text);
         gfx.DrawString(ws, -1, &f, rTxt, &sf, &br);
     }
@@ -3610,7 +3665,9 @@ LRESULT TabsCtrl::OnNotifyReflect(WPARAM wp, LPARAM lp) {
 
         case TTN_GETDISPINFOA:
         case TTN_GETDISPINFOW:
-            // logfa("TabsCtrl::OnNotifyReflect: TTN_GETDISPINFO\n");
+            if (gLogTabs) {
+                logfa("TabsCtrl::OnNotifyReflect: TTN_GETDISPINFO\n");
+            }
             break;
     }
     return 0;
@@ -3620,7 +3677,7 @@ LRESULT TabsCtrl::OnNotifyReflect(WPARAM wp, LPARAM lp) {
 static int nWmMouseMoveCount = 0;
 
 LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    TCITEMW* tcs = nullptr;
+    // TCITEMW* tcs = nullptr;
 
     Point mousePos = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
     if (WM_MOUSELEAVE == msg) {
@@ -3643,8 +3700,8 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         canClose = tabState.tabInfo && tabState.tabInfo->canClose;
         overClose = tabState.overClose && canClose;
         lastMousePos = mousePos;
-        const char* msgName = WinMsgName(msg);
-        // logfa("msg; %s, tabUnderMouse: %d, overClose: %d\n", msgName, tabUnderMouse, (int)overClose);
+        // const char* msgName = WinMsgName(msg);
+        //  logfa("msg; %s, tabUnderMouse: %d, overClose: %d\n", msgName, tabUnderMouse, (int)overClose);
     }
 
     if (draggingTab && msg == WM_MOUSEMOVE) {
@@ -3679,8 +3736,10 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
         case WM_MOUSELEAVE:
-            logfa("TabsCtrl::WndProc: WM_MOUSELEAVE, tabUnderMouse: %d, tabHighlited: %d\n", tabUnderMouse,
-                  tabHighlighted);
+            if (gLogTabs) {
+                logfa("TabsCtrl::WndProc: WM_MOUSELEAVE, tabUnderMouse: %d, tabHighlited: %d\n", tabUnderMouse,
+                      tabHighlighted);
+            }
             if (tabHighlighted != tabUnderMouse) {
                 tabHighlighted = tabUnderMouse;
                 HwndScheduleRepaint(hwnd);
@@ -3692,8 +3751,10 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             TrackMouseLeave(hwnd);
             bool isDragging = (GetCapture() == hwnd);
             if (nWmMouseMoveCount == 0 || isDragging) {
-                logfa("TabsCtrl::WndProc: WM_MOUSEMOVE: tabUnderMouse: %d, tabHighlited: %d, isDragging: %d\n",
-                      tabUnderMouse, tabHighlighted, (int)isDragging);
+                if (gLogTabs) {
+                    logfa("TabsCtrl::WndProc: WM_MOUSEMOVE: tabUnderMouse: %d, tabHighlited: %d, isDragging: %d\n",
+                          tabUnderMouse, tabHighlighted, (int)isDragging);
+                }
             }
             nWmMouseMoveCount++;
             int hl = tabHighlighted;
@@ -3717,11 +3778,16 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (isDragging) {
                     // send notification if the highlighted tab is dragged over another
                     if (!GetTab(tabUnderMouse)->isPinned) {
-                        logfa("TabsCtrl::WndProc: WM_MOUSEMOVE: before TriggerTabDragged: hl=%d, tabUnderMouse=%d\n",
-                              hl, tabUnderMouse);
+                        if (gLogTabs) {
+                            logfa(
+                                "TabsCtrl::WndProc: WM_MOUSEMOVE: before TriggerTabDragged: hl=%d, tabUnderMouse=%d\n",
+                                hl, tabUnderMouse);
+                        }
                         TriggerTabDragged(this, hl, tabUnderMouse);
-                        logfa("TabsCtrl::WndProc: WM_MOUSEMOVE: before UpdateAfterDrag: hl=%d, tabUnderMouse=%d\n", hl,
-                              tabUnderMouse);
+                        if (gLogTabs) {
+                            logfa("TabsCtrl::WndProc: WM_MOUSEMOVE: before UpdateAfterDrag: hl=%d, tabUnderMouse=%d\n",
+                                  hl, tabUnderMouse);
+                        }
                         UpdateAfterDrag(this, hl, tabUnderMouse);
                     }
                 } else {
@@ -3766,19 +3832,23 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     SetCapture(hwnd);
                 }
             }
-            logfa(
-                "TabsCtrl::WndProc: WM_LBUTTONDOWN, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
-                "overClose: %d\n",
-                tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            if (gLogTabs) {
+                logfa(
+                    "TabsCtrl::WndProc: WM_LBUTTONDOWN, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
+                    "overClose: %d\n",
+                    tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            }
             return 0;
         }
 
         case WM_LBUTTONUP: {
             nWmMouseMoveCount = 0;
-            logfa(
-                "TabsCtrl::WndProc: WM_LBUTTONUP, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
-                "overClose: %d\n",
-                tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            if (gLogTabs) {
+                logfa(
+                    "TabsCtrl::WndProc: WM_LBUTTONUP, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
+                    "overClose: %d\n",
+                    tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            }
             if (tabBeingClosed != -1 && tabUnderMouse == tabBeingClosed && overClose) {
                 // send notification that the tab is closed
                 TriggerTabClosed(this, tabBeingClosed);
@@ -3796,8 +3866,10 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 draggingTab = false;
                 ImageList_EndDrag();
                 int selectedTab = GetSelected();
-                logfa("TabsCtrl::WndProc: WM_LBUTTONUP, selectedTab: %d tabUnderMouse: %d\n", selectedTab,
-                      tabUnderMouse);
+                if (gLogTabs) {
+                    logfa("TabsCtrl::WndProc: WM_LBUTTONUP, selectedTab: %d tabUnderMouse: %d\n", selectedTab,
+                          tabUnderMouse);
+                }
                 if (tabUnderMouse != -1 && tabUnderMouse != selectedTab && !GetTab(tabUnderMouse)->isPinned) {
                     TriggerTabDragged(this, selectedTab, tabUnderMouse);
                     UpdateAfterDrag(this, selectedTab, tabUnderMouse);
@@ -3813,10 +3885,12 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_MBUTTONDOWN: {
-            logfa(
-                "TabsCtrl::WndProc: WM_MBUTTONDOWN, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
-                "overClose: %d\n",
-                tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            if (gLogTabs) {
+                logfa(
+                    "TabsCtrl::WndProc: WM_MBUTTONDOWN, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
+                    "overClose: %d\n",
+                    tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            }
             nWmMouseMoveCount = 0;
             // middle-clicking unconditionally closes the tab
             tabBeingClosed = tabUnderMouse;
@@ -3825,10 +3899,12 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_MBUTTONUP: {
-            logfa(
-                "TabsCtrl::WndProc: WM_MBUTTONUP, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
-                "overClose: %d\n",
-                tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            if (gLogTabs) {
+                logfa(
+                    "TabsCtrl::WndProc: WM_MBUTTONUP, tabUnderMouse: %d, tabHighlited: %d, tabBeingClosed: %d, "
+                    "overClose: %d\n",
+                    tabUnderMouse, tabHighlighted, tabBeingClosed, (int)overClose);
+            }
             nWmMouseMoveCount = 0;
             if (tabBeingClosed < 0 || !canClose) {
                 return 0;
@@ -4184,7 +4260,7 @@ void DrawCloseButton(const DrawCloseButtonArgs& args) {
 }
 
 void DrawCloseButton2(const DrawCloseButtonArgs& args) {
-    bool isHover = args.isHover;
+    // bool isHover = args.isHover;
     HDC hdc = args.hdc;
     const Rect& r = args.r;
     COLORREF lineCol = args.colX;

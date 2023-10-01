@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="docs">
+      <UniqueIdentifier>{CECA957C-BA01-970D-63EE-7C104F04130F}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ext">
       <UniqueIdentifier>{7670880B-E279-887C-6BF5-9E7CD7FD937C}</UniqueIdentifier>
     </Filter>
@@ -242,6 +245,9 @@
     </ClInclude>
     <ClInclude Include="..\src\wingui\WinGui.h">
       <Filter>src\wingui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\CpsLabAnnot.h">
+      <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -536,8 +542,20 @@
     <ClCompile Include="..\src\wingui\WinGui.cpp">
       <Filter>src\wingui</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\CpsLabAnnot.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\docs\notes.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="..\docs\releasenotes.txt">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="..\docs\wishlist.txt">
+      <Filter>docs</Filter>
+    </None>
     <None Include="..\src\ext\versions.txt">
       <Filter>src\ext</Filter>
     </None>

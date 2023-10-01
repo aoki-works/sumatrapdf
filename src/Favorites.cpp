@@ -221,7 +221,7 @@ void Favorites::AddOrReplace(const char* filePath, int pageNo, const char* name,
 
     Favorite* fn = FindByPage(fav, pageNo, pageLabel);
     if (fn) {
-        str::ReplacePtr(&fn->name, name);
+        str::ReplaceWithCopy(&fn->name, name);
         CrashIf(fn->pageLabel && !str::Eq(fn->pageLabel, pageLabel));
     } else {
         fn = NewFavorite(pageNo, name, pageLabel);
@@ -418,7 +418,7 @@ static void AppendFavMenus(HMENU m, const char* currFilePath) {
             if (f == currFileFav) {
                 AppendMenuW(m, MF_POPUP | MF_STRING, (UINT_PTR)sub, _TR("Current file"));
             } else {
-                char* fileName = MenuToSafeStringTemp(path::GetBaseNameTemp(filePath));
+                TempStr fileName = MenuToSafeStringTemp(path::GetBaseNameTemp(filePath));
                 AppendMenuW(m, MF_POPUP | MF_STRING, (UINT_PTR)sub, ToWstrTemp(fileName));
             }
         }
@@ -808,7 +808,7 @@ static void FavTreeContextMenu(ContextMenuEvent* ev) {
     HMENU popup = BuildMenuFromMenuDef(menuDefContextFav, CreatePopupMenu(), nullptr);
     MarkMenuOwnerDraw(popup);
     uint flags = TPM_RETURNCMD | TPM_RIGHTBUTTON;
-    int cmd = TrackPopupMenu(popup, flags, pt.x, pt.y, 0, hwnd, nullptr);
+    int cmd = TrackPopupMenu(popup, flags, pt.x, pt.y, 0, win->hwndFrame, nullptr);
     FreeMenuOwnerDrawInfoData(popup);
     DestroyMenu(popup);
 
@@ -926,5 +926,5 @@ void CreateFavorites(MainWindow* win) {
     }
     SetWindowLongPtr(win->hwndFavBox, GWLP_WNDPROC, (LONG_PTR)WndProcFavBox);
 
-    UpdateTreeCtrlColors(win);
+    UpdateControlsColors(win);
 }

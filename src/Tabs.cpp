@@ -188,8 +188,7 @@ void TabsSelect(MainWindow* win, int tabIndex) {
 // clang-format off
 static MenuDef menuDefContextTab[] = {
     {
-        // TODO: translate
-        "Properties...",
+        _TRN("Properties..."),
         CmdProperties,
     },
     {
@@ -197,8 +196,11 @@ static MenuDef menuDefContextTab[] = {
         CmdShowInFolder,
     },
     {
-        // TODO: translate
-        "Open In New Window",
+        _TRN("Copy File Path"),
+        CmdCopyFilePath,
+    },
+    {
+        _TRN("Open In New Window"),
         CmdDuplicateInNewWindow,
     },
     {
@@ -310,6 +312,10 @@ static void TabsContextMenu(ContextMenuEvent* ev) {
         }
         case CmdShowInFolder: {
             ShowFileInFolder(tabUnderMouse);
+            break;
+        }
+        case CmdCopyFilePath: {
+            CopyFilePath(tabUnderMouse);
             break;
         }
         case CmdDuplicateInNewWindow: {

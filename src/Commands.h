@@ -49,6 +49,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdCopyImage, "Copy Image")                                         \
     V(CmdCopyLinkTarget, "Copy Link Target")                              \
     V(CmdCopyComment, "Copy Comment")                                     \
+    V(CmdCopyFilePath, "Copy File Path")                                  \
     V(CmdScrollUp, "Scroll Up")                                           \
     V(CmdScrollDown, "Scroll Down")                                       \
     V(CmdScrollLeft, "Scroll Left")                                       \
@@ -71,8 +72,9 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdFindPrevSel, "Find Previous Selection")                          \
     V(CmdFindMatch, "Find: Match Case")                                   \
     V(CmdSaveAnnotations, "Save Annotations to existing PDF")             \
+    V(CmdSaveAnnotationsNewFile, "Save Annotations to a new PDF")         \
+    V(CmdSelectAnnotation, "Select Annotation")                           \
     V(CmdEditAnnotations, "Edit Annotations")                             \
-    V(CmdSelectAnnotation, "Select Annotation in Editor")                 \
     V(CmdDeleteAnnotation, "Delete Annotation")                           \
     V(CmdZoomFitPage, "Zoom: Fit Page")                                   \
     V(CmdZoomActualSize, "Zoom: Actual Size")                             \
@@ -161,17 +163,18 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdToggleZoom, "Toggle Zoom")                                       \
     V(CmdNavigateBack, "Navigate Back")                                   \
     V(CmdNavigateForward, "Navigate Forward")                             \
-    V(CmdShowCursorPosition, "Show Cursor Position")                      \
+    V(CmdToggleCursorPosition, "Toggle Cursor Position")                  \
     V(CmdOpenNextFileInFolder, "Open Next File In Folder")                \
     V(CmdOpenPrevFileInFolder, "Open Previous File In Folder")            \
     V(CmdCommandPalette, "Command Palette")                               \
     V(CmdCommandPaletteNoFiles, "Command Palette No Files")               \
+    V(CmdCommandPaletteOnlyTabs, "Command Palette Only Tabs")             \
     V(CmdShowLog, "Show Log")                                             \
     V(CmdClearHistory, "Clear History")                                   \
     V(CmdReopenLastClosedFile, "Reopen Last Closed")                      \
     V(CmdNextTab, "Next Tab")                                             \
     V(CmdPrevTab, "Previous Tab")                                         \
-    V(CmdCycleTheme, "Switch to next theme")                              \
+    V(CmdSelectNextTheme, "Select next theme")                            \
     V(CmdNone, "Do nothing")
 
 // order of CreateAnnot* must be the same as enum AnnotationType

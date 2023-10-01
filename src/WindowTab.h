@@ -44,12 +44,21 @@ struct WindowTab {
     DisplayMode prevDisplayMode{DisplayMode::Automatic};
     TocTree* currToc = nullptr; // not owned by us
     EditAnnotationsWindow* editAnnotsWindow = nullptr;
+    Rect lastEditAnnotsWindowPos = {};
 
     // TODO: terrible hack
     bool askedToSaveAnnotations = false;
 
     // CpsLab
     cpslab::Markers* markers = nullptr;
+
+    TabState* tabState = nullptr; // when lazy loading
+
+    Annotation* selectedAnnotation = nullptr;
+    bool didScrollToSelectedAnnotation = false; // only automatically scroll once
+
+    // TODO: arguably a hack
+    bool ignoreNextAutoReload = false;
 
     WindowTab(MainWindow* win);
     ~WindowTab();

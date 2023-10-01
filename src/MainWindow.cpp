@@ -121,7 +121,6 @@ MainWindow::~MainWindow() {
     CrashIf(TabCount() > 0);
     // CrashIf(ctrl); // TODO: seen in crash report
     CrashIf(linkOnLastButtonDown);
-    CrashIf(annotationOnLastButtonDown);
 
     UnsubclassToc(this);
 
@@ -166,8 +165,7 @@ MainWindow::~MainWindow() {
 
 void ClearMouseState(MainWindow* win) {
     win->linkOnLastButtonDown = nullptr;
-    delete win->annotationOnLastButtonDown;
-    win->annotationOnLastButtonDown = nullptr;
+    win->annotationUnderCursor = nullptr;
 }
 
 bool MainWindow::IsAboutWindow() const {
@@ -306,6 +304,10 @@ void MainWindow::ChangePresentationMode(PresentationMode mode) {
     RedrawAll();
 }
 
+bool MainWindow::InPresentation() const {
+    return presentation != PM_DISABLED;
+}
+
 static HWND FindModalOwnedBy(HWND hwndParent) {
     HWND hwnd = nullptr;
     while (true) {
@@ -397,15 +399,12 @@ void LinkHandler::GotoLink(IPageDestination* dest) {
         PageDestinationFile* pdf = (PageDestinationFile*)dest;
         // LaunchFile only opens files inside SumatraPDF
         // (except for allowed perceived file types)
-        char* tmpPath = CleanupFileURL(pdf->path);
+        TempStr tmpPath = CleanupFileURLTemp(pdf->path);
         // heuristic: replace %20 with ' '
         if (!file::Exists(tmpPath) && (str::Find(tmpPath, "%20") != nullptr)) {
-            char* tmp = str::Replace(tmpPath, "%20", " ");
-            str::Free(tmpPath);
-            tmpPath = tmp;
+            tmpPath = str::ReplaceTemp(tmpPath, "%20", " ");
         }
         LaunchFile(tmpPath, dest);
-        str::Free(tmpPath);
         return;
     }
     if (kindDestinationLaunchEmbedded == kind) {
@@ -431,6 +430,13 @@ void LinkHandler::GotoLink(IPageDestination* dest) {
 void LinkHandler::ScrollTo(IPageDestination* dest) {
     ReportIf(!win || !win->ctrl || win->linkHandler != this);
     if (!dest || !win || !win->ctrl || !win->IsDocLoaded()) {
+        return;
+    }
+    // TODO: this seems like a hack, there should be a better way
+    // https://github.com/sumatrapdfreader/sumatrapdf/issues/3499
+    ChmModel* chm = win->ctrl->AsChm();
+    if (chm) {
+        chm->HandleLink(dest, nullptr);
         return;
     }
     int pageNo = dest->GetPageNo();
@@ -477,9 +483,9 @@ void LinkHandler::LaunchFile(const char* pathOrig, IPageDestination* link) {
     }
 
     // TODO: make it a function
-    AutoFreeStr path = str::Replace(pathOrig, "/", "\\");
+    TempStr path = str::ReplaceTemp(pathOrig, "/", "\\");
     if (str::StartsWith(path, ".\\")) {
-        path.SetCopy(path + 2);
+        path = path + 2;
     }
 
     char drive;
@@ -617,12 +623,14 @@ void LinkHandler::GotoNamedDest(const char* name) {
     }
 }
 
-void UpdateTreeCtrlColors(MainWindow* win) {
-    COLORREF labelBgCol = GetSysColor(COLOR_BTNFACE);
-    COLORREF labelTxtCol = GetSysColor(COLOR_BTNTEXT);
+void UpdateControlsColors(MainWindow* win) {
+    Theme* theme = gCurrentTheme;
+    COLORREF labelBgCol = theme->mainWindow.controlBackgroundColor;
+    COLORREF labelTxtCol = theme->mainWindow.textColor;
+
     COLORREF treeBgCol, treeTxtCol;
     GetDocumentColors(treeTxtCol, treeBgCol);
-    logfa("retrieved doc colors in tree control: 0x%x 0x%x\n", treeTxtCol, treeBgCol);
+    // logfa("retrieved doc colors in tree control: 0x%x 0x%x\n", treeTxtCol, treeBgCol);
 
     COLORREF splitterCol = GetSysColor(COLOR_BTNFACE);
     bool flatTreeWnd = false;
@@ -654,7 +662,6 @@ void UpdateTreeCtrlColors(MainWindow* win) {
         uint flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED;
         SetWindowPos(favTreeView->hwnd, nullptr, 0, 0, 0, 0, flags);
     }
-
     // TODO: more work needed to to ensure consistent look of the ebook window:
     // - tab bar should match the colort
     // - change the tree item text color

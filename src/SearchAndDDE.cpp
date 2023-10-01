@@ -85,7 +85,10 @@ void FindFirst(MainWindow* win) {
 
     // copy any selected text to the find bar, if it's still empty
     DisplayModel* dm = win->AsFixed();
-    if (dm->textSelection->result.len > 0 && Edit_GetTextLength(win->hwndFindEdit) == 0) {
+    // note: used to only copy selection to search edit ctrl
+    // if search edit was empty
+    // auto isEditEmpty = Edit_GetTextLength(win->hwndFindEdit) == 0
+    if (dm->textSelection->result.len > 0) {
         AutoFreeWstr selection(dm->textSelection->ExtractText(" "));
         str::NormalizeWSInPlace(selection);
         if (!str::IsEmpty(selection.Get())) {
@@ -239,10 +242,7 @@ struct FindThreadData : public ProgressUpdateUI {
             NotificationCreateArgs args;
             args.hwndParent = win->hwndCanvas;
             args.timeoutMs = 0;
-            args.onRemoved = [](NotificationWnd* wnd) {
-                RemoveNotification(wnd);
-                wnd = nullptr;
-            };
+            args.onRemoved = [](NotificationWnd* wnd) { RemoveNotification(wnd); };
 
             args.progressMsg = _TRA("Searching %d of %d...");
             args.groupId = kNotifGroupFindProgress;
@@ -841,7 +841,7 @@ DDE command: jump to a page in an already opened document.
 
 eg: [GoToPage("c:\file.pdf",37)]
 */
-static const char* HandlePageCmd(__unused HWND hwnd, const char* cmd, DDEACK& ack) {
+static const char* HandlePageCmd(HWND, const char* cmd, DDEACK& ack) {
     AutoFreeStr pdfFile;
     uint page = 0;
     const char* next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &pdfFile, &page);
@@ -1118,7 +1118,9 @@ static const char* HandleCmdCommand(HWND hwnd, const char* cmd, DDEACK& ack) {
 
 static void HandleDdeCmds(HWND hwnd, const char* cmd, DDEACK& ack) {
     while (!str::IsEmpty(cmd)) {
-        { logf("HandleDdeCmds: '%s'\n", cmd); }
+        {
+            logf("HandleDdeCmds: '%s'\n", cmd);
+        }
 
         const char* nextCmd = HandleSyncCmd(cmd, ack);
         if (!nextCmd) {
@@ -1182,13 +1184,13 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
     return 0;
 }
 
-LRESULT OnDDETerminate(HWND hwnd, WPARAM wp, __unused LPARAM lp) {
+LRESULT OnDDETerminate(HWND hwnd, WPARAM wp, LPARAM) {
     // Respond with another WM_DDE_TERMINATE message
     PostMessageW((HWND)wp, WM_DDE_TERMINATE, (WPARAM)hwnd, 0L);
     return 0;
 }
 
-LRESULT OnCopyData(__unused HWND hwnd, WPARAM wp, LPARAM lp) {
+LRESULT OnCopyData(HWND hwnd, WPARAM wp, LPARAM lp) {
     COPYDATASTRUCT* cds = (COPYDATASTRUCT*)lp;
     if (!cds || cds->dwData != 0x44646557 /* DdeW */ || wp) {
         return FALSE;
