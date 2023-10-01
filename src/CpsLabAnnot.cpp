@@ -129,6 +129,7 @@ MarkerNode::~MarkerNode() {
 TextSel* MarkerNode::selectWords(DisplayModel* dm, StrVec& select_words, bool conti) {
     TextSel* first_word = nullptr;
     dm->textSearch->SetDirection(TextSearchDirection::Forward);
+    dm->textSearch->wordSearch = true;
     for(auto wd : select_words) {
         for (size_t i = 0; i < words.size(); ++i) {
             char* mkwd = words.at(i);
@@ -147,6 +148,7 @@ TextSel* MarkerNode::selectWords(DisplayModel* dm, StrVec& select_words, bool co
             }
         }
     }
+    dm->textSearch->wordSearch = false;
     return first_word;
 }
 
@@ -444,6 +446,60 @@ void TmpAllocator::Free(const void*)
 // =============================================================
 //
 // =============================================================
+bool IsWord(const WCHAR* begin, const size_t length) {
+    if (*begin == '\n') {
+        return false;
+    }
+    if (!isWordChar(*begin)) {
+        return false;
+    }
+    if (isWordChar(*(begin - 1))) {
+        return false;
+    }
+    if (isWordChar(*(begin + length))) {
+        return false;
+    }
+    return true;
+}
+
+
+bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const WCHAR* end) {
+    if (!isWordChar(*begin)) {
+        return false;
+    }
+    Rect rect = coords[begin - pageText];
+    if (begin != pageText) {
+        if (isWordChar(*(begin - 1))) {
+            Rect r = coords[begin - pageText - 1];
+            if (r.x == rect.x || r.y == rect.y) {
+                return false;
+            }
+        }
+    }
+    if (isWordChar(*(end))) {
+        Rect r = coords[end - pageText];
+        if (r.x == rect.x || r.y == rect.y) {
+            return false;
+        }
+    }
+    return true;
+    // forword search the end letter of 'word'.
+    for (auto c = begin + 1; c < end; ++c) {
+        if (!isWordChar(*c)) {
+            return false;
+        }
+        Rect r = coords[c - pageText];
+        if (r.x != rect.x && r.y != rect.y) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+// =============================================================
+//
+// =============================================================
 const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageText,
                           const Rect* coords, const WCHAR* src, const WCHAR* lineSep,
                           str::WStr& result,
@@ -674,6 +730,7 @@ const char* MarkWords(MainWindow* win) {
     DisplayModel* dm = tab->AsFixed();
     auto engine = dm->GetEngine();
     // ---------------------------------------------
+    dm->textSearch->wordSearch = true;
     char* first_word = nullptr;
     for (auto marker_node : tab->markers->markerTable) {
         str::Str annot_key_content("@CPSLabMark:");
@@ -741,6 +798,7 @@ const char* MarkWords(MainWindow* win) {
             DeleteOldSelectionInfo(win, true);
         }
     }
+    dm->textSearch->wordSearch = false;
     return first_word;
 }
 

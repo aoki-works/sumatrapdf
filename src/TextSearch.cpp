@@ -13,6 +13,7 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
+#include "CpsLabAnnot.h"
 
 #define SkipWhitespace(c) for (; str::IsWs(*(c)); (c)++)
 // ignore spaces between CJK glyphs but not between Latin, Greek, Cyrillic, etc. letters
@@ -28,6 +29,7 @@ TextSearch::TextSearch(EngineBase* engine, DocumentTextCache* textCache) : TextS
     nPages = engine->PageCount();
     pagesToSkip.SetSize(nPages);
     markAllPagesNonSkip(pagesToSkip);
+    wordSearch = false;
 }
 
 TextSearch::~TextSearch() {
@@ -43,6 +45,7 @@ void TextSearch::Clear() {
 
 void TextSearch::Reset() {
     pageText = nullptr;
+    pageRects = nullptr;  // CPS Lab.
     TextSelection::Reset();
 }
 
@@ -137,7 +140,7 @@ void TextSearch::SetLastResult(TextSelection* sel) {
 
     searchHitStartAt = findPage = std::min(startPage, endPage);
     findIndex = (findPage == startPage ? startGlyph : endGlyph) + (int)str::Len(findText);
-    pageText = textCache->GetTextForPage(findPage);
+    pageText = textCache->GetTextForPage(findPage, nullptr, &pageRects);
     forward = true;
 }
 
@@ -219,6 +222,9 @@ TextSearch::PageAndOffset TextSearch::MatchEnd(const WCHAR* start) const {
         } else {
             // ... or because we were looking at whitespace in the pattern and we were at a page break
             // -> skip to next page
+            if (wordSearch) {
+                return notFound;    // CPS Lab.
+            }
             ++currentPage;
             end = currentPageText = textCache->GetTextForPage(currentPage);
         }
@@ -239,6 +245,13 @@ TextSearch::PageAndOffset TextSearch::MatchEnd(const WCHAR* start) const {
     }
     if (matchWordEnd && end > currentPageText && isWordChar(end[-1]) && isWordChar(end[0])) {
         return notFound;
+    }
+
+    // CPS Lab
+    if (wordSearch) {
+        if (!cpslab::IsWord(pageText, pageRects, start, end)) {
+            return notFound;
+        }
     }
 
     int off = (int)(end - currentPageText);
@@ -322,7 +335,7 @@ bool TextSearch::FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker, bool 
 
         Reset();
 
-        pageText = textCache->GetTextForPage(pageNo, &findIndex);
+        pageText = textCache->GetTextForPage(pageNo, &findIndex, &pageRects);
         if (pageText) {
             if (forward) {
                 findIndex = 0;
@@ -332,7 +345,7 @@ bool TextSearch::FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker, bool 
                 if (forward) {
                     if (findPage != r.page) {
                         findPage = r.page;
-                        pageText = textCache->GetTextForPage(findPage);
+                        pageText = textCache->GetTextForPage(findPage, nullptr, &pageRects);
                     }
                     findIndex = r.offset;
                 }
@@ -377,7 +390,7 @@ TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker, bool conti) {
         if (forward) {
             findPage = finalGlyph.page;
             findIndex = finalGlyph.offset;
-            pageText = textCache->GetTextForPage(findPage);
+            pageText = textCache->GetTextForPage(findPage, nullptr, &pageRects);
         }
         return &result;
     }

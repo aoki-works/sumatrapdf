@@ -19,6 +19,7 @@ extern WCHAR* USERAPP_DDE_DEBUG_TOPIC;
 
 extern void SaveWordsToFile(MainWindow* win, const char* fname);
 extern void SaveTextToFile(MainWindow* win, const char* fname);
+extern bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const WCHAR* end);
 extern const char* MarkWords(MainWindow* win);
 extern const char* MarkWords(MainWindow* win, const char* json_file);
 extern const char* MarkWords(MainWindow* win, StrVec& words);
