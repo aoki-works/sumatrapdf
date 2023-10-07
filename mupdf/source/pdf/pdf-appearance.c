@@ -1008,8 +1008,8 @@ static void
 pdf_write_highlight_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf, fz_rect *rect, pdf_obj **res)
 {
 	pdf_obj *qp;
-	fz_point quad[4], mquad[4], v;
-	float h, m, dx, dy, vn;
+	fz_point quad[4], mquad[4];
+	float h, m, dx, dy;
 	int i, n;
 
 	*rect = fz_empty_rect;
@@ -1024,35 +1024,55 @@ pdf_write_highlight_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf
 		for (i = 0; i < n; i += 8)
 		{
 			h = extract_quad(ctx, quad, qp, i);
-			m = h / 4.2425f; /* magic number that matches adobe's appearance */
-			dx = quad[LR].x - quad[LL].x;
-			dy = quad[LR].y - quad[LL].y;
-			vn = sqrtf(dx * dx + dy * dy);
-			v = fz_make_point(dx * m / vn, dy * m / vn);
-
-			mquad[LL].x = quad[LL].x - v.x - v.y;
-			mquad[LL].y = quad[LL].y - v.y + v.x;
-			mquad[UL].x = quad[UL].x - v.x + v.y;
-			mquad[UL].y = quad[UL].y - v.y - v.x;
-			mquad[LR].x = quad[LR].x + v.x - v.y;
-			mquad[LR].y = quad[LR].y + v.y + v.x;
-			mquad[UR].x = quad[UR].x + v.x + v.y;
-			mquad[UR].y = quad[UR].y + v.y - v.x;
-
-			fz_append_printf(ctx, buf, "%g %g m\n", quad[LL].x, quad[LL].y);
-			fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
-				mquad[LL].x, mquad[LL].y,
-				mquad[UL].x, mquad[UL].y,
-				quad[UL].x, quad[UL].y);
-			fz_append_printf(ctx, buf, "%g %g l\n", quad[UR].x, quad[UR].y);
-			fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
-				mquad[UR].x, mquad[UR].y,
-				mquad[LR].x, mquad[LR].y,
-				quad[LR].x, quad[LR].y);
-			fz_append_printf(ctx, buf, "f\n");
-
-			union_quad(rect, quad, h/16);
-			union_quad(rect, mquad, 0);
+			dx = abs(quad[UR].x - quad[LL].x);
+			dy = abs(quad[UR].y - quad[LL].y);
+            if (dx <= dy) { // horizontal rectangle
+				m = dx / 4.2425f; // magic number that matches adobe's appearance
+                mquad[LL].x = quad[LL].x - m;
+                mquad[LL].y = quad[LL].y - m;
+                mquad[UL].x = quad[UL].x + m;
+                mquad[UL].y = quad[UL].y - m;
+                mquad[LR].x = quad[LR].x - m;
+                mquad[LR].y = quad[LR].y + m;
+                mquad[UR].x = quad[UR].x + m;
+                mquad[UR].y = quad[UR].y + m;
+                fz_append_printf(ctx, buf, "%g %g m\n", quad[LL].x, quad[LL].y);
+                fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
+					             mquad[LL].x, mquad[LL].y,
+                                 mquad[UL].x, mquad[UL].y,
+					             quad[UL].x, quad[UL].y);
+                fz_append_printf(ctx, buf, "%g %g l\n", quad[UR].x, quad[UR].y);
+                fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
+					             mquad[UR].x, mquad[UR].y,
+                                 mquad[LR].x, mquad[LR].y,
+					             quad[LR].x, quad[LR].y);
+                fz_append_printf(ctx, buf, "f\n");
+                union_quad(rect, quad, dx / 16);
+                union_quad(rect, mquad, 0);
+            } else { // vertical rectangle
+				m = dy / 4.2425f; // magic number that matches adobe's appearance 
+                mquad[LL].x = quad[LL].x + m;
+                mquad[LL].y = quad[LL].y + m;
+                mquad[UL].x = quad[UL].x - m;
+                mquad[UL].y = quad[UL].y + m;
+                mquad[LR].x = quad[LR].x + m;
+                mquad[LR].y = quad[LR].y - m;
+                mquad[UR].x = quad[UR].x - m;
+                mquad[UR].y = quad[UR].y - m;
+				fz_append_printf(ctx, buf, "%g %g m\n", quad[UL].x, quad[UL].y);
+				fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
+						         mquad[UL].x, mquad[UL].y,
+								 mquad[UR].x, mquad[UR].y,
+						         quad[UR].x, quad[UR].y);
+				fz_append_printf(ctx, buf, "%g %g l\n", quad[LR].x, quad[LR].y);
+				fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
+							     mquad[LR].x, mquad[LR].y,
+                                 mquad[LL].x, mquad[LL].y,
+						         quad[LL].x, quad[LL].y);
+				fz_append_printf(ctx, buf, "f\n");
+                union_quad(rect, mquad, dy / 16);
+                union_quad(rect, quad, 0);
+            }
 		}
 	}
 }
