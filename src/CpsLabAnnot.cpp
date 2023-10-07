@@ -337,7 +337,7 @@ void Markers::selectWords(MainWindow* win, StrVec& words) {
     RepaintAsync(win, 0);
     bool conti = false;
     for (auto node : markerTable) {
-        auto sel = node->selectWords(dm, words);
+        auto sel = node->selectWords(dm, words, conti);
         if (sel != nullptr && first_word == nullptr) {
             first_word = sel;
         }
