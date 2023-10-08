@@ -110,6 +110,16 @@ struct Flags {
     // before proceeding
     int sleepMs = 0;
 
+#if defined(DEBUG)
+    // DDE Service/Topic name for PdfSync
+    char* pdfsync_dde_service = str::Dup("xxxSUMATRA");
+    char* pdfsync_dde_topic = str::Dup("xxxcontrol");
+
+    // DDE Service/Topic name for user application
+    char* userapp_dde_service = str::Dup("xxxUSERAPP");
+    char* userapp_dde_topic = str::Dup("xxxcontrol");
+    char* userapp_dde_debug_topic = nullptr;
+#else
     // DDE Service/Topic name for PdfSync
     char* pdfsync_dde_service = nullptr;
     char* pdfsync_dde_topic = nullptr;
@@ -118,6 +128,7 @@ struct Flags {
     char* userapp_dde_service = nullptr;
     char* userapp_dde_topic = nullptr;
     char* userapp_dde_debug_topic = nullptr;
+#endif
 
     bool testBrowser = false;
 

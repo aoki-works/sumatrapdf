@@ -272,6 +272,18 @@ void Markers::sendSelectMessage(MainWindow* win) {
         if (isTextOnlySelectionOut) {
             WCHAR* s = dm->textSelection->ExtractText(sep);
             text = ToUtf8(s);
+            Rect r = dm->textSelection->result.rects[dm->textSelection->result.len - 1];
+            Vec<MarkerNode*> nodes;
+            getMarkersByRect(r, nodes);
+            if (nodes.Size() == 0) {
+                // dm->textSelection->result.len--;
+            } else {
+                for (auto m : nodes) {
+                    if (!m->selected_words.Contains(text)) {
+                        m->selected_words.Append(text);
+                    }
+                }
+            }
             str::Free(s);
         } else {
             if (gGlobalPrefs->circularSelectionRegion) {
@@ -299,14 +311,16 @@ void Markers::sendSelectMessage(MainWindow* win) {
             }
         }
     }
-    str::Str cmd;
-    cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
-    for (int i = 0; i < selected_words.Size(); i++) {
-        auto s = selected_words.at(i);
-        cmd.AppendFmt(", \"%s\"", s);
+    if (0 < selected_words.Size()) {
+        str::Str cmd;
+        cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
+        for (int i = 0; i < selected_words.Size(); i++) {
+            auto s = selected_words.at(i);
+            cmd.AppendFmt(", \"%s\"", s);
+        }
+        cmd.AppendFmt(")]");
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
     }
-    cmd.AppendFmt(")]");
-    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
 }
 
 
