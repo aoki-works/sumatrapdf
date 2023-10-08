@@ -258,7 +258,7 @@ void ToolbarUpdateStateForWindow(MainWindow* win, bool setButtonsVisibility) {
     const WCHAR* msg = L"";
     DisplayModel* dm = win->AsFixed();
     if (dm && EngineHasUnsavedAnnotations(dm->GetEngine())) {
-        msg = _TR("You have unsaved annotations");
+        //msg = _TR("You have unsaved annotations");
     }
     SetToolbarInfoText(win, msg);
 }
