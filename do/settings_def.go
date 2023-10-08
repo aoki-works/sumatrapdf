@@ -285,9 +285,9 @@ var (
 			"(passwords containing spaces must be quoted)").setExpert().setVersion("2.4"),
 		mkEmptyLine(),
 
-		mkField("RememberOpenedFiles", Bool, true,
+		mkField("RememberOpenedFiles", Bool, false, // CPS Lab.
 			"if true, we remember which files we opened and their display settings"),
-		mkField("RememberStatePerDocument", Bool, true,
+		mkField("RememberStatePerDocument", Bool, false, // CPS Lab.
 			"if true, we store display settings for each document separately (i.e. everything "+
 				"after UseDefaultState in FileStates)"),
 		mkField("RestoreSession", Bool, true,
@@ -318,17 +318,18 @@ var (
 			"background color of the non-document windows, traditionally yellow").setExpert(),
 		mkField("FullPathInTitle", Bool, false,
 			"if true, we show the full path to a file in the title bar").setExpert().setVersion("3.0"),
-		mkField("ShowMenubar", Bool, true,
+		mkField("ShowMenubar", Bool, false,     // CPS Lab.
 			"if false, the menu bar will be hidden for all newly opened windows "+
 				"(use F9 to show it until the window closes or Alt to show it just briefly), only applies if UseTabs is false").setExpert().setVersion("2.5"),
 		mkField("ShowToolbar", Bool, true,
 			"if true, we show the toolbar at the top of the window"),
 		mkField("ShowFavorites", Bool, false,
 			"if true, we show the Favorites sidebar"),
-		mkField("ShowToc", Bool, true,
+		mkField("ShowToc", Bool, false, // CPS Lab.
 			"if true, we show table of contents (Bookmarks) sidebar if it's present "+
 				"in the document"),
-		mkField("NoHomeTab", Bool, false, "if true, doesn't open Home tab"),
+		mkField("NoHomeTab", Bool, true,    // CPS Lab
+			"if true, doesn't open Home tab"),
 		mkField("TocDy", Int, 0,
 			"if both favorites and bookmarks parts of sidebar are visible, this is "+
 				"the height of bookmarks (table of contents) part"),
@@ -356,17 +357,17 @@ var (
 			"3 is fullscreen, 4 is minimized"),
 		mkCompactStruct("WindowPos", windowPos,
 			"default position (can be on any monitor)").setStructName("Rect").setDoc("default position (x, y) and size (width, height) of the window"),
-		mkField("UseTabs", Bool, true,
+		mkField("UseTabs", Bool, false,     // CPS Lab
 			"if true, documents are opened in tabs instead of new windows").setVersion("3.0"),
 		mkField("UseSysColors", Bool, false,
 			"if true, we use Windows system colors for background/text color. Over-rides other settings").setExpert(),
 		mkField("CustomScreenDPI", Int, 0,
 			"actual resolution of the main screen in DPI (if this value "+
 				"isn't positive, the system's UI setting is used)").setExpert().setVersion("2.5"),
-		mkField("PrintableCharAsWordChar", Bool, false,
+		mkField("PrintableCharAsWordChar", Bool, false, // Add CPS Lab.
 			"if true, all printable characters except white space are recognized as word-characteres. " +
             "if false, number, alphabetic and under score (_) are recognized as word-characteres").setExpert(),
-		mkField("CircularSelectionRegion", Bool, false,
+		mkField("CircularSelectionRegion", Bool, false, // Add CPS Lab.
             "if true, a circular shape is used for the area selection").setExpert(),
 		mkEmptyLine(),
 

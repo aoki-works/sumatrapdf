@@ -657,8 +657,7 @@ static const FieldInfo gFILETIMEFields[] = {
 static const StructInfo gFILETIMEInfo = {sizeof(FILETIME), 2, gFILETIMEFields, "DwHighDateTime\0DwLowDateTime"};
 
 static const FieldInfo gGlobalPrefsFields[] = {
-    {(size_t)-1, SettingType::Comment,
-     (intptr_t) "For documentation, see https://www.sumatrapdfreader.org/settings/settings3-5.html"},
+    {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, theme), SettingType::String, (intptr_t) ""},
     {offsetof(GlobalPrefs, fixedPageUI), SettingType::Struct, (intptr_t)&gFixedPageUIInfo},
     {offsetof(GlobalPrefs, comicBookUI), SettingType::Struct, (intptr_t)&gComicBookUIInfo},
@@ -677,8 +676,8 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, annotations), SettingType::Struct, (intptr_t)&gAnnotationsInfo},
     {offsetof(GlobalPrefs, defaultPasswords), SettingType::StringArray, 0},
     {(size_t)-1, SettingType::Comment, 0},
-    {offsetof(GlobalPrefs, rememberOpenedFiles), SettingType::Bool, false},      // CPS Lab.
-    {offsetof(GlobalPrefs, rememberStatePerDocument), SettingType::Bool, false}, // CPS Lab.
+    {offsetof(GlobalPrefs, rememberOpenedFiles), SettingType::Bool, false},
+    {offsetof(GlobalPrefs, rememberStatePerDocument), SettingType::Bool, false},
     {offsetof(GlobalPrefs, restoreSession), SettingType::Bool, true},
     {offsetof(GlobalPrefs, uiLanguage), SettingType::String, 0},
     {offsetof(GlobalPrefs, inverseSearchCmdLine), SettingType::String, 0},
@@ -692,11 +691,11 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, mainWindowBackground), SettingType::Color, (intptr_t) "#80fff200"},
     {offsetof(GlobalPrefs, fullPathInTitle), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, false},
     {offsetof(GlobalPrefs, showToolbar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showFavorites), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, showToc), SettingType::Bool, false},         // CPS Lab.
-    {offsetof(GlobalPrefs, noHomeTab), SettingType::Bool, true},        // CPS Lab.
+    {offsetof(GlobalPrefs, showToc), SettingType::Bool, false},
+    {offsetof(GlobalPrefs, noHomeTab), SettingType::Bool, true},
     {offsetof(GlobalPrefs, tocDy), SettingType::Int, 0},
     {offsetof(GlobalPrefs, sidebarDx), SettingType::Int, 0},
     {offsetof(GlobalPrefs, toolbarSize), SettingType::Int, 18},
@@ -710,10 +709,10 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, versionToSkip), SettingType::String, 0},
     {offsetof(GlobalPrefs, windowState), SettingType::Int, 1},
     {offsetof(GlobalPrefs, windowPos), SettingType::Compact, (intptr_t)&gRectInfo},
-    {offsetof(GlobalPrefs, useTabs), SettingType::Bool, false},     // CPS Lab.
+    {offsetof(GlobalPrefs, useTabs), SettingType::Bool, false},
     {offsetof(GlobalPrefs, useSysColors), SettingType::Bool, false},
     {offsetof(GlobalPrefs, customScreenDPI), SettingType::Int, 0},
-    {offsetof(GlobalPrefs, printableCharAsWordChar), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, printableCharAsWordChar), SettingType::Bool, false},
     {offsetof(GlobalPrefs, circularSelectionRegion), SettingType::Bool, false},
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, fileStates), SettingType::Array, (intptr_t)&gFileStateInfo},
@@ -725,13 +724,14 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {(size_t)-1, SettingType::Comment, (intptr_t) "Settings below are not recognized by the current version"},
 };
 static const StructInfo gGlobalPrefsInfo = {
-    sizeof(GlobalPrefs), 61, gGlobalPrefsFields,
+    sizeof(GlobalPrefs), 63, gGlobalPrefsFields,
     "\0Theme\0FixedPageUI\0ComicBookUI\0ChmUI\0\0SelectionHandlers\0ExternalViewers\0\0ZoomLevels\0ZoomIncrement\0\0Pri"
     "nterDefaults\0ForwardSearch\0Annotations\0DefaultPasswords\0\0RememberOpenedFiles\0RememberStatePerDocument\0Resto"
     "reSession\0UiLanguage\0InverseSearchCmdLine\0EnableTeXEnhancements\0DefaultDisplayMode\0DefaultZoom\0Shortcuts\0Es"
     "cToExit\0ReuseInstance\0ReloadModifiedDocuments\0\0MainWindowBackground\0FullPathInTitle\0ShowMenubar\0ShowToolbar"
     "\0ShowFavorites\0ShowToc\0NoHomeTab\0TocDy\0SidebarDx\0ToolbarSize\0TabWidth\0TreeFontSize\0TreeFontWeightOffset\0"
     "TreeFontName\0SmoothScroll\0ShowStartPage\0CheckForUpdates\0VersionToSkip\0WindowState\0WindowPos\0UseTabs\0UseSys"
-    "Colors\0CustomScreenDPI\0\0FileStates\0SessionData\0ReopenOnce\0TimeOfLastUpdateCheck\0OpenCountWeek\0\0"};
+    "Colors\0CustomScreenDPI\0PrintableCharAsWordChar\0CircularSelectionRegion\0\0FileStates\0SessionData\0ReopenOnce\0"
+    "TimeOfLastUpdateCheck\0OpenCountWeek\0\0"};
 
 #endif

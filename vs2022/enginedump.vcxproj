@@ -633,12 +633,6 @@
     <ClCompile Include="..\src\mui\TextRender.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="dav1d.vcxproj">
-      <Project>{f5bf470f-61d4-6fc0-2a56-132096296cf1}</Project>
-    </ProjectReference>
-    <ProjectReference Include="libheif.vcxproj">
-      <Project>{380d6779-a4ec-e514-ad04-71eb19634c76}</Project>
-    </ProjectReference>
     <ProjectReference Include="zlib.vcxproj">
       <Project>{16CFA17C-0206-A30D-ABF2-881097081F0F}</Project>
     </ProjectReference>
@@ -662,6 +656,12 @@
     </ProjectReference>
     <ProjectReference Include="libdjvu.vcxproj">
       <Project>{B5F26479-21D2-E314-2AEA-6EEB96484A76}</Project>
+    </ProjectReference>
+    <ProjectReference Include="dav1d.vcxproj">
+      <Project>{F5BF470F-61D4-6FC0-2A56-132096296CF1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="libheif.vcxproj">
+      <Project>{380D6779-A4EC-E514-AD04-71EB19634C76}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

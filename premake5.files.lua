@@ -661,6 +661,7 @@ function sumatrapdf_files()
     "Version.h",
     "Uninstaller.cpp",
     "WindowTab.*",
+    "CpsLabAnnot.*",
 
     "ext/versions.txt",
     "../docs/*.txt",
