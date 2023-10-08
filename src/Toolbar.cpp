@@ -127,6 +127,10 @@ static bool IsVisibleToolbarButton(MainWindow* win, int buttonNo) {
             return NeedsFindUI(win);
         case CmdInfoText:
             return NeedsInfo(win);
+        case CmdOpenFile: {
+            auto tab = win->CurrentTab();
+            return (tab == nullptr);
+        }
         default:
             return true;
     }

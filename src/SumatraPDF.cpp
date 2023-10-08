@@ -92,8 +92,10 @@ using std::placeholders::_1;
 
 constexpr const char* kRestrictionsFileName = "sumatrapdfrestrict.ini";
 
-constexpr const char* kSumatraWindowTitle = "SumatraPDF";
-constexpr const WCHAR* kSumatraWindowTitleW = L"SumatraPDF";
+//constexpr const char* kSumatraWindowTitle = "SumatraPDF";
+//constexpr const WCHAR* kSumatraWindowTitleW = L"SumatraPDF";
+constexpr const char* kSumatraWindowTitle = "";
+constexpr const WCHAR* kSumatraWindowTitleW = L"";
 
 /* if true, we're in debug mode where we show links as blue rectangle on
    the screen. Makes debugging code related to links easier. */
