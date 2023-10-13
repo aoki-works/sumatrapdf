@@ -721,8 +721,9 @@ const char* MarkWords(MainWindow* win) {
                     pageNos.Append(pno);
                 }
             }
+            Vec<RectF> rects;
             for (auto pno : pageNos) {
-                Vec<RectF> rects;
+                rects.Reset();
                 for (auto& sel : *s) {
                     if (pno != sel.pageNo) {
                         continue;

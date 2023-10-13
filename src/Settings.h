@@ -712,7 +712,7 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, useTabs), SettingType::Bool, false},
     {offsetof(GlobalPrefs, useSysColors), SettingType::Bool, false},
     {offsetof(GlobalPrefs, customScreenDPI), SettingType::Int, 0},
-    {offsetof(GlobalPrefs, printableCharAsWordChar), SettingType::Bool, false},
+    {offsetof(GlobalPrefs, printableCharAsWordChar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, circularSelectionRegion), SettingType::Bool, false},
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, fileStates), SettingType::Array, (intptr_t)&gFileStateInfo},
