@@ -49,7 +49,7 @@ class MarkerNode
     ~MarkerNode();
 
   public:
-    TextSel* selectWords(DisplayModel* dm, StrVec& words, bool conti=false);
+    void selectWords(MainWindow* win, StrVec& words, bool conti=false, bool moveto=false);
 };
 
 

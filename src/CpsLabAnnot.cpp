@@ -126,8 +126,8 @@ MarkerNode::~MarkerNode() {
     }
 }
 
-TextSel* MarkerNode::selectWords(DisplayModel* dm, StrVec& select_words, bool conti) {
-    TextSel* first_word = nullptr;
+void MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti, bool moveto) {
+    DisplayModel* dm = win->AsFixed();
     dm->textSearch->SetDirection(TextSearchDirection::Forward);
     dm->textSearch->wordSearch = true;
     for(auto wd : select_words) {
@@ -140,8 +140,13 @@ TextSel* MarkerNode::selectWords(DisplayModel* dm, StrVec& select_words, bool co
             if (sel == nullptr) {
                 continue;
             }
-            if (first_word == nullptr) {
-                first_word = sel;
+            if (moveto) {
+                bool prev = gGlobalPrefs->showToolbar;
+                gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
+                HwndSetText(win->hwndFindEdit, wd);
+                dm->ShowResultRectToScreen(sel);
+                gGlobalPrefs->showToolbar = prev;
+                moveto = false;
             }
             do {
                 dm->textSelection->CopySelection(dm->textSearch, conti);
@@ -151,7 +156,7 @@ TextSel* MarkerNode::selectWords(DisplayModel* dm, StrVec& select_words, bool co
         }
     }
     dm->textSearch->wordSearch = false;
-    return first_word;
+    return;
 }
 
 // =============================================================
@@ -325,42 +330,26 @@ void Markers::sendSelectMessage(MainWindow* win) {
 
 
 void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
-    TextSel* first_word = nullptr;
-    DisplayModel* dm = win->AsFixed();
     DeleteOldSelectionInfo(win, true);
     RepaintAsync(win, 0);
     bool conti = false;
     MarkerNode* node = getMarker(keyword);
     if (node != nullptr) {
-        auto sel = node->selectWords(dm, words, conti);
-        if (sel != nullptr && first_word == nullptr) {
-            first_word = sel;
-        }
+        node->selectWords(win, words, conti, !conti);
         conti = true;
     }
     UpdateTextSelection(win, false);
-    if (first_word != nullptr) {
-        dm->ShowResultRectToScreen(first_word);
-    }
 }
 
 void Markers::selectWords(MainWindow* win, StrVec& words) {
-    TextSel* first_word = nullptr;
-    DisplayModel* dm = win->AsFixed();
     DeleteOldSelectionInfo(win, true);
     RepaintAsync(win, 0);
     bool conti = false;
     for (auto node : markerTable) {
-        auto sel = node->selectWords(dm, words, conti);
-        if (sel != nullptr && first_word == nullptr) {
-            first_word = sel;
-        }
+        node->selectWords(win, words, conti, !conti);
         conti = true;
     }
     UpdateTextSelection(win, false);
-    if (first_word != nullptr) {
-        dm->ShowResultRectToScreen(first_word);
-    }
 }
 
 // =============================================================
