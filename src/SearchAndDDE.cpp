@@ -1032,7 +1032,7 @@ static const char* HandleMarkWordCmd(const char* cmd, DDEACK& ack)
     if (first_word != nullptr) {
         bool wasModified = true;
         bool showProgress = true;
-        //HwndSetText(win->hwndFindEdit, first_word);
+        HwndSetText(win->hwndFindEdit, first_word);
         FindTextOnThread(win, TextSearchDirection::Forward, first_word, wasModified, showProgress);
         win->Focus();
     }

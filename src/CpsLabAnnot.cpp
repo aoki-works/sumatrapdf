@@ -660,7 +660,7 @@ const char* MarkWords(MainWindow* win) {
     auto engine = dm->GetEngine();
     // ---------------------------------------------
     // ---------------------------------------------
-    StrVec markedWords;
+    //StrVec markedWords;
     dm->textSearch->wordSearch = true;
     char* first_word = nullptr;
     for (auto marker_node : tab->markers->markerTable) {
@@ -678,9 +678,7 @@ const char* MarkWords(MainWindow* win) {
             if (!sel) {
                 continue;
             }
-            if (!markedWords.Contains(term)) {
-                markedWords.Append(term);
-            }
+            // if (!markedWords.Contains(term)) { markedWords.Append(term); }
             if (first_word == nullptr) {
                 first_word = term;
             }
@@ -734,7 +732,7 @@ const char* MarkWords(MainWindow* win) {
         }
     }
     dm->textSearch->wordSearch = false;
-    SetSelectedWordToFindEdit(win, markedWords);
+    // SetSelectedWordToFindEdit(win, markedWords);
     return first_word;
 }
 
