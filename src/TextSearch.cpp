@@ -37,6 +37,10 @@ TextSearch::~TextSearch() {
 }
 
 void TextSearch::Clear() {
+    while (!findWords.IsEmpty()) {
+        const WCHAR* w = findWords.Pop();
+        str::Free(w);
+    }
     str::ReplaceWithCopy(&findText, nullptr);
     str::ReplaceWithCopy(&anchor, nullptr);
     str::ReplaceWithCopy(&lastText, nullptr);
@@ -103,6 +107,22 @@ void TextSearch::SetText(const WCHAR* text) {
         this->findText[str::Len(this->findText) - 1] = '\0';
     }
 
+    // CPS Lab.
+    if (this->findText) {
+        char* tmpFindText = strconv::WstrToUtf8(this->findText);
+        StrVec wTmp;
+        Split(wTmp, tmpFindText, " ", true);
+        for (size_t k = 0; k < wTmp.size(); k++) {
+            char* w = wTmp.at(k);
+            const WCHAR* wd = strconv::Utf8ToWstr(w, (size_t)-1);
+            findWords.Append(wd);
+        }
+        str::Free(tmpFindText);
+        if (!findWords.IsEmpty()) {
+            str::ReplaceWithCopy(&anchor, nullptr);
+        }
+    }
+
     markAllPagesNonSkip(pagesToSkip);
 }
 
@@ -164,6 +184,76 @@ static inline WCHAR CharToLower(WCHAR c) {
     return CharToLower2(c);
 }
 
+// == CPS LAB. =====================================================================
+TextSearch::PageAndOffset TextSearch::wMatchEnd(const WCHAR* start) const {
+
+    const WCHAR* end = start;
+    const PageAndOffset notFound = {-1, -1};
+    int currentPage = findPage;
+    const WCHAR* currentPageText = pageText;
+
+    if (findWords.IsEmpty()) { return notFound; }
+    if (matchWordStart && start > pageText && isWordChar(start[-1]) && isWordChar(start[0])) {
+        return notFound;
+    }
+
+    Vec<const WCHAR*> words = findWords;
+    while (true) {
+        if (!*end) {
+            return notFound;
+        }
+        Vec<const WCHAR*> matched_words;
+        while (!words.IsEmpty()) {
+            const WCHAR* match = words.Pop();
+            bool isMatch = false;
+            if (caseSensitive) {
+                isMatch = *match == *end;
+            } else {
+                WCHAR matchLower = CharToLower(*match);
+                WCHAR matchEnd = CharToLower(*end);
+                isMatch = matchLower == matchEnd;
+            }
+            if (isMatch) {
+                match++;
+                if (!(*match)) { // EOL
+                    if (matchWordEnd && end > currentPageText && isWordChar(end[-1]) && isWordChar(end[0])) {
+                        // not matched
+                    }
+                    else if (cpslab::IsWord(pageText, pageRects, start, end+1)) {
+                        int off = (int)(end - currentPageText) + 1;
+                        return {currentPage, off};
+                    }
+                } else {
+                    matched_words.Append(match);
+                }
+            }
+        }
+        if (matched_words.IsEmpty()) {
+            return notFound;
+        }
+        if (!(*end)) {
+            // not skip to next page
+            ++currentPage;
+            end = currentPageText = textCache->GetTextForPage(currentPage);
+            return notFound;
+        }
+        end++;
+        SkipWhitespace(end);
+        while ((!*end) && (currentPage < nPages)) {
+            // treat page break as whitespace, too
+            ++currentPage;
+            end = currentPageText = textCache->GetTextForPage(currentPage);
+            SkipWhitespace(end);
+        }
+        words = matched_words;
+        matched_words.Reset();
+    }
+    return notFound;
+}
+
+
+
+
 // try to match "findText" from "start" with whitespace tolerance
 // (ignore all whitespace except after alphanumeric characters)
 TextSearch::PageAndOffset TextSearch::MatchEnd(const WCHAR* start) const {
@@ -222,11 +312,11 @@ TextSearch::PageAndOffset TextSearch::MatchEnd(const WCHAR* start) const {
         } else {
             // ... or because we were looking at whitespace in the pattern and we were at a page break
             // -> skip to next page
-            if (wordSearch) {
-                return notFound;    // CPS Lab.
-            }
             ++currentPage;
             end = currentPageText = textCache->GetTextForPage(currentPage);
+            if (wordSearch) {
+                return notFound; // CPS Lab.
+            }
         }
         // treat "??" and "? ?" differently, since '?' could have been a word
         // character that's just missing an encoding (and '?' is the replacement
@@ -297,7 +387,11 @@ bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyp
             return false;
         }
         findIndex = (int)(found - pageText) + (forward ? 1 : 0);
-        fg = MatchEnd(found);
+        if (findWords.IsEmpty()) {
+            fg = MatchEnd(found);
+        } else {
+            fg = wMatchEnd(found);      // CPS Lab
+        }
     } while (fg.page <= 0);
 
     int offset = (int)(found - pageText);

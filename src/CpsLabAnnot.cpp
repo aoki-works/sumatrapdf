@@ -140,13 +140,13 @@ void MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti, 
             if (sel == nullptr) {
                 continue;
             }
-            if (moveto) {
-                bool prev = gGlobalPrefs->showToolbar;
-                gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
-                HwndSetText(win->hwndFindEdit, wd);
+            if (!conti) {
+                //bool prev = gGlobalPrefs->showToolbar;
+                //gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
+                //HwndSetText(win->hwndFindEdit, wd);
+                //gGlobalPrefs->showToolbar = prev;
                 dm->ShowResultRectToScreen(sel);
-                gGlobalPrefs->showToolbar = prev;
-                moveto = false;
+                //moveto = false;
             }
             do {
                 dm->textSelection->CopySelection(dm->textSearch, conti);
@@ -328,6 +328,13 @@ void Markers::sendSelectMessage(MainWindow* win) {
     }
 }
 
+static void SetSelectedWordToFindEdit(MainWindow*win,  StrVec& words) {
+    const char* line = Join(words, " ");
+    bool prev = gGlobalPrefs->showToolbar;
+    gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
+    HwndSetText(win->hwndFindEdit, line);
+    gGlobalPrefs->showToolbar = prev;
+}
 
 void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
     DeleteOldSelectionInfo(win, true);
@@ -338,6 +345,7 @@ void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
         node->selectWords(win, words, conti, !conti);
         conti = true;
     }
+    SetSelectedWordToFindEdit(win, words);
     UpdateTextSelection(win, false);
 }
 
@@ -349,22 +357,13 @@ void Markers::selectWords(MainWindow* win, StrVec& words) {
         node->selectWords(win, words, conti, !conti);
         conti = true;
     }
+    SetSelectedWordToFindEdit(win, words);
     UpdateTextSelection(win, false);
 }
 
 // =============================================================
 //
 // =============================================================
-struct TmpAllocator : Allocator {
-    void* p;
-    size_t len;
-    TmpAllocator();
-    ~TmpAllocator();
-    void* Alloc(size_t size);
-    void* Realloc(void* men, size_t size);
-    void Free(const void*);
-};
-
 TmpAllocator::TmpAllocator() {
     len = 100;
     //p = ::AllocZero(len, sizeof(char));
@@ -660,6 +659,8 @@ const char* MarkWords(MainWindow* win) {
     DisplayModel* dm = tab->AsFixed();
     auto engine = dm->GetEngine();
     // ---------------------------------------------
+    // ---------------------------------------------
+    StrVec markedWords;
     dm->textSearch->wordSearch = true;
     char* first_word = nullptr;
     for (auto marker_node : tab->markers->markerTable) {
@@ -676,6 +677,9 @@ const char* MarkWords(MainWindow* win) {
             TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
             if (!sel) {
                 continue;
+            }
+            if (!markedWords.Contains(term)) {
+                markedWords.Append(term);
             }
             if (first_word == nullptr) {
                 first_word = term;
@@ -730,6 +734,7 @@ const char* MarkWords(MainWindow* win) {
         }
     }
     dm->textSearch->wordSearch = false;
+    SetSelectedWordToFindEdit(win, markedWords);
     return first_word;
 }
 

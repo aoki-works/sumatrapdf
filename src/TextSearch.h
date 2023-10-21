@@ -27,6 +27,7 @@ class TextSearch : public TextSelection {
         int offset;
     };
 
+    Vec<const WCHAR*> findWords;    // CPS lab.
     WCHAR* findText = nullptr;
     WCHAR* anchor = nullptr;
     int findPage = 0;
@@ -43,6 +44,7 @@ class TextSearch : public TextSelection {
     bool FindTextInPage(int pageNo, PageAndOffset* finalGlyph, bool conti=false);
     bool FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker, bool conti=false);
     PageAndOffset MatchEnd(const WCHAR* start) const;
+    PageAndOffset wMatchEnd(const WCHAR* start) const;  // CPS Lab
 
     void Clear();
     void Reset();

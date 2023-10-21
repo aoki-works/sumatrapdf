@@ -28,6 +28,15 @@ extern void CloseEvent(MainWindow* win);
 extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
 extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
 
+struct TmpAllocator : Allocator {
+    void* p;
+    size_t len;
+    TmpAllocator();
+    ~TmpAllocator();
+    void* Alloc(size_t size);
+    void* Realloc(void* men, size_t size);
+    void Free(const void*);
+};
 
 class MarkerNode
 {
