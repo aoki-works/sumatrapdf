@@ -329,7 +329,7 @@ void Markers::sendSelectMessage(MainWindow* win) {
             cmd.AppendFmt(", \"%s\"", s);
         }
         cmd.AppendFmt(")]");
-        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWstrTemp(cmd.Get()));
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
     }
 }
 
@@ -564,7 +564,7 @@ void CloseEvent(WindowTab* tab) {
     if (path != nullptr) {
         str::Str cmd;
         cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
-        const WCHAR* w = ToWstrTemp(cmd.Get());
+        const WCHAR* w = ToWStrTemp(cmd.Get());
         DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w);
     }
 }
@@ -578,7 +578,7 @@ void CloseEvent(MainWindow* win) {
         if (path != nullptr) {
             str::Str cmd;
             cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
-            const WCHAR* w = ToWstrTemp(cmd.Get());
+            const WCHAR* w = ToWStrTemp(cmd.Get());
             DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, w);
         }
     }
@@ -639,7 +639,7 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
     }
     //
     FILE* outFile = nullptr;
-    WCHAR* tmpFileW = ToWstrTemp(fname);
+    WCHAR* tmpFileW = ToWStrTemp(fname);
     errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
     if (err == 0) {
         for (auto sel : words) {
@@ -666,7 +666,7 @@ void SaveTextToFile(MainWindow* win, const char* fname) {
     }
     char* text = ToUtf8(result.Get());
     FILE* outFile = nullptr;
-    WCHAR* tmpFileW = ToWstrTemp(fname);
+    WCHAR* tmpFileW = ToWStrTemp(fname);
     errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
     if (err == 0) {
         std::fwrite(text, 1, std::strlen(text), outFile);
