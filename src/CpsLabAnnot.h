@@ -58,7 +58,7 @@ class MarkerNode
     ~MarkerNode();
 
   public:
-    void selectWords(MainWindow* win, StrVec& words, bool conti=false, bool moveto=false);
+    const char* selectWords(MainWindow* win, StrVec& words, bool conti=false);
 };
 
 

@@ -126,7 +126,8 @@ MarkerNode::~MarkerNode() {
     }
 }
 
-void MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti, bool moveto) {
+const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti) {
+    char* first_word = nullptr;
     DisplayModel* dm = win->AsFixed();
     dm->textSearch->SetDirection(TextSearchDirection::Forward);
     dm->textSearch->wordSearch = true;
@@ -136,8 +137,10 @@ void MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti, 
             if (!str::Eq(wd, mkwd)) {
                 continue;
             }
+            const WCHAR* wsep = strconv::Utf8ToWstr(wd);
             TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(wd), nullptr, conti);
             if (sel == nullptr) {
+                str::Free(wsep);
                 continue;
             }
             if (!conti) {
@@ -145,6 +148,7 @@ void MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti, 
                 //gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
                 //HwndSetText(win->hwndFindEdit, wd);
                 //gGlobalPrefs->showToolbar = prev;
+                first_word = wd;
                 dm->ShowResultRectToScreen(sel);
                 //moveto = false;
             }
@@ -153,10 +157,11 @@ void MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti, 
                 conti = true;
                 sel = dm->textSearch->FindNext(nullptr, conti);
             } while (sel);
+            str::Free(wsep);
         }
     }
     dm->textSearch->wordSearch = false;
-    return;
+    return first_word;
 }
 
 // =============================================================
@@ -342,8 +347,9 @@ void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
     bool conti = false;
     MarkerNode* node = getMarker(keyword);
     if (node != nullptr) {
-        node->selectWords(win, words, conti, !conti);
-        conti = true;
+        if (node->selectWords(win, words, conti) != nullptr) {
+            conti = true;
+        }
     }
     SetSelectedWordToFindEdit(win, words);
     UpdateTextSelection(win, false);
@@ -354,8 +360,9 @@ void Markers::selectWords(MainWindow* win, StrVec& words) {
     RepaintAsync(win, 0);
     bool conti = false;
     for (auto node : markerTable) {
-        node->selectWords(win, words, conti, !conti);
-        conti = true;
+        if (node->selectWords(win, words, conti) != nullptr) {
+            conti = true;
+        }
     }
     SetSelectedWordToFindEdit(win, words);
     UpdateTextSelection(win, false);
@@ -426,22 +433,39 @@ bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const
     if (!isWordChar(*begin)) {
         return false;
     }
-    Rect rect = coords[begin - pageText];
+    // -----------------------------------------------------------------
+    // Check wheter 'begin' is the beginning character of a word.
+    // -----------------------------------------------------------------
+    Rect rect = coords[begin - pageText];   // boundary rectangle of 'begin' character.
     if (begin != pageText) {
         if (isWordChar(*(begin - 1))) {
-            Rect r = coords[begin - pageText - 1];
+            // The previous character of 'begin' is also word-character.
+            Rect r = coords[begin - pageText - 1];  // boundary rectangle of the previous char of 'begin'.
             if (r.x == rect.x || r.y == rect.y) {
+                // 'begin' and 'begin-1' is on the same line.
+                // Then the 'begin' is not beginning of a word.
                 return false;
+            } else {
+                // 'begin' and 'begin-1' is not on the same line.
+                // Then 'begin' is the beginning character of a word.
             }
         }
     }
+    // -----------------------------------------------------------------
+    // Check wheter the 'end' is a word-character, and
+    // on the same line of 'begin'.
+    // -----------------------------------------------------------------
     if (isWordChar(*(end))) {
         Rect r = coords[end - pageText];
         if (r.x == rect.x || r.y == rect.y) {
             return false;
         }
     }
-    return true;
+    //return true;
+    // -----------------------------------------------------------------
+    // Check wheter from 'begin' to 'end' is a word-character, and
+    // on the same line.
+    // -----------------------------------------------------------------
     // forword search the end letter of 'word'.
     for (auto c = begin + 1; c < end; ++c) {
         if (!isWordChar(*c)) {
@@ -674,8 +698,10 @@ const char* MarkWords(MainWindow* win) {
         dm->textSearch->SetDirection(TextSearchDirection::Forward);
         bool conti = false;
         for (auto term : marker_node->words) {
+            const WCHAR* wsep = strconv::Utf8ToWstr(term);
             TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
             if (!sel) {
+                str::Free(wsep);
                 continue;
             }
             // if (!markedWords.Contains(term)) { markedWords.Append(term); }
@@ -691,6 +717,7 @@ const char* MarkWords(MainWindow* win) {
                 conti = true;
                 sel = dm->textSearch->FindNext(nullptr, conti);
             } while (sel);
+            str::Free(wsep);
         }
         //  ---------------------------------------------
         Vec<SelectionOnPage>* s = tab->selectionOnPage;
