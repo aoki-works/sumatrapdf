@@ -113,7 +113,6 @@ static bool NeedsInfo(MainWindow* win) {
 }
 
 static bool IsVisibleToolbarButton(MainWindow* win, int buttonNo) {
-    return true;
     switch (gToolbarButtons[buttonNo].cmdId) {
         case CmdZoomFitWidthAndContinuous:
         case CmdZoomFitPageAndSinglePage:
