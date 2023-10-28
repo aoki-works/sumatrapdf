@@ -67,6 +67,10 @@ constexpr int CmdInfoText = (int)CmdLast + 17;
 static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::Open, CmdOpenFile, _TRN("Open")},
     {TbIcon::Print, CmdPrint, _TRN("Print")},
+    {TbIcon::None, CmdFindFirst, nullptr},
+    {TbIcon::SearchPrev, CmdFindPrev, _TRN("Find Previous")},
+    {TbIcon::SearchNext, CmdFindNext, _TRN("Find Next")},
+    {TbIcon::MatchCase, CmdFindMatch, _TRN("Match Case")},
     {TbIcon::None, CmdPageInfo, nullptr}, // text box for page number + show current page / no of pages
     {TbIcon::PagePrev, CmdGoToPrevPage, _TRN("Previous Page")},
     {TbIcon::PageNext, CmdGoToNextPage, _TRN("Next Page")},
@@ -77,10 +81,6 @@ static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::RotateRight, CmdRotateRight, _TRN("Rotate &Right")},
     {TbIcon::ZoomOut, CmdZoomOut, _TRN("Zoom Out")},
     {TbIcon::ZoomIn, CmdZoomIn, _TRN("Zoom In")},
-    {TbIcon::None, CmdFindFirst, nullptr},
-    {TbIcon::SearchPrev, CmdFindPrev, _TRN("Find Previous")},
-    {TbIcon::SearchNext, CmdFindNext, _TRN("Find Next")},
-    {TbIcon::MatchCase, CmdFindMatch, _TRN("Match Case")},
     {TbIcon::None, CmdInfoText, nullptr}, // info text
 };
 
@@ -113,6 +113,7 @@ static bool NeedsInfo(MainWindow* win) {
 }
 
 static bool IsVisibleToolbarButton(MainWindow* win, int buttonNo) {
+    return true;
     switch (gToolbarButtons[buttonNo].cmdId) {
         case CmdZoomFitWidthAndContinuous:
         case CmdZoomFitPageAndSinglePage:
@@ -447,7 +448,8 @@ void UpdateToolbarFindText(MainWindow* win) {
     Rect findWndRect = WindowRect(win->hwndFindBg);
 
     RECT r{};
-    TbGetRect(win->hwndToolbar, CmdZoomIn, &r);
+    //TbGetRect(win->hwndToolbar, CmdZoomIn, &r);
+    SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
     int currX = r.right + DpiScale(win->hwndToolbar, 10);
     int currY = (r.bottom - findWndRect.dy) / 2;
 
@@ -628,7 +630,8 @@ void UpdateToolbarPageText(MainWindow* win, int pageCount, bool updateOnly) {
     Rect pageWndRect = WindowRect(win->hwndPageBg);
 
     RECT r{};
-    SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
+    //SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
+    TbGetRect(win->hwndToolbar, CmdFindMatch, &r);
     int currX = r.right + DpiScale(win->hwndFrame, 10);
     int currY = (r.bottom - pageWndRect.dy) / 2;
 
