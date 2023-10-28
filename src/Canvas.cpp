@@ -302,7 +302,8 @@ bool IsDragDistance(int x1, int x2, int y1, int y2) {
     return dy > dragDy;
 }
 
-static bool gShowAnnotationNotification = true;
+// static bool gShowAnnotationNotification = true;
+static bool gShowAnnotationNotification = false;    // CPS Lab.
 
 static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
     DisplayModel* dm = win->AsFixed();
@@ -565,9 +566,11 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     }
 
     if (IsCtrlPressed() && win->annotationUnderCursor) {
-        ShowEditAnnotationsWindow(tab);
-        SetSelectedAnnotation(tab, win->annotationUnderCursor);
-        return;
+        if (gShowAnnotationNotification) {
+            ShowEditAnnotationsWindow(tab);
+            SetSelectedAnnotation(tab, win->annotationUnderCursor);
+            return;
+        }
     }
 
     if (link && link->GetRect().Contains(ptPage)) {
