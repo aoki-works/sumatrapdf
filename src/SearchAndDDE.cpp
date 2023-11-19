@@ -1028,6 +1028,7 @@ static const char* HandleMarkWordCmd(const char* cmd, DDEACK& ack)
     }
     // ---------------------------------------------
     // Pan to first word.
+    /*  no need to jump to first word
     if (first_word != nullptr) {
         bool wasModified = true;
         bool showProgress = true;
@@ -1035,6 +1036,7 @@ static const char* HandleMarkWordCmd(const char* cmd, DDEACK& ack)
         FindTextOnThread(win, TextSearchDirection::Forward, first_word, wasModified, showProgress);
         win->Focus();
     }
+    */
     // ---------------------------------------------
     MainWindowRerender(win);
     ack.fAck = 1;
