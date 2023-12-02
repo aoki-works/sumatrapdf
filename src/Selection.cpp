@@ -477,6 +477,7 @@ void OnSelectionStart(MainWindow* win, int x, int y, WPARAM) {
     SetCapture(win->hwndCanvas);
     SetTimer(win->hwndCanvas, SMOOTHSCROLL_TIMER_ID, SMOOTHSCROLL_DELAY_IN_MS, nullptr);
     RepaintAsync(win, 0);
+    return;
 }
 
 void OnSelectionStop(MainWindow* win, int x, int y, bool aborted) {

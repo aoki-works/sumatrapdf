@@ -508,7 +508,9 @@ static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
     if (isMoveableAnnot || !canCopy || (isShift || !isOverText) && !isCtrl) {
         StartMouseDrag(win, x, y);
     } else {
-        OnSelectionStart(win, x, y, key);
+        if (IsCtrlPressed() && !isOverText) { // CPS Lab
+            OnSelectionStart(win, x, y, key);
+        }
     }
 }
 
@@ -651,11 +653,11 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         int pageNo = dm->GetPageNoByPoint(mousePos);
         if (win->ctrl->ValidPageNo(pageNo)) {
             PointF pt = dm->CvtFromScreen(mousePos, pageNo);
-            dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y);
+            dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y, IsCtrlPressed());
             UpdateTextSelection(win, false);
             RepaintAsync(win, 0);
             /* callback to user application via DDE. CPS Lab.*/
-            tab->markers->sendSelectMessage(win);
+            tab->markers->sendSelectMessage(win, IsCtrlPressed());
         }
         return;
     }

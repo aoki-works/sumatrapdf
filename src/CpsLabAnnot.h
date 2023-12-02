@@ -74,7 +74,7 @@ class Markers
     Markers(WindowTab* tab);
     ~Markers();
   public:
-    void sendSelectMessage(MainWindow* win);
+    void sendSelectMessage(MainWindow* win, bool conti=false);
     void parse(const char* fname);
   public:
     void selectWords(MainWindow* win, const char* keyword, StrVec& words);

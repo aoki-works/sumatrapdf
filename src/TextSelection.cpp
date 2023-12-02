@@ -284,7 +284,7 @@ void TextSelection::SelectUpTo(int pageNo, int glyphIx, bool conti) {
     }
 }
 
-void TextSelection::SelectWordAt(int pageNo, double x, double y) {
+void TextSelection::SelectWordAt(int pageNo, double x, double y, bool conti) {
     int i = FindClosestGlyph(this, pageNo, x, y);
     int textLen;
     Rect* coords;
@@ -311,7 +311,7 @@ void TextSelection::SelectWordAt(int pageNo, double x, double y) {
             break;
         }
     }
-    SelectUpTo(pageNo, i);
+    SelectUpTo(pageNo, i, conti);
 }
 
 void TextSelection::CopySelection(TextSelection* orig, bool conti) {

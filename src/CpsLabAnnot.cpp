@@ -254,7 +254,7 @@ size_t Markers::getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result) {
 }
 
 
-void Markers::sendSelectMessage(MainWindow* win) {
+void Markers::sendSelectMessage(MainWindow* win, bool conti) {
     if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
         return;
     }
@@ -323,7 +323,11 @@ void Markers::sendSelectMessage(MainWindow* win) {
     }
     if (0 < selected_words.Size()) {
         str::Str cmd;
-        cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
+        if (conti) {
+            cmd.AppendFmt("[CSelect(\"%s\"", tab_->filePath.Get());
+        } else {
+            cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
+        }
         for (int i = 0; i < selected_words.Size(); i++) {
             auto s = selected_words.at(i);
             cmd.AppendFmt(", \"%s\"", s);
