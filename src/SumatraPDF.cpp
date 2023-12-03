@@ -5428,6 +5428,29 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             SelectNextTheme();
             break;
 
+        case CmdSelectCells: {  // CPS Lab.
+            if (tab != nullptr) {
+                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectCells, 0);
+                if (iResult & TBSTATE_CHECKED) {
+                    tab->markers->setSelection("Cell");
+                } else {
+                    tab->markers->unsetSelection("Cell");
+                }
+            }
+
+        } break;
+
+        case CmdSelectNets: {  // CPS Lab.
+            if (tab != nullptr) {
+                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectNets, 0);
+                if (iResult & TBSTATE_CHECKED) {
+                    tab->markers->setSelection("Net");
+                } else {
+                    tab->markers->unsetSelection("Net");
+                }
+            }
+        }  break;
+
         default:
             return DefWindowProc(hwnd, msg, wp, lp);
     }

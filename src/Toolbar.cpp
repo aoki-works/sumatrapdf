@@ -35,6 +35,7 @@
 #include "Theme.h"
 #include "wingui/Layout.h"
 #include "wingui/WinGui.h"
+#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -67,6 +68,9 @@ constexpr int CmdInfoText = (int)CmdLast + 17;
 static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::Open, CmdOpenFile, _TRN("Open")},
     {TbIcon::Print, CmdPrint, _TRN("Print")},
+    {TbIcon::None, 0, nullptr}, // separator                // CPS Lab
+    {TbIcon::Net, CmdSelectNets, _TRN("Select Nets")},     // CPS Lab
+    {TbIcon::Cell, CmdSelectCells, _TRN("Select Cells")},   // CPS Lab
     {TbIcon::None, CmdFindFirst, nullptr},
     {TbIcon::SearchPrev, CmdFindPrev, _TRN("Find Previous")},
     {TbIcon::SearchNext, CmdFindNext, _TRN("Find Next")},
@@ -128,8 +132,12 @@ static bool IsVisibleToolbarButton(MainWindow* win, int buttonNo) {
         case CmdInfoText:
             return NeedsInfo(win);
         case CmdOpenFile: {
-            auto tab = win->CurrentTab();
+            auto tab = win->CurrentTab();   // CPS.Lab
             return (tab == nullptr);
+        }
+        case CmdSelectNets:
+        case CmdSelectCells: {
+            return true;    // CPS Lab.
         }
         default:
             return true;
@@ -191,7 +199,11 @@ static TBBUTTON TbButtonFromButtonInfo(int i) {
     } else {
         info.iBitmap = (int)btInfo.bmpIndex;
         info.fsState = TBSTATE_ENABLED;
-        info.fsStyle = TBSTYLE_BUTTON;
+        if (btInfo.cmdId == CmdSelectNets || btInfo.cmdId == CmdSelectCells) {
+            info.fsStyle = TBSTYLE_CHECK;   // CPS Lab
+        } else {
+            info.fsStyle = TBSTYLE_BUTTON;
+        }
         info.iString = (INT_PTR)trans::GetTranslation(btInfo.toolTip);
     }
     return info;
@@ -447,8 +459,9 @@ void UpdateToolbarFindText(MainWindow* win) {
     Rect findWndRect = WindowRect(win->hwndFindBg);
 
     RECT r{};
-    //TbGetRect(win->hwndToolbar, CmdZoomIn, &r);
-    SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
+    //TbGetRect(win->hwndToolbar, CmdZoomIn, &r);   CPS. Lab
+    //SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
+    SendMessageW(win->hwndToolbar, TB_GETRECT, CmdSelectCells, (LPARAM)&r); // CPS. Lab
     int currX = r.right + DpiScale(win->hwndToolbar, 10);
     int currY = (r.bottom - findWndRect.dy) / 2;
 
@@ -521,6 +534,23 @@ void UpdateToolbarState(MainWindow* win) {
     if (!isChecked) {
         win->CurrentTab()->prevZoomVirtual = kInvalidZoom;
     }
+
+    auto s = SendMessage(hwnd, TB_GETSTATE, CmdSelectNets, 0);
+    if (win->CurrentTab()->markers->isSelection("Net")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectNets, s);
+
+    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectCells, 0);
+    if (win->CurrentTab()->markers->isSelection("Cell")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectCells, s);
+
 }
 
 static void CreateFindBox(MainWindow* win, HFONT hfont, int iconDy) {

@@ -66,6 +66,7 @@ class Markers
 {
   private:
     WindowTab*  tab_;
+    uint select_;
 
   public:
     Vec<MarkerNode*> markerTable;
@@ -85,7 +86,10 @@ class Markers
     size_t getMarkersByWord(const WCHAR* word, Vec<MarkerNode*>& result);
     size_t getMarkersByWord(const char* word, Vec<MarkerNode*>& result);
     size_t getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result);
-    size_t getMarkersByRect(Rect& r, Vec<MarkerNode*>& result);
+    size_t getMarkersByRect(Rect& r, Vec<MarkerNode*>& result, bool specified_object_only=false);
+    void setSelection(const char* keyword);
+    void unsetSelection(const char* keyword);
+    bool isSelection(const char* keyword);
 };
 
 } // namespace cpslab

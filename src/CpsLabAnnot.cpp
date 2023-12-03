@@ -169,10 +169,39 @@ const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool 
 // =============================================================
 Markers::Markers(WindowTab* tab) {
     tab_ = tab;
+    select_ = (0x01 | 0x02);
 }
 
 Markers::~Markers() {
     deleteAnnotations();
+}
+
+bool Markers::isSelection(const char* keyword)
+{
+    if (str::Eq(keyword, "Net")) {
+        return select_ & 0x01;
+    } else if (str::Eq(keyword, "Cell")) {
+        return select_ & 0x02;
+    }
+    return false;
+}
+
+void Markers::setSelection(const char* keyword)
+{
+    if (str::Eq(keyword, "Net")) {
+        select_ |= 0x01;
+    } else if (str::Eq(keyword, "Cell")) {
+        select_ |= 0x02;
+    }
+}
+
+void Markers::unsetSelection(const char* keyword)
+{
+    if (str::Eq(keyword, "Net")) {
+        select_ &= ~0x01;
+    } else if (str::Eq(keyword, "Cell")) {
+        select_ &= ~0x02;
+    }
 }
 
 void Markers::parse(const char* fname) {
@@ -222,9 +251,13 @@ size_t Markers::getMarkersByWord(const WCHAR* word, Vec<MarkerNode*>& result) {
     return getMarkersByWord(strconv::WstrToUtf8(word), result);
 }
 
-size_t Markers::getMarkersByRect(Rect& r, Vec<MarkerNode*>& result) {
+size_t Markers::getMarkersByRect(Rect& r, Vec<MarkerNode*>& result, bool specified_object_only)
+{
     size_t n = 0;
     for (auto p : markerTable) {
+        if (specified_object_only && !isSelection(p->keyword)) {
+            continue;
+        }
         for (Rect pr : p->rects) {
             if (r == pr) {
                 result.Append(p);
@@ -324,7 +357,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
     if (0 < selected_words.Size()) {
         str::Str cmd;
         if (conti) {
-            cmd.AppendFmt("[CSelect(\"%s\"", tab_->filePath.Get());
+            cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
         } else {
             cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
         }
@@ -490,7 +523,8 @@ bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const
 const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageText,
                           const Rect* coords, const WCHAR* src, const WCHAR* lineSep,
                           str::WStr& result,
-                          Markers* markers=nullptr) {
+                          Markers* markers=nullptr,
+                          bool specified_object_only=false) {
     if (*src == '\n') {
         return (src + 1);
     }
@@ -537,7 +571,7 @@ const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageT
     if (markers != nullptr) {
         Rect r = dm->textSelection->result.rects[dm->textSelection->result.len - 1];
         Vec<MarkerNode*> nodes;
-        markers->getMarkersByRect(r, nodes);
+        markers->getMarkersByRect(r, nodes, specified_object_only);
         if (nodes.Size() == 0) {
             dm->textSelection->result.len--;
             return end;
@@ -811,7 +845,7 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, c
             ++src;
             continue;       // not intersected.
         }
-        src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers);
+        src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers, true);
     }
     str::Free(wsep);
     WCHAR* ws = result.Get();
@@ -857,7 +891,7 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
         if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y           - cy, 2)) {++src; continue;}
         if (sqrr <= pow(rect.x           - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
         if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
-        src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers);
+        src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers, true);
     }
     str::Free(wsep);
     WCHAR* ws = result.Get();

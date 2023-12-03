@@ -21,4 +21,6 @@ enum class TbIcon {
     Save,
     RotateLeft,
     RotateRight,
+    Net,
+    Cell,
 };
