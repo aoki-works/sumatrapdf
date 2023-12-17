@@ -295,9 +295,11 @@ void TextSelection::SelectWordAt(int pageNo, double x, double y, bool conti) {
         if (!isWordChar(text[i - 1])) {
             break;
         }
-        Rect& r = coords[i - 1];
-        if (r.x != coord.x && r.y != coord.y) {
-            break;
+        if (gGlobalPrefs->printableCharAsWordChar) {
+            Rect& r = coords[i - 1];
+            if (r.x != coord.x && r.y != coord.y) {
+                break; // CPS Lab.
+            }
         }
     }
     StartAt(pageNo, i);
@@ -306,9 +308,11 @@ void TextSelection::SelectWordAt(int pageNo, double x, double y, bool conti) {
         if (!isWordChar(text[i])) {
             break;
         }
-        Rect& r = coords[i];
-        if (r.x != coord.x && r.y != coord.y) {
-            break;
+        if (gGlobalPrefs->printableCharAsWordChar) {
+            Rect& r = coords[i];
+            if (r.x != coord.x && r.y != coord.y) {
+                break; // CPS Lab.
+            }
         }
     }
     SelectUpTo(pageNo, i, conti);

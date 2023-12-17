@@ -357,7 +357,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
     if (0 < selected_words.Size()) {
         str::Str cmd;
         if (conti) {
-            cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
+            cmd.AppendFmt("[CSelect(\"%s\"", tab_->filePath.Get());
         } else {
             cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
         }
@@ -477,14 +477,16 @@ bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const
     if (begin != pageText) {
         if (isWordChar(*(begin - 1))) {
             // The previous character of 'begin' is also word-character.
-            Rect r = coords[begin - pageText - 1];  // boundary rectangle of the previous char of 'begin'.
-            if (r.x == rect.x || r.y == rect.y) {
-                // 'begin' and 'begin-1' is on the same line.
-                // Then the 'begin' is not beginning of a word.
-                return false;
-            } else {
-                // 'begin' and 'begin-1' is not on the same line.
-                // Then 'begin' is the beginning character of a word.
+            if (gGlobalPrefs->printableCharAsWordChar) {
+                Rect r = coords[begin - pageText - 1]; // boundary rectangle of the previous char of 'begin'.
+                if (r.x == rect.x || r.y == rect.y) {
+                    // 'begin' and 'begin-1' is on the same line.
+                    // Then the 'begin' is not beginning of a word.
+                    return false;
+                } else {
+                    // 'begin' and 'begin-1' is not on the same line.
+                    // Then 'begin' is the beginning character of a word.
+                }
             }
         }
     }
@@ -493,9 +495,11 @@ bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const
     // on the same line of 'begin'.
     // -----------------------------------------------------------------
     if (isWordChar(*(end))) {
-        Rect r = coords[end - pageText];
-        if (r.x == rect.x || r.y == rect.y) {
-            return false;
+        if (gGlobalPrefs->printableCharAsWordChar) {
+            Rect r = coords[end - pageText];
+            if (r.x == rect.x || r.y == rect.y) {
+                return false;
+            }
         }
     }
     //return true;
@@ -508,9 +512,11 @@ bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const
         if (!isWordChar(*c)) {
             return false;
         }
-        Rect r = coords[c - pageText];
-        if (r.x != rect.x && r.y != rect.y) {
-            return false;
+        if (gGlobalPrefs->printableCharAsWordChar) {
+            Rect r = coords[c - pageText];
+            if (r.x != rect.x && r.y != rect.y) {
+                return false;
+            }
         }
     }
     return true;
@@ -540,10 +546,12 @@ const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageT
             begin++;
             break;
         }
-        Rect r = coords[begin - pageText];
-        if (r.x != rect.x && r.y != rect.y) {
-            begin++;
-            break;
+        if (gGlobalPrefs->printableCharAsWordChar) {
+            Rect r = coords[begin - pageText];
+            if (r.x != rect.x && r.y != rect.y) {
+                begin++;
+                break;
+            }
         }
     }
     // forword search the end letter of 'word'.
@@ -552,9 +560,11 @@ const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageT
         if (!isWordChar(*end)) {
             break;
         }
-        Rect r = coords[end - pageText];
-        if (r.x != rect.x && r.y != rect.y) {
-            break;
+        if (gGlobalPrefs->printableCharAsWordChar) {
+            Rect r = coords[end - pageText];
+            if (r.x != rect.x && r.y != rect.y) {
+                break;
+            }
         }
     }
     /**/
@@ -653,9 +663,11 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
                 if (!isWordChar(*end)) {
                     break;
                 }
-                Rect r = coords[end - pageText];
-                if (r.x != rect.x && r.y != rect.y) {
-                    break;
+                if (gGlobalPrefs->printableCharAsWordChar) {
+                    Rect r = coords[end - pageText];
+                    if (r.x != rect.x && r.y != rect.y) {
+                        break;
+                    }
                 }
             }
             char* w = strconv::WstrToUtf8(begin, end - begin, &alloc);
