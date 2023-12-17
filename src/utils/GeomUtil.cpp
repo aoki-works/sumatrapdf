@@ -200,6 +200,18 @@ void Rect::Inflate(int _x, int _y) {
     dy += 2 * _y;
 }
 
+void Rect::SubTB(int t, int b) {
+    y += t;
+    dy -= t;
+    dy -= b;
+}
+
+void Rect::SubLR(int l, int r) {
+    x += l;
+    dx -= l;
+    dx -= r;
+}
+
 Point Rect::TL() const {
     return Point(x, y);
 }
@@ -210,6 +222,16 @@ Point Rect::BR() const {
 
 Size Rect::Size() const {
     return {dx, dy};
+}
+
+void Rect::SetSize(const struct Size& sz) {
+    dx = sz.dx;
+    dy = sz.dy;
+}
+
+void Rect::SetPos(const Point& pos) {
+    x = pos.x;
+    y = pos.y;
 }
 
 bool Rect::Equals(const Rect& other) const {
@@ -410,27 +432,27 @@ Size ToSize(const SizeF s) {
     return Size(dx, dy);
 }
 
-RectF ToRectF(const Rect r) {
+RectF ToRectF(const Rect& r) {
     return {(float)r.x, (float)r.y, (float)r.dx, (float)r.dy};
 }
 
-RECT ToRECT(const Rect r) {
+RECT ToRECT(const Rect& r) {
     return {r.x, r.y, r.x + r.dx, r.y + r.dy};
 }
 
-Gdiplus::Rect ToGdipRect(const Rect r) {
+Gdiplus::Rect ToGdipRect(const Rect& r) {
     return Gdiplus::Rect(r.x, r.y, r.dx, r.dy);
 }
 
-Gdiplus::RectF ToGdipRectF(const Rect r) {
+Gdiplus::RectF ToGdipRectF(const Rect& r) {
     return Gdiplus::RectF((float)r.x, (float)r.y, (float)r.dx, (float)r.dy);
 }
 
-RECT ToRECT(const RectF r) {
+RECT ToRECT(const RectF& r) {
     return {(int)r.x, (int)r.y, (int)(r.x + r.dx), (int)(r.y + r.dy)};
 }
 
-Rect ToRect(const RectF r) {
+Rect ToRect(const RectF& r) {
     int x = (int)floor(r.x + 0.5);
     int y = (int)floor(r.y + 0.5);
     int dx = (int)floor(r.dx + 0.5);
@@ -450,12 +472,12 @@ Rect ToRect(const RECT& r) {
     return r2;
 }
 
-Gdiplus::Rect ToGdipRect(const RectF r) {
+Gdiplus::Rect ToGdipRect(const RectF& r) {
     Rect rect = ToRect(r);
     return Gdiplus::Rect(rect.x, rect.y, rect.dx, rect.dy);
 }
 
-Gdiplus::RectF ToGdipRectF(const RectF r) {
+Gdiplus::RectF ToGdipRectF(const RectF& r) {
     return Gdiplus::RectF(r.x, r.y, r.dx, r.dy);
 }
 

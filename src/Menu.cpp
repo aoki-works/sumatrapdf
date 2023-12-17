@@ -35,7 +35,7 @@
 #include "Favorites.h"
 #include "FileThumbnails.h"
 #include "Selection.h"
-#include "SumatraAbout.h"
+#include "HomePage.h"
 #include "Translations.h"
 #include "Toolbar.h"
 #include "EditAnnotations.h"
@@ -64,7 +64,7 @@ BuildMenuCtx::~BuildMenuCtx() {
 
 // value associated with menu item for owner-drawn purposes
 struct MenuOwnerDrawInfo {
-    const WCHAR* text = nullptr;
+    const char* text = nullptr;
     // copy of MENUITEMINFO fields
     uint fType = 0;
     uint fState = 0;
@@ -523,8 +523,8 @@ static MenuDef menuDefHelp[] = {
 //[ ACCESSKEY_GROUP Debug Menu
 static MenuDef menuDefDebug[] = {
     {
-        "Highlight links",
-        CmdDebugShowLinks,
+        "Show links",
+        CmdToggleLinks,
     },
     {
         "Download symbols",
@@ -1003,34 +1003,38 @@ static bool __cmdIdInList(UINT_PTR cmdId, UINT_PTR* idsList, int n) {
 
 #define cmdIdInList(name) __cmdIdInList(md.idOrSubmenu, name, dimof(name))
 
+// TODO: write it in a way that handles unicode
+static TempStr ShortenString(char* menuString, size_t maxLen) {
+    size_t menuStrLen = str::Len(menuString);
+    if (menuStrLen <= maxLen) {
+        return menuString;
+    }
+    char* newStr = AllocArrayTemp<char>(maxLen);
+    const size_t half = maxLen / 2;
+    const size_t strSize = menuStrLen + 1; // size()+1 because wcslen() doesn't include \0
+    // Copy first N/2 characters, move last N/2 characters to the halfway point
+    for (size_t i = 0; i < half; i++) {
+        newStr[i] = menuString[i];
+        newStr[i + half] = menuString[strSize - half + i];
+    }
+    // Add ellipsis
+    newStr[half - 2] = newStr[half - 1] = newStr[half] = '.';
+    // Ensure null-terminated string
+    newStr[maxLen - 1] = '\0';
+    return newStr;
+}
+
 static void AddFileMenuItem(HMENU menuFile, const char* filePath, int index) {
     ReportIf(!filePath || !menuFile);
     if (!filePath || !menuFile) {
         return;
     }
 
-    TempStr menuString = (TempStr)path::GetBaseNameTemp(filePath);
-
+    TempStr menuString = path::GetBaseNameTemp(filePath);
     // If the name is too long, save only the ends glued together
     // E.g. 'Very Long PDF Name (3).pdf' -> 'Very Long...e (3).pdf'
     const size_t MAX_LEN = 70;
-    size_t menuStrLen = str::Len(menuString);
-    if (menuStrLen > MAX_LEN) {
-        char* newStr = AllocArrayTemp<char>(MAX_LEN);
-        const size_t half = MAX_LEN / 2;
-        const size_t strSize = menuStrLen + 1; // size()+1 because wcslen() doesn't include \0
-        // Copy first N/2 characters, move last N/2 characters to the halfway point
-        for (size_t i = 0; i < half; i++) {
-            newStr[i] = menuString[i];
-            newStr[i + half] = menuString[strSize - half + i];
-        }
-        // Add ellipsis
-        newStr[half - 2] = newStr[half - 1] = newStr[half] = '.';
-        // Ensure null-terminated string
-        newStr[MAX_LEN - 1] = '\0';
-        // Save truncated string
-        menuString = newStr;
-    }
+    menuString = ShortenString(menuString, MAX_LEN);
 
     TempStr fileName = MenuToSafeStringTemp(menuString);
     int menuIdx = (int)((index + 1) % 10);
@@ -1058,6 +1062,15 @@ static void AppendRecentFilesToMenu(HMENU m) {
         }
         AddFileMenuItem(m, fp, i);
     }
+#if 0
+    AddFileMenuItem(
+        m,
+        "\xf0\x9f\xa4\xa3\xf0\x9f\x98\x8a\xf0\x9f\x98\x82\xe2\x9d\xa4\xf0\x9f\x98\x8d\xf0\x9f\x98\x92\xf0\x9f\x91\x8c"
+        "\xf0\x9f\x98\x98\xf0\x9f\x92\x95\xf0\x9f\x98\x81\xf0\x9f\x91\x8d\xf0\x9f\x99\x8c\xf0\x9f\xa4\xa6\xe2\x80\x8d"
+        "\xe2\x99\x80\xef\xb8\x8f\xf0\x9f\xa4\xa6\xe2\x80\x8d\xe2\x99\x82\xef\xb8\x8f\xf0\x9f\xa4\xb7\xe2\x80\x8d\xe2"
+        "\x99\x80\xef\xb8\x8f\xf0\x9f\xa4\xb7\xe2\x80\x8d\xe2\x99\x82\xef\xb8\x8f\x2e\x70\x64\x66",
+        i++);
+#endif
 
     if (i > 0) {
         InsertMenuW(m, CmdExit, MF_BYCOMMAND | MF_SEPARATOR, 0, nullptr);
@@ -1554,7 +1567,7 @@ static void MenuUpdateStateForWindow(MainWindow* win) {
     int themeCmdId = CmdThemeFirst + GetCurrentThemeIndex();
     CheckMenuRadioItem(win->menu, CmdThemeFirst, CmdThemeLast, themeCmdId, MF_BYCOMMAND);
 
-    MenuSetChecked(win->menu, CmdDebugShowLinks, gDebugShowLinks);
+    MenuSetChecked(win->menu, CmdToggleLinks, gGlobalPrefs->showLinks);
 }
 
 // TODO: not the best file for this
@@ -1595,7 +1608,8 @@ void OnAboutContextMenu(MainWindow* win, int x, int y) {
 
     if (CmdOpenSelectedDocument == cmd) {
         LoadArgs args(path, win);
-        LoadDocument(&args, false, !IsCtrlPressed());
+        args.activateExisting = !IsCtrlPressed();
+        LoadDocument(&args);
         return;
     }
 
@@ -1866,49 +1880,21 @@ void FreeMenuOwnerDrawInfo(MenuOwnerDrawInfo* modi) {
     free(modi);
 }
 
-static HFONT gMenuFont = nullptr;
-
-HFONT GetMenuFont() {
-    if (!gMenuFont) {
-        NONCLIENTMETRICS ncm{};
-        ncm.cbSize = sizeof(ncm);
-        SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
-        gMenuFont = CreateFontIndirect(&ncm.lfMenuFont);
-    }
-    return gMenuFont;
-}
-
-void DeleteMenuFont() {
-    DeleteFontSafe(&gMenuFont);
-}
-
-struct MenuText {
-    WCHAR* menuText;
-    int menuTextLen;
-    WCHAR* shortcutText;
-    int shortcutTextLen;
-};
-
 // menu text consists of potentially 2 parts:
 // - text of the menu item
 // - text for the keyboard shortcut
 // They are separated with \t
-static void ParseMenuText(WCHAR* s, MenuText& mt) {
-    mt.shortcutText = nullptr;
-    mt.menuText = s;
-    while (*s && *s != L'\t') {
-        s++;
+static char* ParseMenuTextTemp(const char* sIn, char** shortcutOut) {
+    *shortcutOut = nullptr;
+    auto tabPos = str::FindChar(sIn, '\t');
+    if (!tabPos) {
+        return (char*)sIn;
     }
-    mt.menuTextLen = (int)(s - mt.menuText);
-    if (*s != L'\t') {
-        return;
-    }
-    s++;
-    mt.shortcutText = s;
-    while (*s) {
-        s++;
-    }
-    mt.shortcutTextLen = (int)(s - mt.shortcutText);
+    int n = tabPos - sIn;
+    char* s = str::DupTemp(sIn);
+    s[n] = 0;
+    *shortcutOut = s + n + 1;
+    return s;
 }
 
 void FreeMenuOwnerDrawInfoData(HMENU hmenu) {
@@ -1932,10 +1918,35 @@ void FreeMenuOwnerDrawInfoData(HMENU hmenu) {
         }
     };
 }
+
 void MarkMenuOwnerDraw(HMENU hmenu) {
-    if (!gCurrentTheme->colorizeControls) {
+    if (!ThemeColorizeControls()) {
         return;
     }
+
+    // https://stackoverflow.com/questions/30353644/cmenu-border-color-on-mfc
+    static HBRUSH hbrBrush = nullptr;
+    static COLORREF bgCol = (COLORREF)-1;
+    COLORREF col = ThemeMainWindowBackgroundColor();
+    if (!hbrBrush) {
+        bgCol = col;
+        hbrBrush = ::CreateSolidBrush(col);
+    } else {
+        if (col != bgCol) {
+            // in case theme changed
+            DeleteBrush(hbrBrush);
+            bgCol = col;
+            hbrBrush = ::CreateSolidBrush(col);
+        }
+    }
+
+    MENUINFO mi = {0};
+    mi.cbSize = sizeof(MENUINFO);
+    GetMenuInfo(hmenu, &mi);
+    mi.hbrBack = hbrBrush;
+    mi.fMask = MIM_BACKGROUND | MIM_STYLE | MIM_APPLYTOSUBMENUS;
+    SetMenuInfo(hmenu, &mi);
+
     WCHAR buf[1024];
 
     MENUITEMINFOW mii{};
@@ -1950,7 +1961,6 @@ void MarkMenuOwnerDraw(HMENU hmenu) {
         mii.cch = dimof(buf);
         BOOL ok = GetMenuItemInfoW(hmenu, (uint)i, TRUE /* by position */, &mii);
         CrashIf(!ok);
-
         mii.fMask = MIIM_FTYPE | MIIM_DATA;
         mii.fType |= MFT_OWNERDRAW;
         if (mii.dwItemData != 0) {
@@ -1965,7 +1975,7 @@ void MarkMenuOwnerDraw(HMENU hmenu) {
         modi->hbmpChecked = mii.hbmpChecked;
         modi->hbmpUnchecked = mii.hbmpUnchecked;
         if (str::Len(buf) > 0) {
-            modi->text = str::Dup(buf);
+            modi->text = ToUtf8(buf);
         }
         mii.dwItemData = (ULONG_PTR)modi;
         SetMenuItemInfoW(hmenu, (uint)i, TRUE /* by position */, &mii);
@@ -1992,19 +2002,19 @@ void MenuCustomDrawMesureItem(HWND hwnd, MEASUREITEMSTRUCT* mis) {
         return;
     }
 
-    auto text = modi && modi->text ? modi->text : L"Dummy";
+    auto text = modi && modi->text ? modi->text : "Dummy";
     HFONT font = GetMenuFont();
-    MenuText mt;
-    ParseMenuText((WCHAR*)text, mt);
+    char* shortcutText = nullptr;
+    char* menuText = ParseMenuTextTemp(text, &shortcutText);
 
-    auto size = TextSizeInHwnd(hwnd, mt.menuText, font);
+    auto size = HwndMeasureText(hwnd, menuText, font);
     mis->itemHeight = size.dy;
     int dx = size.dx;
-    if (mt.shortcutText != nullptr) {
+    if (shortcutText != nullptr) {
         // add space betweeen menu text and shortcut
-        size = TextSizeInHwnd(hwnd, "    ", font);
+        size = HwndMeasureText(hwnd, "    ", font);
         dx += size.dx;
-        size = TextSizeInHwnd(hwnd, mt.shortcutText, font);
+        size = HwndMeasureText(hwnd, shortcutText, font);
         dx += size.dx;
     }
     auto padX = DpiScale(hwnd, kMenuPaddingX);
@@ -2066,8 +2076,8 @@ void MenuCustomDrawItem(HWND hwnd, DRAWITEMSTRUCT* dis) {
     HFONT font = GetMenuFont();
     ScopedSelectFont restoreFont(hdc, font);
 
-    COLORREF bgCol = GetMainWindowBackgroundColor();
-    COLORREF txtCol = gCurrentTheme->window.textColor;
+    COLORREF bgCol = ThemeMainWindowBackgroundColor();
+    COLORREF txtCol = ThemeWindowTextColor();
     // TODO: if isDisabled, pick a color that represents disabled
     // either add it to theme definition or auto-generate
     // (lighter if dark color, darker if light color)
@@ -2120,18 +2130,20 @@ void MenuCustomDrawItem(HWND hwnd, DRAWITEMSTRUCT* dis) {
         return;
     }
 
-    MenuText mt;
-    ParseMenuText((WCHAR*)modi->text, mt);
+    char* shortcutText = nullptr;
+    char* menuText = ParseMenuTextTemp(modi->text, &shortcutText);
 
     // DrawTextEx handles & => underscore drawing
     rc.top += padY;
     rc.left += dxCheckMark;
-    DrawTextExW(hdc, mt.menuText, mt.menuTextLen, &rc, DT_LEFT, nullptr);
-    if (mt.shortcutText != nullptr) {
+    WCHAR* ws = ToWStrTemp(menuText);
+    DrawTextExW(hdc, ws, -1, &rc, DT_LEFT, nullptr);
+    if (shortcutText != nullptr) {
+        ws = ToWStrTemp(shortcutText);
         rc = dis->rcItem;
         rc.top += padY;
         rc.right -= (padX + dxCheckMark / 2);
-        DrawTextExW(hdc, mt.shortcutText, mt.shortcutTextLen, &rc, DT_RIGHT, nullptr);
+        DrawTextExW(hdc, ws, -1, &rc, DT_RIGHT, nullptr);
     }
 
     constexpr int kRadioCircleDx = 6;

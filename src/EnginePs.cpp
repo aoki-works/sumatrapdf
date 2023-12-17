@@ -167,9 +167,9 @@ static EngineBase* ps2pdf(const char* path) {
         gswin32c.Get(), tmpFile.Get(), shortPath.Get());
 
     {
-        const char* fileName = path::GetBaseNameTemp(__FILE__);
+        TempStr fileName = path::GetBaseNameTemp(__FILE__);
         char* gswin = gswin32c.Get();
-        const char* tmpFileName = path::GetBaseNameTemp(tmpFile.Get());
+        TempStr tmpFileName = path::GetBaseNameTemp(tmpFile.Get());
         logf("- %s:%d: using '%s' for creating '%%TEMP%%\\%s'\n", fileName, __LINE__, gswin, tmpFileName);
     }
 
@@ -306,14 +306,14 @@ class EnginePs : public EngineBase {
         return pdfEngine->HasClipOptimizations(pageNo);
     }
 
-    char* GetProperty(DocumentProperty prop) override {
+    TempStr GetPropertyTemp(DocumentProperty prop) override {
         // omit properties created by Ghostscript
         if (!pdfEngine || DocumentProperty::CreationDate == prop || DocumentProperty::ModificationDate == prop ||
             DocumentProperty::PdfVersion == prop || DocumentProperty::PdfProducer == prop ||
             DocumentProperty::PdfFileStructure == prop) {
             return nullptr;
         }
-        return pdfEngine->GetProperty(prop);
+        return pdfEngine->GetPropertyTemp(prop);
     }
 
     bool BenchLoadPage(int pageNo) override {

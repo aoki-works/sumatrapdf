@@ -91,23 +91,13 @@ WCHAR* GetSumatraExePath() {
     return ToWstr(path);
 }
 
-static void ParseCmdLine(const WCHAR* cmdLine, StrVec& args) {
-    int nArgs = 0;
-    WCHAR** argsArr = CommandLineToArgvW(cmdLine, &nArgs);
-    for (int i = 0; i < nArgs; i++) {
-        char* arg = ToUtf8Temp(argsArr[i]);
-        args.Append(arg);
-    }
-    LocalFree(argsArr);
-}
-
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     StrVec argList;
     ParseCmdLine(GetCommandLine(), argList);
 
     if (argList.size() == 1) {
-        AutoFreeStr msg(
-            str::Format("Syntax: %s [<SumatraPDF.exe>] [<URL>] <filename.ext>", path::GetBaseNameTemp(argList.at(0))));
+        AutoFreeStr msg =
+            str::Format("Syntax: %s [<SumatraPDF.exe>] [<URL>] <filename.ext>", path::GetBaseNameTemp(argList.at(0)));
         MessageBoxA(nullptr, msg.Get(), PLUGIN_TEST_NAMEA, MB_OK | MB_ICONINFORMATION);
         return 1;
     }

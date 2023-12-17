@@ -325,8 +325,12 @@ vec_dot(const fz_point *a, const fz_point *b)
 
 static int may_add_space(int lastchar)
 {
-	/* basic latin, greek, cyrillic, hebrew, arabic unicode blocks */
-	return (lastchar != ' ' && lastchar < 0x700);
+	/* Basic latin, greek, cyrillic, hebrew, arabic,
+	 * general punctuation,
+	 * superscripts and subscripts,
+	 * and currency symbols.
+	 */
+	return (lastchar != ' ' && (lastchar < 0x700 || (lastchar >= 0x2000 && lastchar <= 0x20CF)));
 }
 
 static void
@@ -508,11 +512,6 @@ fz_add_stext_char_imp(fz_context *ctx, fz_stext_device *dev, fz_font *font, int 
 					/* Motion is forward in line and large enough to warrant us adding a space. */
 					if (wmode == 0 && may_add_space(dev->lastchar))
 						add_space = 1;
-					new_line = 0;
-				}
-				else if (spacing < 0)
-				{
-					/* Motion is backward in line! */
 					new_line = 0;
 				}
 				else

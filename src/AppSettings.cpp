@@ -58,11 +58,11 @@ static int cmpFloat(const void* a, const void* b) {
     return *(float*)a < *(float*)b ? -1 : *(float*)a > *(float*)b ? 1 : 0;
 }
 
-char* GetSettingsFileNameTemp() {
+TempStr GetSettingsFileNameTemp() {
     return str::DupTemp("SumatraPDF-settings.txt");
 }
 
-char* GetSettingsPathTemp() {
+TempStr GetSettingsPathTemp() {
     return AppGenDataFilenameTemp(GetSettingsFileNameTemp());
 }
 
@@ -88,7 +88,7 @@ bool LoadSettings() {
     auto timeStart = TimeGet();
 
     GlobalPrefs* gprefs = nullptr;
-    char* settingsPath = GetSettingsPathTemp();
+    TempStr settingsPath = GetSettingsPathTemp();
     {
         ByteSlice prefsData = file::ReadFile(settingsPath);
 
@@ -155,6 +155,9 @@ bool LoadSettings() {
     setMin(gprefs->sidebarDx, 0);
     setMin(gprefs->tocDy, 0);
     setMin(gprefs->treeFontSize, 0);
+    if (gprefs->toolbarSize == 0) {
+        gprefs->toolbarSize = 18; // same as kDefaultIconSize in Toolbar.cpp
+    }
     setMinMax(gprefs->toolbarSize, 8, 64);
 
     if (!gprefs->treeFontName) {
@@ -244,7 +247,7 @@ bool SaveSettings() {
     str::ReplaceWithCopy(&gGlobalPrefs->defaultDisplayMode, DisplayModeToString(gGlobalPrefs->defaultDisplayModeEnum));
     ZoomToString(&gGlobalPrefs->defaultZoom, gGlobalPrefs->defaultZoomFloat, nullptr);
 
-    char* path = GetSettingsPathTemp();
+    TempStr path = GetSettingsPathTemp();
     ReportIf(!path);
     if (!path) {
         return false;
@@ -278,13 +281,13 @@ bool SaveSettings() {
 // refresh the preferences when a different SumatraPDF process saves them
 // or if they are edited by the user using a text editor
 bool ReloadSettings() {
-    char* settingsPath = GetSettingsPathTemp();
+    TempStr settingsPath = GetSettingsPathTemp();
     if (!file::Exists(settingsPath)) {
         return false;
     }
 
     // make sure that the settings file is readable - else wait
-    // a short while to prevent accidental dataloss
+    // a short while to prevent accidental data loss
     // this is triggered when e.g. saving the file with VS Code
     bool ok = false;
     for (int i = 0; !ok && i < 5; i++) {
@@ -356,7 +359,7 @@ void RegisterSettingsForFileChanges() {
     }
 
     CrashIf(gWatchedSettingsFile); // only call me once
-    char* path = GetSettingsPathTemp();
+    TempStr path = GetSettingsPathTemp();
     gWatchedSettingsFile = FileWatcherSubscribe(path, schedulePrefsReload);
 }
 

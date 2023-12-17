@@ -591,6 +591,9 @@
     <ClCompile Include="..\..\source\html\story-writer.c">
       <Filter>html</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\html\office.c">
+      <Filter>html</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\fitz\encode-fax.c">
       <Filter>fitz</Filter>
     </ClCompile>
@@ -637,6 +640,21 @@
       <Filter>pdf</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\fitz\encode-jpx.c">
+      <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\fitz\gz-doc.c">
+      <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\fitz\unlibarchive.c">
+      <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\fitz\unchm.c">
+      <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\fitz\lzxd.c">
+      <Filter>fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\fitz\heap.c">
       <Filter>fitz</Filter>
     </ClCompile>
   </ItemGroup>
@@ -901,6 +919,15 @@
     </ClInclude>
     <ClInclude Include="..\..\include\mupdf\pdf\image-rewriter.h">
       <Filter>!include\pdf</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\fitz\lzxd-imp.h">
+      <Filter>fitz</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mupdf\fitz\heap.h">
+      <Filter>!include\fitz</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mupdf\fitz\heap-imp.h">
+      <Filter>!include\fitz</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

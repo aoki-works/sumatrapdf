@@ -227,9 +227,9 @@ const WCHAR* Parse(const WCHAR* str, const WCHAR* format, ...);
 int CmpNatural(const char*, const char*);
 int CmpNatural(const WCHAR*, const WCHAR*);
 
-char* FormatFloatWithThousandSepTemp(double number, LCID locale = LOCALE_USER_DEFAULT);
-char* FormatNumWithThousandSepTemp(i64 num, LCID locale = LOCALE_USER_DEFAULT);
-char* FormatRomanNumeralTemp(int number);
+TempStr FormatFloatWithThousandSepTemp(double number, LCID locale = LOCALE_USER_DEFAULT);
+TempStr FormatNumWithThousandSepTemp(i64 num, LCID locale = LOCALE_USER_DEFAULT);
+TempStr FormatRomanNumeralTemp(int number);
 
 bool EmptyOrWhiteSpaceOnly(const char* sv);
 } // namespace str
@@ -238,8 +238,8 @@ namespace url {
 
 void DecodeInPlace(char* url);
 bool IsAbsolute(const char* url);
-char* GetFullPathTemp(const char* url);
-char* GetFileName(const char* url);
+TempStr GetFullPathTemp(const char* url);
+TempStr GetFileNameTemp(const char* url);
 
 } // namespace url
 
@@ -468,5 +468,6 @@ struct StrVec {
 };
 
 size_t Split(StrVec& v, const char* s, const char* separator, bool collapse = false);
-char* Join(const StrVec& v, const char* joint = nullptr);
+char* Join(const StrVec& v, const char* sep = nullptr);
+TempStr JoinTemp(const StrVec& v, const char* sep);
 ByteSlice ToByteSlice(const char* s);

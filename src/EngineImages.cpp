@@ -492,7 +492,7 @@ class EngineImage : public EngineImages {
 
     EngineBase* Clone() override;
 
-    char* GetProperty(DocumentProperty prop) override;
+    TempStr GetPropertyTemp(DocumentProperty prop) override;
 
     static EngineBase* CreateFromFile(const char* fileName);
     static EngineBase* CreateFromStream(IStream* stream);
@@ -642,7 +642,7 @@ bool EngineImage::FinishLoading() {
 #define PropertyTagXPSubject 0x9c9f
 #endif
 
-static char* GetImageProperty(Bitmap* bmp, PROPID id, PROPID altId = 0) {
+static TempStr GetImagePropertyTemp(Bitmap* bmp, PROPID id, PROPID altId = 0) {
     char* value = nullptr;
     uint size = bmp->GetPropertyItemSize(id);
     PropertyItem* item = (PropertyItem*)malloc(size);
@@ -653,29 +653,34 @@ static char* GetImageProperty(Bitmap* bmp, PROPID id, PROPID altId = 0) {
         value = strconv::AnsiToUtf8((char*)item->value);
     } else if (PropertyTagTypeByte == item->type && item->length > 0 && 0 == (item->length % 2) &&
                !((WCHAR*)item->value)[item->length / 2 - 1]) {
-        value = ToUtf8((WCHAR*)item->value);
+        value = ToUtf8Temp((WCHAR*)item->value);
+        if (value) {
+            return value;
+        }
     }
     free(item);
     if (!value && altId) {
-        return GetImageProperty(bmp, altId);
+        return GetImagePropertyTemp(bmp, altId);
     }
-    return value;
+    TempStr res = str::DupTemp(value);
+    str::Free(value);
+    return res;
 }
 
-char* EngineImage::GetProperty(DocumentProperty prop) {
+TempStr EngineImage::GetPropertyTemp(DocumentProperty prop) {
     switch (prop) {
         case DocumentProperty::Title:
-            return GetImageProperty(image, PropertyTagImageDescription, PropertyTagXPTitle);
+            return GetImagePropertyTemp(image, PropertyTagImageDescription, PropertyTagXPTitle);
         case DocumentProperty::Subject:
-            return GetImageProperty(image, PropertyTagXPSubject);
+            return GetImagePropertyTemp(image, PropertyTagXPSubject);
         case DocumentProperty::Author:
-            return GetImageProperty(image, PropertyTagArtist, PropertyTagXPAuthor);
+            return GetImagePropertyTemp(image, PropertyTagArtist, PropertyTagXPAuthor);
         case DocumentProperty::Copyright:
-            return GetImageProperty(image, PropertyTagCopyright);
+            return GetImagePropertyTemp(image, PropertyTagCopyright);
         case DocumentProperty::CreationDate:
-            return GetImageProperty(image, PropertyTagDateTime, PropertyTagExifDTDigitized);
+            return GetImagePropertyTemp(image, PropertyTagDateTime, PropertyTagExifDTDigitized);
         case DocumentProperty::CreatorApp:
-            return GetImageProperty(image, PropertyTagSoftwareUsed);
+            return GetImagePropertyTemp(image, PropertyTagSoftwareUsed);
         default:
             return nullptr;
     }
@@ -807,7 +812,7 @@ class EngineImageDir : public EngineImages {
     }
     bool SaveFileAs(const char* copyFileName) override;
 
-    char* GetProperty(DocumentProperty) override {
+    TempStr GetPropertyTemp(DocumentProperty) override {
         return nullptr;
     }
 
@@ -867,8 +872,8 @@ TempStr EngineImageDir::GetPageLabeTemp(int pageNo) const {
     }
 
     const char* path = pageFileNames.at(pageNo - 1);
-    const char* fileName = path::GetBaseNameTemp(path);
-    char* ext = path::GetExtTemp(fileName);
+    TempStr fileName = path::GetBaseNameTemp(path);
+    TempStr ext = path::GetExtTemp(fileName);
     if (!ext) {
         return str::DupTemp(fileName);
     }
@@ -881,7 +886,7 @@ int EngineImageDir::GetPageByLabel(const char* label) const {
     size_t nLabel = str::Len(label);
     for (int i = 0; i < pageFileNames.Size(); i++) {
         char* pagePath = pageFileNames[i];
-        const char* fileName = path::GetBaseNameTemp(pagePath);
+        TempStr fileName = path::GetBaseNameTemp(pagePath);
         char* ext = path::GetExtTemp(fileName);
         if (!str::StartsWith(fileName, label)) {
             continue;
@@ -925,8 +930,8 @@ bool EngineImageDir::SaveFileAs(const char* dstPath) {
         return false;
     }
     for (char* pathOld : pageFileNames) {
-        const char* fileName = path::GetBaseNameTemp(pathOld);
-        char* pathNew = path::JoinTemp(dstPath, fileName);
+        TempStr fileName = path::GetBaseNameTemp(pathOld);
+        TempStr pathNew = path::JoinTemp(dstPath, fileName);
         ok = ok && file::Copy(pathNew, pathOld, true);
     }
     return ok;
@@ -1087,7 +1092,7 @@ class EngineCbx : public EngineImages {
 
     EngineBase* Clone() override;
 
-    char* GetProperty(DocumentProperty prop) override;
+    TempStr GetPropertyTemp(DocumentProperty prop) override;
 
     TocTree* GetToc() override;
 
@@ -1252,7 +1257,7 @@ bool EngineCbx::FinishLoading() {
     TocItem* curr = nullptr;
     for (int i = 0; i < pageCount; i++) {
         const char* fname = files[i]->name;
-        const char* baseName = path::GetBaseNameTemp(fname);
+        TempStr baseName = path::GetBaseNameTemp(fname);
         TocItem* ti = new TocItem(nullptr, baseName, i + 1);
         if (root == nullptr) {
             root = ti;
@@ -1283,21 +1288,25 @@ ByteSlice EngineCbx::GetImageData(int pageNo) {
     return d;
 }
 
-char* EngineCbx::GetProperty(DocumentProperty prop) {
+TempStr EngineCbx::GetPropertyTemp(DocumentProperty prop) {
     switch (prop) {
         case DocumentProperty::Title:
-            return str::Dup(cip.propTitle);
-        case DocumentProperty::Author:
-            return cip.propAuthors.size() ? Join(cip.propAuthors, ", ") : nullptr;
+            return cip.propTitle;
+        case DocumentProperty::Author: {
+            if (cip.propAuthors.size() == 0) {
+                return nullptr;
+            }
+            return JoinTemp(cip.propAuthors, ", ");
+        }
         case DocumentProperty::CreationDate:
-            return str::Dup(cip.propDate);
+            return cip.propDate;
         case DocumentProperty::ModificationDate:
-            return str::Dup(cip.propModDate);
+            return cip.propModDate;
         case DocumentProperty::CreatorApp:
-            return str::Dup(cip.propCreator);
+            return cip.propCreator;
         // TODO: replace with Prop_Summary
         case DocumentProperty::Subject:
-            return str::Dup(cip.propSummary);
+            return cip.propSummary;
         default:
             return nullptr;
     }

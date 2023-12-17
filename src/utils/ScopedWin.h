@@ -153,6 +153,23 @@ struct AutoDeleteDC {
     }
 };
 
+struct AutoReleaseDC {
+    HWND hwnd = nullptr;
+    HDC hdc = nullptr;
+
+    explicit AutoReleaseDC(HWND hwnd) {
+        hdc = GetWindowDC(hwnd);
+    }
+    AutoReleaseDC() = default;
+
+    ~AutoReleaseDC() {
+        ReleaseDC(hwnd, hdc);
+    }
+    operator HDC() const { // NOLINT
+        return hdc;
+    }
+};
+
 template <typename T>
 class ScopedGdiObj {
     T obj;
@@ -168,7 +185,6 @@ class ScopedGdiObj {
         return obj;
     }
 };
-using AutoDeleteFont = ScopedGdiObj<HFONT>;
 using AutoDeletePen = ScopedGdiObj<HPEN>;
 using AutoDeleteBrush = ScopedGdiObj<HBRUSH>;
 
@@ -191,27 +207,43 @@ class ScopedGetDC {
 
 class ScopedSelectObject {
     HDC hdc = nullptr;
+    HGDIOBJ obj = nullptr;
     HGDIOBJ prev = nullptr;
 
   public:
-    ScopedSelectObject(HDC hdc, HGDIOBJ obj) : hdc(hdc), prev(SelectObject(hdc, obj)) {
+    ScopedSelectObject(HDC hdc, HGDIOBJ obj, bool alsoDelete = false) {
+        this->hdc = hdc;
+        this->prev = SelectObject(hdc, obj);
+        if (alsoDelete) {
+            this->obj = obj;
+        }
     }
 
     ~ScopedSelectObject() {
         SelectObject(hdc, prev);
+        if (obj) {
+            DeleteObject(obj);
+        }
     }
 };
 
 class ScopedSelectFont {
     HDC hdc = nullptr;
-    HFONT prevFont = nullptr;
+    HGDIOBJ prev = nullptr;
 
   public:
-    explicit ScopedSelectFont(HDC hdc, HFONT font) : prevFont((HFONT)SelectObject(hdc, font)) {
+    // font can be nullptr
+    explicit ScopedSelectFont(HDC hdc, HFONT font) {
+        this->hdc = hdc;
+        if (font) {
+            prev = (HFONT)SelectObject(hdc, font);
+        }
     }
 
     ~ScopedSelectFont() {
-        SelectObject(hdc, prevFont);
+        if (prev) {
+            SelectObject(hdc, prev);
+        }
     }
 };
 

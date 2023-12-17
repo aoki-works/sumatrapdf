@@ -30,11 +30,13 @@ static void xps_init_document(fz_context *ctx, xps_document *doc);
 static xps_part *
 xps_new_part(fz_context *ctx, xps_document *doc, char *name, fz_buffer *data)
 {
-	xps_part *part;
+	xps_part *part = NULL;
 
-	part = fz_malloc_struct(ctx, xps_part);
+	fz_var(part);
+
 	fz_try(ctx)
 	{
+		part = fz_malloc_struct(ctx, xps_part);
 		part->name = fz_strdup(ctx, name);
 		part->data = data; /* take ownership of buffer */
 	}
@@ -109,7 +111,7 @@ xps_read_part(fz_context *ctx, xps_document *doc, char *partname)
 						seen_last = 1;
 					}
 					else
-						fz_throw(ctx, FZ_ERROR_GENERIC, "cannot find all pieces for part '%s'", partname);
+						fz_throw(ctx, FZ_ERROR_FORMAT, "cannot find all pieces for part '%s'", partname);
 				}
 			}
 		}

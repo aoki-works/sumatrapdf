@@ -1,3 +1,1 @@
-@cd do
-go run . %*
-cd ..
+go run ./do %*

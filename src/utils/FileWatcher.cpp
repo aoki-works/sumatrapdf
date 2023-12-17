@@ -71,7 +71,7 @@ struct WatchedDir {
     HANDLE hDir = nullptr;
     bool startMonitoring = true;
     OverlappedEx overlapped;
-    char buf[8 * 1024]{};
+    char buf[16 * 1024]{};
 };
 
 struct WatchedFile {
@@ -166,7 +166,7 @@ static void NotifyAboutFile(WatchedDir* d, const char* fileName) {
         if (wf->watchedDir != d) {
             continue;
         }
-        const char* path = path::GetBaseNameTemp(wf->filePath);
+        TempStr path = path::GetBaseNameTemp(wf->filePath);
 
         if (!str::EqI(fileName, path)) {
             continue;
@@ -221,8 +221,11 @@ static void CALLBACK ReadDirectoryChangesNotification(DWORD errCode, DWORD bytes
         return;
     }
 
+    wd->startMonitoring = false;
+
     // This might mean overflow? Not sure.
     if (!bytesTransfered) {
+        StartMonitoringDirForChanges(wd);
         return;
     }
 
@@ -250,7 +253,6 @@ static void CALLBACK ReadDirectoryChangesNotification(DWORD errCode, DWORD bytes
         notify = (FILE_NOTIFY_INFORMATION*)((char*)notify + nextOff);
     }
 
-    wd->startMonitoring = false;
     StartMonitoringDirForChanges(wd);
 
     for (char* f : changedFiles) {

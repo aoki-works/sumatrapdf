@@ -135,8 +135,8 @@ static bool ExtractFiles(lzma::SimpleArchive* archive, const char* destDir) {
 
 static bool CopySelfToDir(const char* destDir) {
     logf("CopySelfToDir(%s)\n", destDir);
-    char* exePath = GetExePathTemp();
-    char* dstPath = path::JoinTemp(destDir, kExeName);
+    TempStr exePath = GetExePathTemp();
+    TempStr dstPath = path::JoinTemp(destDir, kExeName);
     bool failIfExists = false;
     bool ok = file::Copy(dstPath, exePath, failIfExists);
     // strip zone identifier (if exists) to avoid windows
@@ -158,18 +158,18 @@ static void CopySettingsFile() {
     // copy the settings from old directory
 
     // seen a crash when running elevated
-    char* srcDir = GetSpecialFolderTemp(CSIDL_APPDATA, false);
+    TempStr srcDir = GetSpecialFolderTemp(CSIDL_APPDATA, false);
     if (str::IsEmpty(srcDir)) {
         return;
     }
-    char* dstDir = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, false);
+    TempStr dstDir = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, false);
     if (str::IsEmpty(dstDir)) {
         return;
     }
 
-    const char* prefsFileName = GetSettingsFileNameTemp();
-    char* srcPath = path::JoinTemp(srcDir, kAppName, prefsFileName);
-    char* dstPath = path::JoinTemp(dstDir, kAppName, prefsFileName);
+    TempStr prefsFileName = GetSettingsFileNameTemp();
+    TempStr srcPath = path::JoinTemp(srcDir, kAppName, prefsFileName);
+    TempStr dstPath = path::JoinTemp(dstDir, kAppName, prefsFileName);
 
     // don't over-write
     bool failIfExists = true;
@@ -582,8 +582,8 @@ static char* GetDefaultInstallationDir(bool forAllUsers, bool ignorePrev) {
 
     char* dir;
     char* dirPrevInstall = gWnd->prevInstall.installationDir;
-    char* dirAll = GetSpecialFolderTemp(CSIDL_PROGRAM_FILES, false);
-    char* dirUser = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, false);
+    TempStr dirAll = GetSpecialFolderTemp(CSIDL_PROGRAM_FILES, false);
+    TempStr dirUser = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, false);
 
     if (dirPrevInstall && !ignorePrev) {
         logf("  using %s from previous install\n", dirPrevInstall);
@@ -656,7 +656,7 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd) {
     gButtonDy = btnSize.dy;
     gBottomPartDy = gButtonDy + (margin * 2);
 
-    Size size = TextSizeInHwnd(hwnd, "Foo");
+    Size size = HwndMeasureText(hwnd, "Foo");
     int staticDy = size.dy + DpiScale(hwnd, 6);
 
     y = r.dy - gBottomPartDy;
@@ -710,7 +710,7 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd) {
     y -= (DpiScale(hwnd, 4) + margin);
 
     const char* s = "&...";
-    Size btnSize2 = TextSizeInHwnd(hwnd, s);
+    Size btnSize2 = HwndMeasureText(hwnd, s);
     btnSize2.dx += DpiScale(hwnd, 4);
     wnd->btnBrowseDir = CreateDefaultButton(hwnd, s);
     wnd->btnBrowseDir->onClicked = OnButtonBrowse;

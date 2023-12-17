@@ -23,8 +23,8 @@ bool IsSep(char c) {
 // Note: if want to change to returning TempStr, would have
 // to audit caller as they depend of in-place nature of returned
 // value
-const char* GetBaseNameTemp(const char* path) {
-    const char* s = path + str::Len(path);
+TempStr GetBaseNameTemp(const char* path) {
+    char* s = (char*)path + str::Len(path);
     for (; s > path; s--) {
         if (IsSep(s[-1])) {
             break;
@@ -147,7 +147,7 @@ TempWStr GetDirTemp(const WCHAR* path) {
 }
 
 TempStr GetDirTemp(const char* path) {
-    const char* baseName = GetBaseNameTemp(path);
+    TempStr baseName = GetBaseNameTemp(path);
     if (baseName == path) {
         // relative directory
         return str::DupTemp(".");
@@ -308,13 +308,16 @@ static bool IsSameFileHandleInformation(BY_HANDLE_FILE_INFORMATION& fi1, BY_HAND
 // http://stackoverflow.com/questions/562701/best-way-to-determine-if-two-path-reference-to-same-file-in-c-c/562830#562830
 // Determine if 2 paths point ot the same file...
 bool IsSame(const char* path1, const char* path2) {
+    if (!path1 || !path2) {
+        return false;
+    }
     if (str::EqI(path1, path2)) {
         return true;
     }
 
     // we assume that if the last part doesn't match, they can't be the same
-    const char* base1 = path::GetBaseNameTemp(path1);
-    const char* base2 = path::GetBaseNameTemp(path2);
+    TempStr base1 = path::GetBaseNameTemp(path1);
+    TempStr base2 = path::GetBaseNameTemp(path2);
     if (!str::EqI(base1, base2)) {
         return false;
     }

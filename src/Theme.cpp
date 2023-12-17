@@ -30,6 +30,43 @@ constexpr COLORREF kColWhite = 0xFFFFFF;
 // #define kColWhiteish 0xEBEBF9
 // #define kColDarkGray 0x424242
 
+constexpr const int kThemeCount = 3;
+
+struct MainWindowStyle {
+    // Background color of recently added, about, and properties menus
+    COLORREF backgroundColor;
+    // Background color of controls, menus, non-client areas, etc.
+    COLORREF controlBackgroundColor;
+    // Text color of recently added, about, and properties menus
+    COLORREF textColor;
+    // Link color on recently added, about, and properties menus
+    COLORREF linkColor;
+};
+
+struct NotificationStyle {
+    // Background color of the notification window
+    COLORREF backgroundColor;
+    // Text color of the notification window
+    COLORREF textColor;
+    // Color of the highlight box that surrounds the text when a notification is highlighted
+    COLORREF highlightColor;
+    // Color of the text when a notification is highlighted
+    COLORREF highlightTextColor;
+    // Background color of the progress bar in the notification window
+    COLORREF progressColor;
+};
+
+struct Theme {
+    // Name of the theme
+    const char* name;
+    // Style of the main window
+    MainWindowStyle window;
+    // Style of notifications
+    NotificationStyle notifications;
+    // Whether or not we colorize standard Windows controls and window areas
+    bool colorizeControls;
+};
+
 // clang-format off
 static Theme gThemeLight = {
     // Theme Name
@@ -208,49 +245,56 @@ void SetCurrentThemeFromSettings() {
     }
 }
 
-void GetDocumentColors(COLORREF& text, COLORREF& bg) {
-    text = kColBlack;
+COLORREF ThemeDocumentColors(COLORREF& bg) {
+    COLORREF text = kColBlack;
     bg = kColWhite;
 
-    if (currentThemeIndex == 0) {
-        // for backwards compat light theme respects the old customization colors
-        ParsedColor* parsedCol;
-        if (gGlobalPrefs->fixedPageUI.invertColors) {
-            parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.textColor);
-        } else {
-            parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.backgroundColor);
-        }
-        bg = parsedCol->col;
-        if (gGlobalPrefs->fixedPageUI.invertColors) {
-            parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.backgroundColor);
-        } else {
-            parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.textColor);
-        }
+    ParsedColor* parsedCol;
+    parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.textColor);
+    if (parsedCol->parsedOk) {
         text = parsedCol->col;
-        return;
     }
 
-    if (gGlobalPrefs->fixedPageUI.invertColors) {
-        // if we're inverting in non-default themes, the colors
-        // should match the colors of the window
-        // TODO: this probably only makes sense for dark themes
-        text = gCurrentTheme->window.textColor;
-        bg = gCurrentTheme->window.backgroundColor;
-        if (IsLightColor(bg)) {
-            bg = AdjustLightness2(bg, -8);
-        } else {
-            bg = AdjustLightness2(bg, 8);
-        }
+    parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.backgroundColor);
+    if (parsedCol->parsedOk) {
+        bg = parsedCol->col;
     }
+
+    if (!gGlobalPrefs->fixedPageUI.invertColors) {
+        return text;
+    }
+
+    // if uesr did change those colors in advanced settings, respect them
+    bool userDidChange = text != kColBlack || bg != kColWhite;
+    if (userDidChange) {
+        std::swap(text, bg);
+        return text;
+    }
+
+    // default colors
+    if (gCurrentTheme == &gThemeLight) {
+        return text;
+    }
+
+    // if we're inverting in non-default themes, the colors
+    // should match the colors of the window
+    text = ThemeWindowTextColor();
+    bg = gCurrentTheme->window.backgroundColor;
+    if (IsLightColor(bg)) {
+        bg = AdjustLightness2(bg, -8);
+    } else {
+        bg = AdjustLightness2(bg, 8);
+    }
+    return text;
 }
 
-COLORREF GetControlBackgroundColor() {
+COLORREF ThemeControlBackgroundColor() {
     // note: we can change it in ThemeUpdateAfterLoadSettings()
     return gCurrentTheme->window.controlBackgroundColor;
 }
 
 // TODO: migrate from prefs to theme.
-COLORREF GetMainWindowBackgroundColor() {
+COLORREF ThemeMainWindowBackgroundColor() {
     COLORREF bgColor = gCurrentTheme->window.backgroundColor;
     if (currentThemeIndex == 0) {
         // Special behavior for light theme.
@@ -260,4 +304,44 @@ COLORREF GetMainWindowBackgroundColor() {
         }
     }
     return bgColor;
+}
+
+COLORREF ThemeWindowBackgroundColor() {
+    return gCurrentTheme->window.backgroundColor;
+}
+
+COLORREF ThemeWindowTextColor() {
+    return gCurrentTheme->window.textColor;
+}
+
+COLORREF ThemeWindowControlBackgroundColor() {
+    return gCurrentTheme->window.controlBackgroundColor;
+}
+
+COLORREF ThemeWindowLinkColor() {
+    return gCurrentTheme->window.linkColor;
+}
+
+COLORREF ThemeNotificationsBackgroundColor() {
+    return gCurrentTheme->notifications.backgroundColor;
+}
+
+COLORREF ThemeNotificationsTextColor() {
+    return gCurrentTheme->notifications.textColor;
+}
+
+COLORREF ThemeNotificationsHighlightColor() {
+    return gCurrentTheme->notifications.highlightColor;
+}
+
+COLORREF ThemeNotificationsHighlightTextColor() {
+    return gCurrentTheme->notifications.highlightTextColor;
+}
+
+COLORREF ThemeNotificationsProgressColor() {
+    return gCurrentTheme->notifications.progressColor;
+}
+
+bool ThemeColorizeControls() {
+    return gCurrentTheme->colorizeControls;
 }

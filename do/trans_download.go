@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -19,38 +18,68 @@ var (
 )
 
 func getTransSecret() string {
-	v := os.Getenv("TRANS_UPLOAD_SECRET")
-	panicIf(v == "", "must set TRANS_UPLOAD_SECRET env variable")
-	return v
+	panicIf(transUploadSecret == "", "must set TRANS_UPLOAD_SECRET env variable or in .env file")
+	return transUploadSecret
 }
 
-func printSusTranslations(d []byte) {
+// sometimes people press enter at the end of the translation
+// we should fix it in apptranslator.org but for now fix it here
+func fixTranslation(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimSuffix(s, `\n`)
+	s = strings.TrimSuffix(s, `\r`)
+	s = strings.TrimSuffix(s, `\n`)
+	s = strings.TrimSpace(s)
+	return s
+}
+
+type BadTranslation struct {
+	currString string
+	orig       string
+	fixed      string
+}
+
+var badTranslatins []BadTranslation
+
+func printBadTranslations() {
+	sort.Slice(badTranslatins, func(i, j int) bool {
+		return badTranslatins[i].orig < badTranslatins[j].orig
+	})
+	currLang := ""
+	for _, bt := range badTranslatins {
+		lang := strings.Split(bt.orig, ":")[0]
+		if lang != currLang {
+			currLang = lang
+			uri := "https://www.apptranslator.org/app/SumatraPDF/" + lang
+			fmt.Printf("\n%s\n", uri)
+		}
+		fmt.Printf("%s\n  '%s' => '%s'\n", bt.currString, bt.orig, bt.fixed)
+	}
+}
+
+func fixTranslations(d []byte) []byte {
+	var b bytes.Buffer
 	a := strings.Split(string(d), "\n")
 	currString := ""
-	isSus := func(s string) bool {
-		/*
-			if strings.Contains(s, `\n\n`) {
-				return true
-			}
-		*/
-		if strings.HasPrefix(s, `\n`) || strings.HasSuffix(s, `\n`) {
-			return true
-		}
-		if strings.HasPrefix(s, `\r`) || strings.HasSuffix(s, `\r`) {
-			return true
-		}
-		return false
-	}
 
 	for _, s := range a {
 		if strings.HasPrefix(s, ":") {
 			currString = s[1:]
+			b.WriteString(s + "\n")
 			continue
 		}
-		if isSus(s) {
-			fmt.Printf("Suspicious translation:\n%s\n%s\n\n", currString, s)
+		fixed := fixTranslation(s)
+		if s != fixed {
+			push(&badTranslatins, BadTranslation{
+				currString: currString,
+				orig:       s,
+				fixed:      fixed,
+			})
 		}
+		b.WriteString(fixed + "\n")
 	}
+	res := b.Bytes()
+	return res[:len(res)-1] // remove last \n
 }
 
 func downloadTranslationsMust() []byte {
@@ -155,7 +184,7 @@ func splitIntoPerLangFiles(d []byte) {
 			skipStr = "  SKIP"
 			langsToSkip[lang] = true
 		}
-		logf(ctx(), "Wrote: '%s', missing: %d%s\n", path, nMissing, skipStr)
+		logf("Wrote: '%s', missing: %d%s\n", path, nMissing, skipStr)
 	}
 
 	// write translations-good.txt with langs that don't miss too many translations
@@ -191,11 +220,14 @@ func splitIntoPerLangFiles(d []byte) {
 	s := strings.Join(a, "\n")
 	path := filepath.Join(translationsDir, "translations-good.txt")
 	writeFileMust(path, []byte(s))
-	logf(ctx(), "Wrote %s of size %d\n", path, len(s))
+	logf("Wrote %s of size %d\n", path, len(s))
 }
 
 func downloadTranslations() bool {
 	d := downloadTranslationsMust()
+	d = fixTranslations(d)
+
+	printBadTranslations()
 
 	path := filepath.Join(translationsDir, "translations.txt")
 	curr := readFileMust(path)
@@ -213,9 +245,8 @@ func downloadTranslations() bool {
 	// saving as gzipped and embedding that in the exe
 	//u.WriteFileGzipped(translationsTxtPath+".gz", d)
 	writeFileMust(path, d)
-	logf(ctx(), "Wrote %s of size %d\n", path, len(d))
+	logf("Wrote %s of size %d\n", path, len(d))
 
-	printSusTranslations(d)
 	return false
 }
 

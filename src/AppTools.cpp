@@ -26,13 +26,13 @@
    created by an installer (and should be updated through an installer) */
 bool HasBeenInstalled() {
     // see GetDefaultInstallationDir() in Installer.cpp
-    char* regPathUninst = str::JoinTemp("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\", kAppName);
-    char* installedPath = LoggedReadRegStr2Temp(regPathUninst, "InstallLocation");
+    TempStr regPathUninst = str::JoinTemp("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\", kAppName);
+    TempStr installedPath = LoggedReadRegStr2Temp(regPathUninst, "InstallLocation");
     if (!installedPath) {
         return false;
     }
 
-    char* exePath = GetExePathTemp();
+    TempStr exePath = GetExePathTemp();
     if (exePath) {
         return false;
     }
@@ -55,6 +55,7 @@ bool IsRunningInPortableMode() {
     sCacheIsPortable = 1;
 
     if (gIsStoreBuild) {
+        sCacheIsPortable = 0;
         return false;
     }
 
@@ -63,10 +64,11 @@ bool IsRunningInPortableMode() {
         return false;
     }
 
-    char* exePath = GetExePathTemp();
-    char* programFilesDir = GetSpecialFolderTemp(CSIDL_PROGRAM_FILES);
+    TempStr exePath = GetExePathTemp();
+    TempStr programFilesDir = GetSpecialFolderTemp(CSIDL_PROGRAM_FILES);
     // if we can't get a path, assume we're not running from "Program Files"
     if (!exePath || !programFilesDir) {
+        sCacheIsPortable = 1;
         return true;
     }
 
@@ -81,6 +83,7 @@ bool IsRunningInPortableMode() {
         }
     }
 
+    sCacheIsPortable = 1;
     return true;
 }
 
@@ -112,7 +115,7 @@ TempStr AppGenDataFilenameTemp(const char* fileName) {
         return path::GetPathOfFileInAppDirTemp(fileName);
     }
 
-    char* path = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, true);
+    TempStr path = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, true);
     if (!path) {
         return nullptr;
     }
@@ -145,7 +148,7 @@ TempStr AppGenDataFilenameTemp(const char* fileName) {
 static TextEditor editorRules[] = {
     {
         "Code.exe",
-        R"(--goto %f:%l)",
+        R"(--goto "%f:%l")",
         RegType::BinaryPath,
         kRegCurrentVer "\\Uninstall\\{771FD6B0-FA20-440A-A002-3B3BAC16DC50}_is1",
         // TODO: change back to Code.exe
@@ -401,18 +404,6 @@ char* BuildOpenFileCmd(const char* pattern, const char* path, int line, int col)
     return cmdline.StealData();
 }
 
-void OpenFileWithTextEditor(const char* path) {
-    Vec<TextEditor*> editors;
-    DetectTextEditors(editors);
-    const char* cmd = editors[0]->openFileCmd;
-
-    char* cmdLine = BuildOpenFileCmd(cmd, path, 1, 1);
-    logf("OpenFileWithTextEditor: '%s'\n", cmdLine);
-    char* appDir = GetExeDirTemp();
-    AutoCloseHandle process(LaunchProcess(cmdLine, appDir));
-    str::Free(cmdLine);
-}
-
 #define UWM_DELAYED_SET_FOCUS (WM_APP + 1)
 
 // selects all text in an edit box if it's selected either
@@ -423,7 +414,7 @@ bool ExtendedEditWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM) {
 
     switch (msg) {
         case WM_LBUTTONDOWN:
-            delayFocus = !IsFocused(hwnd);
+            delayFocus = !HwndIsFocused(hwnd);
             return true;
 
         case WM_LBUTTONUP: {

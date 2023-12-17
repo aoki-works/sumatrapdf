@@ -936,8 +936,9 @@ static fz_css_rule *parse_ruleset(struct lexbuf *buf)
 	}
 	fz_catch(buf->ctx)
 	{
-		if (fz_caught(buf->ctx) != FZ_ERROR_SYNTAX)
-			fz_rethrow(buf->ctx);
+		fz_rethrow_unless(buf->ctx, FZ_ERROR_SYNTAX);
+		fz_report_error(buf->ctx);
+
 		while (buf->lookahead != EOF)
 		{
 			if (accept(buf, '}'))

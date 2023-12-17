@@ -75,17 +75,21 @@ struct Rect {
     int Right() const;
     int Bottom() const;
     static Rect FromXY(int xs, int ys, int xe, int ye);
-    static Rect FromXY(Point TL, Point BR);
+    static Rect FromXY(const Point TL, const Point BR);
     bool IsEmpty() const;
     bool Contains(int x, int y) const;
-    bool Contains(Point pt) const;
-    Rect Intersect(Rect other) const;
+    bool Contains(const Point pt) const;
+    Rect Intersect(const Rect other) const;
     Rect Union(Rect other) const;
     void Offset(int _x, int _y);
     void Inflate(int _x, int _y);
+    void SubTB(int t, int b);
+    void SubLR(int l, int r);
     Point TL() const;
     Point BR() const;
     Size Size() const;
+    void SetSize(const struct Size&);
+    void SetPos(const Point&);
     bool Equals(const Rect& other) const;
     bool operator==(const Rect& other) const;
     bool operator!=(const Rect& other) const;
@@ -137,18 +141,18 @@ SIZE ToSIZE(Size s);
 SizeF ToSizeFl(Size s);
 Size ToSize(SizeF s);
 
-RectF ToRectF(Rect r);
+RectF ToRectF(const Rect& r);
 
-RECT ToRECT(Rect r);
-RECT ToRECT(RectF r);
+RECT ToRECT(const Rect& r);
+RECT ToRECT(const RectF& r);
 
-Rect ToRect(RectF r);
+Rect ToRect(const RectF& r);
 Rect ToRect(const RECT& r);
 
-Gdiplus::Rect ToGdipRect(Rect r);
-Gdiplus::RectF ToGdipRectF(Rect r);
+Gdiplus::Rect ToGdipRect(const Rect& r);
+Gdiplus::RectF ToGdipRectF(const Rect& r);
 
-Gdiplus::Rect ToGdipRect(RectF r);
-Gdiplus::RectF ToGdipRectF(RectF r);
+Gdiplus::Rect ToGdipRect(const RectF& r);
+Gdiplus::RectF ToGdipRectF(const RectF& r);
 
 int NormalizeRotation(int rotation);

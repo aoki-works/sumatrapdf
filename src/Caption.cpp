@@ -164,7 +164,7 @@ void CaptionInfo::UpdateColors(bool activeWindow) {
                                                                   : GetSysColor(COLOR_INACTIVECAPTIONTEXT);
     }
     if (gGlobalPrefs->useTabs) {
-        COLORREF col = GetControlBackgroundColor();
+        COLORREF col = ThemeControlBackgroundColor();
         dwm::SetCaptionColor(::GetParent(hwnd), col);
     }
 }
@@ -561,7 +561,7 @@ static void DrawCaptionButton(DRAWITEMSTRUCT* item, MainWindow* win) {
         }
         // draw the three lines
         // COLORREF c = win->caption->textColor;
-        COLORREF c = gCurrentTheme->window.textColor;
+        COLORREF c = ThemeWindowTextColor();
         u8 r, g, b;
         UnpackColor(c, r, g, b);
         float width = floor((float)rc.dy / 8.0f);

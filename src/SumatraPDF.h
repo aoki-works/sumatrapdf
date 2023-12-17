@@ -82,7 +82,6 @@ struct Flags;
 
 // all defined in SumatraPDF.cpp
 extern Flags* gCli;
-extern bool gDebugShowLinks;
 extern bool gShowFrameRate;
 
 extern const char* gPluginURL;
@@ -97,7 +96,8 @@ extern HCURSOR gCursorDrag;
 extern bool gCrashOnOpen;
 extern HWND gLastActiveFrameHwnd;
 
-extern bool gEnableLazyLoad;
+struct DocController;
+extern DocController* gMostRecentlyOpenedDoc;
 
 #define gPluginMode (gPluginURL != nullptr)
 
@@ -161,6 +161,10 @@ struct LoadArgs {
     // and rationalize all SaveSettings() calls
     bool noSavePrefs = false;
 
+    bool lazyLoad = false;
+    bool async = false;
+    bool activateExisting = false;
+
     DocController* ctrl = nullptr;
 
     FileArgs* fileArgs = nullptr;
@@ -173,9 +177,9 @@ struct LoadArgs {
 
 struct PasswordUI;
 
-MainWindow* LoadDocument(LoadArgs* args, bool lazyload, bool activateExisting);
-MainWindow* LoadDocumentFinish(LoadArgs* args, bool lazyload);
-void LoadDocumentAsync(LoadArgs* args, bool activateExisting);
+MainWindow* LoadDocument(LoadArgs* args);
+MainWindow* LoadDocumentFinish(LoadArgs* args);
+void LoadDocumentAsync(LoadArgs* args);
 MainWindow* CreateAndShowMainWindow(SessionData* data = nullptr);
 DocController* CreateControllerForEngineOrFile(EngineBase* engine, const char* path, PasswordUI* pwdUI,
                                                MainWindow* win);
@@ -197,3 +201,4 @@ bool DocIsSupportedFileType(Kind);
 char* GetLogFilePath();
 void ShowSavedAnnotationsNotification(HWND hwndParent, const char* path);
 void ShowSavedAnnotationsFailedNotification(HWND hwndParent, const char* path, const char* mupdfErr);
+void ShowErrorLoadingNotification(MainWindow* win, const char* path, bool noSavePrefs);

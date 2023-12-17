@@ -182,7 +182,7 @@ pdfpages_pages(fz_context *ctx, fz_output *out, char *filename, char *password, 
 			doc = pdf_open_document(ctx, filename);
 			if (pdf_needs_password(ctx, doc))
 				if (!pdf_authenticate_password(ctx, doc, password))
-					fz_throw(ctx, FZ_ERROR_GENERIC, "cannot authenticate password: %s", filename);
+					fz_throw(ctx, FZ_ERROR_ARGUMENT, "cannot authenticate password: %s", filename);
 
 			state = NO_INFO_GATHERED;
 		}
@@ -236,7 +236,7 @@ int pdfpages_main(int argc, char **argv)
 		ret = pdfpages_pages(ctx, fz_stdout(ctx), filename, password, &argv[fz_optind], argc-fz_optind);
 	fz_catch(ctx)
 	{
-		fz_log_error(ctx, fz_caught_message(ctx));
+		fz_report_error(ctx);
 		ret = 1;
 	}
 	fz_drop_context(ctx);

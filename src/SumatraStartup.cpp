@@ -220,7 +220,7 @@ static void SendMyselfDDE(const char* cmdA, HWND targetHwnd) {
         }
         // fall-through to DDEExecute if wasn't handled
     }
-    DDEExecute(PDFSYNC_DDE_SERVICE, PDFSYNC_DDE_TOPIC, cmd);
+    DDEExecute(kSumatraDdeServer, kSumatraDdeTopic, cmd);
 }
 
 // delegate file opening to a previously running instance by sending a DDE message
@@ -274,22 +274,44 @@ static void FlagsEnterFullscreen(const Flags& flags, MainWindow* win) {
     }
 }
 
+static void MaybeGoTo(MainWindow* win, const char* destName, int pageNumber) {
+    if (!win->IsDocLoaded()) {
+        return;
+    }
+    if (destName) {
+        win->linkHandler->GotoNamedDest(destName);
+        return;
+    }
+
+    if (pageNumber > 0) {
+        if (win->ctrl->ValidPageNo(pageNumber)) {
+            win->ctrl->GoToPage(pageNumber, false);
+        }
+    }
+}
+
+static void MaybeStartSearch(MainWindow* win, const char* searchTerm) {
+    if (!win || !searchTerm) {
+        return;
+    }
+    HwndSetText(win->hwndFindEdit, searchTerm);
+    bool wasModified = true;
+    bool showProgress = true;
+    FindTextOnThread(win, TextSearchDirection::Forward, searchTerm, wasModified, showProgress);
+}
+
 static MainWindow* LoadOnStartup(const char* filePath, const Flags& flags, bool isFirstWin) {
     LoadArgs args(filePath, nullptr);
     args.showWin = !(flags.printDialog && flags.exitWhenDone) && !gPluginMode;
-    MainWindow* win = LoadDocument(&args, false, false);
+    MainWindow* win = LoadDocument(&args);
     if (!win) {
         return win;
     }
 
-    if (win->IsDocLoaded() && flags.destName && isFirstWin) {
-        char* dest = flags.destName;
-        win->linkHandler->GotoNamedDest(dest);
-    } else if (win->IsDocLoaded() && flags.pageNumber > 0 && isFirstWin) {
-        if (win->ctrl->ValidPageNo(flags.pageNumber)) {
-            win->ctrl->GoToPage(flags.pageNumber, false);
-        }
+    if (isFirstWin) {
+        MaybeGoTo(win, flags.destName, flags.pageNumber);
     }
+
     bool ok = MaybeMakePluginWindow(win, flags.hwndPluginParent);
     if (!ok) {
         return nullptr;
@@ -318,11 +340,7 @@ static MainWindow* LoadOnStartup(const char* filePath, const Flags& flags, bool 
         int ret = win->AsFixed()->pdfSync->SourceToDoc(srcPath, flags.forwardSearchLine, 0, &page, rects);
         ShowForwardSearchResult(win, srcPath, flags.forwardSearchLine, 0, ret, page, rects);
     }
-    if (flags.search != nullptr) {
-        bool wasModified = true;
-        bool showProgress = true;
-        FindTextOnThread(win, TextSearchDirection::Forward, flags.search, wasModified, showProgress);
-    }
+    MaybeStartSearch(win, flags.search);
     return win;
 }
 
@@ -383,7 +401,8 @@ static void RestoreTabOnStartup(MainWindow* win, TabState* state, bool lazyLoad 
     if (lazyLoad) {
         args.tabState = state;
     }
-    if (!LoadDocument(&args, lazyLoad, false)) {
+    args.lazyLoad = lazyLoad;
+    if (!LoadDocument(&args)) {
         return;
     }
     WindowTab* tab = win->CurrentTab();
@@ -432,7 +451,7 @@ static bool SetupPluginMode(Flags& i) {
     // extract some command line arguments from the URL's hash fragment where available
     // see http://www.adobe.com/devnet/acrobat/pdfs/pdf_open_parameters.pdf#nameddest=G4.1501531
     if (i.pluginURL && str::FindChar(i.pluginURL, '#')) {
-        AutoFreeStr args(str::Dup(str::FindChar(i.pluginURL, '#') + 1));
+        TempStr args = str::DupTemp(str::FindChar(i.pluginURL, '#') + 1);
         str::TransCharsInPlace(args, "#", "&");
         StrVec parts;
         Split(parts, args, "&", true);
@@ -461,7 +480,7 @@ static void SetupCrashHandler() {
 static HWND FindPrevInstWindow(HANDLE* hMutex) {
     // create a unique identifier for this executable
     // (allows independent side-by-side installations)
-    char* exePath = GetExePathTemp();
+    TempStr exePath = GetExePathTemp();
     str::ToLowerInPlace(exePath);
     u32 hash = MurmurHash2(exePath, str::Len(exePath));
     TempStr mapId = str::FormatTemp("SumatraPDF-%08x", hash);
@@ -661,8 +680,8 @@ static void UpdateGlobalPrefs(const Flags& i) {
 // we're in installer mode if the name of the executable
 // has "install" string in it e.g. SumatraPDF-installer.exe
 static bool ExeHasNameOfInstaller() {
-    char* exePath = GetExePathTemp();
-    const char* exeName = path::GetBaseNameTemp(exePath);
+    TempStr exePath = GetExePathTemp();
+    TempStr exeName = path::GetBaseNameTemp(exePath);
     if (str::FindI(exeName, "uninstall")) {
         return false;
     }
@@ -686,7 +705,7 @@ static bool IsOurExeInstalled() {
     if (!installedDir.Get()) {
         return false;
     }
-    char* exeDir = GetExeDirTemp();
+    TempStr exeDir = GetExeDirTemp();
     return str::EqI(installedDir.Get(), exeDir);
 }
 
@@ -698,14 +717,14 @@ static bool IsInstallerButNotInstalled() {
 }
 
 static void CheckIsStoreBuild() {
-    char* exePath = GetExePathTemp();
-    const char* exeName = path::GetBaseNameTemp(exePath);
+    TempStr exePath = GetExePathTemp();
+    TempStr exeName = path::GetBaseNameTemp(exePath);
     if (str::FindI(exeName, "store")) {
         gIsStoreBuild = true;
         return;
     }
-    char* dir = path::GetDirTemp(exePath);
-    char* path = path::JoinTemp(dir, "AppxManifest.xml");
+    TempStr dir = path::GetDirTemp(exePath);
+    TempStr path = path::JoinTemp(dir, "AppxManifest.xml");
     if (file::Exists(path)) {
         gIsStoreBuild = true;
     }
@@ -932,7 +951,7 @@ static void LogDpiAwareness() {
 
 #if 0
 static void testLogf() {
-    const char* fileName = path::GetBaseNameTemp(__FILE__);
+    TempStr fileName = path::GetBaseNameTemp(__FILE__);
     WCHAR* gswin32c = L"this is a path";
     WCHAR* tmpFile = L"c:\foo\bar.txt";
     auto gswin = ToUtf8Temp(gswin32c);
@@ -951,6 +970,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     bool showStartPage = false;
     bool restoreSession = false;
     HANDLE hMutex = nullptr;
+    HWND existingInstanceHwnd = nullptr;
     HWND existingHwnd = nullptr;
     WindowTab* tabToSelect = nullptr;
     const char* logFilePath = nullptr;
@@ -1164,7 +1184,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
 
     gCrashOnOpen = flags.crashOnOpen;
 
-    GetDocumentColors(gRenderCache.textColor, gRenderCache.backgroundColor);
+    gRenderCache.textColor = ThemeDocumentColors(gRenderCache.backgroundColor);
     // logfa("retrieved doc colors in WinMain: 0x%x 0x%x\n", gRenderCache.textColor, gRenderCache.backgroundColor);
 
     gIsStartup = true;
@@ -1232,13 +1252,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     if(flags.userapp_dde_debug_topic != nullptr) {
         cpslab::USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_debug_topic);
     }
+    // only call FindPrevInstWindow() once
+    existingInstanceHwnd = FindPrevInstWindow(&hMutex);
 
     if (flags.printDialog || flags.stressTestPath || gPluginMode) {
         // TODO: pass print request through to previous instance?
     } else if (flags.reuseDdeInstance || flags.dde) {
         existingHwnd = FindWindow(FRAME_CLASS_NAME, nullptr);
     } else if (gGlobalPrefs->reuseInstance || gGlobalPrefs->useTabs) {
-        existingHwnd = FindPrevInstWindow(&hMutex);
+        existingHwnd = existingInstanceHwnd;
     }
 
     // call before creating first window and menu. Otherwise menu shortcuts will be missing
@@ -1267,7 +1289,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
             if (flags.inNewWindow) {
                 goto ContinueOpenWindow;
             } else {
-                HwndToForeground(existingHwnd);
+                // https://github.com/sumatrapdfreader/sumatrapdf/issues/3386
+                // e.g. when shift-click in taskbar, open a new window
+                SendMyselfDDE("[NewWindow]", existingHwnd);
+                goto Exit;
             }
         }
         goto Exit;
@@ -1279,8 +1304,13 @@ ContinueOpenWindow:
     // and also to keep TabState forever for lazy loading of tabs
     sessionData = gGlobalPrefs->sessionData;
     gGlobalPrefs->sessionData = new Vec<SessionData*>();
-    if (sessionData->size() > 0 && !gPluginURL) {
-        restoreSession = gGlobalPrefs->restoreSession;
+
+    restoreSession = gGlobalPrefs->restoreSession && (sessionData->size() > 0) && !gPluginMode;
+    if (!gGlobalPrefs->useTabs && (existingInstanceHwnd != nullptr)) {
+        // do not restore a session if tabs are disabled and SumatraPDF is already running
+        // TODO: maybe disable restoring if tabs are disabled?
+        restoreSession = false;
+        logf("not restoring a session because the same exe is already running and tabs are disabled\n");
     }
 
     showStartPage = !restoreSession && flags.fileNames.size() == 0 && gGlobalPrefs->rememberOpenedFiles &&
@@ -1302,10 +1332,11 @@ ContinueOpenWindow:
                     logf("WinMain: skipping RestoreTabOnStartup() because state->filePath is empty\n");
                     continue;
                 }
-                RestoreTabOnStartup(win, state, gEnableLazyLoad);
+                RestoreTabOnStartup(win, state, gGlobalPrefs->lazyLoading);
             }
             TabsSelect(win, data->tabIndex - 1);
-            if (gEnableLazyLoad) {
+            if (gGlobalPrefs->lazyLoading) {
+                // trigger loading of the document
                 ReloadDocument(win, false);
             }
         }
@@ -1328,7 +1359,11 @@ ContinueOpenWindow:
             PrintCurrentFile(win, flags.exitWhenDone);
         }
     }
-    SelectTabInWindow(tabToSelect);
+    if (tabToSelect) {
+        SelectTabInWindow(tabToSelect);
+        MaybeStartSearch(tabToSelect->win, flags.search);
+        MaybeGoTo(win, flags.destName, flags.pageNumber);
+    }
 
     nWithDde = (int)gDdeOpenOnStartup.size();
     if (nWithDde > 0) {
@@ -1429,7 +1464,7 @@ Exit:
     }
 
     DeleteCachedCursors();
-    DeleteObject(GetDefaultGuiFont());
+    DeleteCreatedFonts();
     DeleteBitmap(gBitmapReloadingCue);
 
     extern void CleanupEngineDjVu(); // in EngineDjVu.cpp

@@ -133,7 +133,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdFavoriteAdd, "Add Favorite")                                     \
     V(CmdFavoriteDel, "Delete Favorite")                                  \
     V(CmdFavoriteToggle, "Toggle Favorites")                              \
-    V(CmdDebugShowLinks, "Debug: Show Links")                             \
+    V(CmdToggleLinks, "Toggle Show Links")                                \
     V(CmdDebugCrashMe, "Debug: Crash Me")                                 \
     V(CmdDebugCorruptMemory, "Debug: Corrupt Memory")                     \
     V(CmdDebugDownloadSymbols, "Debug: Download Symbols")                 \
@@ -177,6 +177,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdSelectNextTheme, "Select next theme")                            \
     V(CmdSelectNets, " Select nets")                            \
     V(CmdSelectCells, "Select cells")                            \
+    V(CmdToggleFrequentlyRead, "Toggle Frequently Read")                  \
     V(CmdNone, "Do nothing")
 
 //V(CmdSelectAnnotation, "Select Annotation")                           \

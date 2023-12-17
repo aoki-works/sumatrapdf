@@ -59,12 +59,14 @@ bool IsCollapsed(ILayout* l) {
     return l->GetVisibility() == Visibility::Collapse;
 }
 
-RECT RectToRECT(const Rect r) {
-    LONG left = r.x;
-    LONG top = r.y;
-    LONG right = left + r.dx;
-    LONG bottom = top + r.dy;
-    return RECT{left, top, right, bottom};
+void PositionRB(const Rect& container, Rect& r) {
+    r.x = container.dx - r.dx;
+    r.y = container.dy - r.dy;
+}
+
+void MoveXY(Rect& r, int x, int y) {
+    r.x += x;
+    r.y += y;
 }
 
 int Clamp(int v, int vmin, int vmax) {
@@ -268,8 +270,12 @@ Kind LayoutBase::GetKind() {
 void LayoutBase::SetVisibility(Visibility newVisibility) {
     visibility = newVisibility;
 }
+
 Visibility LayoutBase::GetVisibility() {
     return visibility;
+}
+void LayoutBase::SetBounds(Rect bounds) {
+    lastBounds = bounds;
 }
 
 bool IsLayoutOfKind(ILayout* l, Kind kind) {

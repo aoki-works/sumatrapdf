@@ -51,7 +51,7 @@ struct NotificationWnd : ProgressUpdateUI, Wnd {
     bool WasCanceled() override;
 
     bool HasClose() const {
-        return (timeoutMs == 0) || (progressMsg != nullptr);
+        return true;
     }
 
     bool HasProgress() const {
@@ -163,12 +163,8 @@ int GetWndX(NotificationWnd* wnd) {
 }
 
 NotificationWnd::~NotificationWnd() {
-    auto fontToDelete = font;
     Destroy();
     str::Free(progressMsg);
-    if (false && fontToDelete) {
-        DeleteObject(fontToDelete);
-    }
 }
 
 HWND NotificationWnd::Create(const NotificationCreateArgs& args) {
@@ -330,13 +326,13 @@ void NotificationWnd::OnPaint(HDC hdcIn, PAINTSTRUCT* ps) {
 
     ScopedSelectObject fontPrev(hdc, font);
 
-    COLORREF colBg = gCurrentTheme->notifications.backgroundColor;
+    COLORREF colBg = ThemeNotificationsBackgroundColor();
     COLORREF colBorder = MkGray(0xdd);
-    COLORREF colTxt = gCurrentTheme->notifications.textColor;
+    COLORREF colTxt = ThemeNotificationsTextColor();
     if (highlight) {
-        colBg = gCurrentTheme->notifications.highlightColor;
+        colBg = ThemeNotificationsHighlightColor();
         colBorder = colBg;
-        colTxt = gCurrentTheme->notifications.highlightTextColor;
+        colTxt = ThemeNotificationsHighlightTextColor();
     }
     // COLORREF colBg = MkRgb(0xff, 0xff, 0x5c);
     // COLORREF colBg = MkGray(0xff);
@@ -358,7 +354,7 @@ void NotificationWnd::OnPaint(HDC hdcIn, PAINTSTRUCT* ps) {
     char* text = HwndGetTextTemp(hwnd);
     uint format = DT_SINGLELINE | DT_NOPREFIX;
     RECT rTmp = ToRECT(rTxt);
-    HdcDrawText(hdc, text, -1, &rTmp, format);
+    HdcDrawText(hdc, text, &rTmp, format);
 
     if (HasClose()) {
         Point curPos = HwndGetCursorPos(hwnd);
@@ -378,7 +374,7 @@ void NotificationWnd::OnPaint(HDC hdcIn, PAINTSTRUCT* ps) {
         rc = rProgress;
         int progressWidth = rc.dx;
 
-        COLORREF col = gCurrentTheme->notifications.progressColor;
+        COLORREF col = ThemeNotificationsProgressColor();
         Pen pen(GdiRgbFromCOLORREF(col));
         grc = {rc.x, rc.y, rc.dx, rc.dy};
         graphics.DrawRectangle(&pen, grc);

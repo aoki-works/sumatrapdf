@@ -292,6 +292,7 @@ var (
 				"after UseDefaultState in FileStates)"),
 		mkField("RestoreSession", Bool, true,
 			"if true and SessionData isn't empty, that session will be restored at startup").setExpert(),
+		mkField("LazyLoading", Bool, true, "when restoring session, delay loading of documents until their tab is selected").setVersion("3.6"),
 		mkField("UiLanguage", String, nil,
 			"ISO code of the current UI language").setDoc("[ISO code](langs.html) of the current UI language"),
 		mkField("InverseSearchCmdLine", String, nil,
@@ -307,7 +308,7 @@ var (
 		mkArray("Shortcuts", keyboardShortcut, "custom keyboard shortcuts"),
 		mkField("EscToExit", Bool, false,
 			"if true, Esc key closes SumatraPDF").setExpert(),
-		mkField("ReuseInstance", Bool, false,
+		mkField("ReuseInstance", Bool, true,
 			"if true, we'll always open files using existing SumatraPDF process").setExpert(),
 		mkField("ReloadModifiedDocuments", Bool, true,
 			"if true, a document will be reloaded automatically whenever it's changed "+
@@ -330,6 +331,7 @@ var (
 				"in the document"),
 		mkField("NoHomeTab", Bool, true,    // CPS Lab
 			"if true, doesn't open Home tab"),
+		mkField("ShowLinks", Bool, false, "if true we draw a blue border around links in the document").setVersion("3.6"),
 		mkField("TocDy", Int, 0,
 			"if both favorites and bookmarks parts of sidebar are visible, this is "+
 				"the height of bookmarks (table of contents) part"),

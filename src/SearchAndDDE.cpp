@@ -99,7 +99,7 @@ void FindFirst(MainWindow* win) {
 
     // Don't show a dialog if we don't have to - use the Toolbar instead
     if (gGlobalPrefs->showToolbar && !win->isFullScreen && !win->presentation) {
-        if (IsFocused(win->hwndFindEdit)) {
+        if (HwndIsFocused(win->hwndFindEdit)) {
             SendMessageW(win->hwndFindEdit, WM_SETFOCUS, 0, 0);
         } else {
             SetFocus(win->hwndFindEdit);
@@ -507,7 +507,7 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
     if (!file::Exists(srcfilepath)) {
         // if the source file is missing, check if it's been moved to the same place as
         // the PDF document (which happens if all files are moved together)
-        char* altsrcpath = path::GetDirTemp(tab->filePath);
+        TempStr altsrcpath = path::GetDirTemp(tab->filePath);
         altsrcpath = path::JoinTemp(altsrcpath, path::GetBaseNameTemp(srcfilepath));
         if (!str::Eq(altsrcpath, srcfilepath) && file::Exists(altsrcpath)) {
             srcfilepath.SetCopy(altsrcpath);
@@ -607,21 +607,6 @@ void ShowForwardSearchResult(MainWindow* win, const char* fileName, int line, in
 
 // DDE commands handling
 
-LRESULT OnDDEInitiate(HWND hwnd, WPARAM wp, LPARAM lp) {
-    ATOM aServer = GlobalAddAtom(PDFSYNC_DDE_SERVICE);
-    ATOM aTopic = GlobalAddAtom(PDFSYNC_DDE_TOPIC);
-
-    if (LOWORD(lp) == aServer && HIWORD(lp) == aTopic) {
-        SendMessageW((HWND)wp, WM_DDE_ACK, (WPARAM)hwnd, MAKELPARAM(aServer, 0));
-    } else {
-        GlobalDeleteAtom(aServer);
-        GlobalDeleteAtom(aTopic);
-    }
-    return 0;
-}
-
-// DDE commands
-
 /*
 Forward search (synchronization) DDE command
 
@@ -633,7 +618,7 @@ if pdffilepath is provided, the file will be opened if no open window can be fou
 if newwindow = 1 then a new window is created even if the file is already open
 if focus = 1 then the focus is set to the window
 */
-static const char* HandleSyncCmd(const char* cmd, DDEACK& ack) {
+static const char* HandleSyncCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, srcFile;
     BOOL line = 0, col = 0, newWindow = 0, setFocus = 0;
     const char* next = str::Parse(cmd, "[ForwardSearch(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &srcFile, &line, &col);
@@ -662,7 +647,7 @@ static const char* HandleSyncCmd(const char* cmd, DDEACK& ack) {
         // if not then open it
         if (newWindow || !win) {
             LoadArgs args(pdfFile, !newWindow ? win : nullptr);
-            win = LoadDocument(&args, false, false);
+            win = LoadDocument(&args);
         } else if (!win->IsDocLoaded()) {
             ReloadDocument(win, false);
         }
@@ -671,7 +656,7 @@ static const char* HandleSyncCmd(const char* cmd, DDEACK& ack) {
         win = FindMainWindowBySyncFile(srcFile, true);
         if (win && newWindow) {
             LoadArgs args(win->CurrentTab()->filePath, nullptr);
-            win = LoadDocument(&args, false, false);
+            win = LoadDocument(&args);
         }
     }
 
@@ -684,7 +669,6 @@ static const char* HandleSyncCmd(const char* cmd, DDEACK& ack) {
         return next;
     }
 
-    ack.fAck = 1;
     int page;
     Vec<Rect> rects;
     int ret = dm->pdfSync->SourceToDoc(srcFile, line, col, &page, rects);
@@ -693,6 +677,7 @@ static const char* HandleSyncCmd(const char* cmd, DDEACK& ack) {
         win->Focus();
     }
 
+    *ack = true;
     return next;
 }
 
@@ -701,7 +686,7 @@ Search DDE command
 
 [Search("<pdffile>","<search-term>")]
 */
-static const char* HandleSearchCmd(const char* cmd, DDEACK& ack) {
+static const char* HandleSearchCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile;
     AutoFreeStr term;
     const char* next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &pdfFile, &term);
@@ -725,12 +710,12 @@ static const char* HandleSearchCmd(const char* cmd, DDEACK& ack) {
             return next;
         }
     }
-    ack.fAck = 1;
     bool wasModified = true;
     bool showProgress = true;
     HwndSetText(win->hwndFindEdit, term);
     FindTextOnThread(win, TextSearchDirection::Forward, term, wasModified, showProgress);
     win->Focus();
+    *ack = true;
     return next;
 }
 
@@ -739,7 +724,7 @@ Open file DDE Command
 
 [Open("<pdffilepath>"[,<newwindow>,<setfocus>,<forcerefresh>])]
 */
-static const char* HandleOpenCmd(const char* cmd, DDEACK& ack) {
+static const char* HandleOpenCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile;
     int newWindow = 0;
     BOOL setFocus = 0;
@@ -777,7 +762,8 @@ static const char* HandleOpenCmd(const char* cmd, DDEACK& ack) {
             win = FindMainWindowByHwnd(gLastActiveFrameHwnd);
         }
         LoadArgs args(pdfFile, win);
-        win = LoadDocument(&args, false, false);
+        args.activateExisting = !IsCtrlPressed();
+        win = LoadDocument(&args);
     } else if (!win->IsDocLoaded()) {
         ReloadDocument(win, false);
         forceRefresh = 0;
@@ -791,7 +777,6 @@ static const char* HandleOpenCmd(const char* cmd, DDEACK& ack) {
         return next;
     }
 
-    ack.fAck = 1;
     if (forceRefresh) {
         ReloadDocument(win, true);
     }
@@ -799,6 +784,7 @@ static const char* HandleOpenCmd(const char* cmd, DDEACK& ack) {
         win->Focus();
     }
 
+    *ack = true;
     return next;
 }
 
@@ -809,7 +795,7 @@ DDE command: jump to named destination in an already opened document.
 e.g.:
 [GoToNamedDest("c:\file.pdf", "chapter.1")]
 */
-static const char* HandleGotoCmd(const char* cmd, DDEACK& ack) {
+static const char* HandleGotoCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, destName;
     const char* next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &pdfFile, &destName);
     if (!next) {
@@ -828,8 +814,8 @@ static const char* HandleGotoCmd(const char* cmd, DDEACK& ack) {
     }
 
     win->linkHandler->GotoNamedDest(destName);
-    ack.fAck = 1;
     win->Focus();
+    *ack = true;
     return next;
 }
 
@@ -840,7 +826,7 @@ DDE command: jump to a page in an already opened document.
 
 eg: [GoToPage("c:\file.pdf",37)]
 */
-static const char* HandlePageCmd(HWND, const char* cmd, DDEACK& ack) {
+static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
     AutoFreeStr pdfFile;
     uint page = 0;
     const char* next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &pdfFile, &page);
@@ -867,7 +853,7 @@ static const char* HandlePageCmd(HWND, const char* cmd, DDEACK& ack) {
     }
 
     win->ctrl->GoToPage(page, true);
-    ack.fAck = 1;
+    *ack = true;
     win->Focus();
     return next;
 }
@@ -875,26 +861,26 @@ static const char* HandlePageCmd(HWND, const char* cmd, DDEACK& ack) {
 /*
 Set view mode and zoom level DDE command
 
-[SetView("<pdffilepath>", "<view mode>", <zoom level>[, <scrollX>, <scrollY>])]
+[SetView("<filepath>", "<view mode>", <zoom level>[, <scrollX>, <scrollY>])]
 
 eg: [SetView("c:\file.pdf", "book view", -2)]
 
 use -1 for kZoomFitPage, -2 for kZoomFitWidth and -3 for kZoomFitContent
 */
-static const char* HandleSetViewCmd(const char* cmd, DDEACK& ack) {
-    AutoFreeStr pdfFile, viewMode;
+static const char* HandleSetViewCmd(const char* cmd, bool* ack) {
+    AutoFreeStr filePath, viewMode;
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
-    const char* next = str::Parse(cmd, "[SetView(\"%s\",%? \"%s\",%f)]", &pdfFile, &viewMode, &zoom);
+    const char* next = str::Parse(cmd, "[SetView(\"%s\",%? \"%s\",%f)]", &filePath, &viewMode, &zoom);
     if (!next) {
         next =
-            str::Parse(cmd, "[SetView(\"%s\",%? \"%s\",%f,%d,%d)]", &pdfFile, &viewMode, &zoom, &scroll.x, &scroll.y);
+            str::Parse(cmd, "[SetView(\"%s\",%? \"%s\",%f,%d,%d)]", &filePath, &viewMode, &zoom, &scroll.x, &scroll.y);
     }
     if (!next) {
         return nullptr;
     }
 
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    MainWindow* win = FindMainWindowByFile(filePath, true);
     if (!win) {
         return next;
     }
@@ -921,8 +907,76 @@ static const char* HandleSetViewCmd(const char* cmd, DDEACK& ack) {
         ss.y = scroll.y;
         dm->SetScrollState(ss);
     }
+    *ack = true;
+    return next;
+}
 
-    ack.fAck = 1;
+constexpr const char* kNewWindow = "[NewWindow]";
+/*
+Open new window.
+
+[NewWindow]
+*/
+static const char* HandleNewWindowCmd(const char* cmd, bool* ack) {
+    if (!str::StartsWith(cmd, kNewWindow)) {
+        return nullptr;
+    }
+    const char* next = cmd + str::Len(kNewWindow);
+    CreateAndShowMainWindow(nullptr);
+    *ack = true;
+    return next;
+}
+
+/*
+[GetFileState("<filepath>")]
+[GetFileState()]
+[GetFileState]
+Return info about document <filepath> or currently viewed document if no
+<filepath> given.
+Returns info in the format:
+
+path: c:\file.pdf
+zoom: 1.34
+view: continuous
+sumver: 3.5
+
+i.e. multiple lines, each line is
+key: value
+This should make parsing easy:
+* split by `\n' to get the lines
+* split each line by ':' to get key and value
+
+Returns:
+error: <error message>
+if file doesn't exist or no opened file
+*/
+static const char* HandleGetFileStateCmd(HWND hwnd, const char* cmd, bool* ack, str::Str& res) {
+    AutoFreeStr filePath;
+    const char* next = str::Parse(cmd, "[GetFileState(\"%s\")]", &filePath);
+    if (!next) {
+        next = str::Parse(cmd, "[GetFileState()]");
+    }
+    if (!next) {
+        next = str::Parse(cmd, "[GetFileState]");
+    }
+    if (!next) {
+        return nullptr;
+    }
+
+    res.Append("error: hello");
+    MainWindow* win = FindMainWindowByFile(filePath, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+
+    res.Append("error: hello");
+    *ack = true;
     return next;
 }
 
@@ -933,7 +987,7 @@ static const char* HandleSetViewCmd(const char* cmd, DDEACK& ack) {
 [GetText("<pdffilepath>", "<textFileName>", "<pageNo>")]
 [GetText("<pdffilepath>", "<textFileName>)]
 */
-static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
+static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile ;
     AutoFreeStr txtFile ;
     float zoom = kInvalidZoom;
@@ -964,7 +1018,7 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
     } else {
         cpslab::SaveTextToFile(win, txtFile.Get());
     }
-    ack.fAck = 1;
+    *ack = true;
     return next;
 }
 
@@ -975,7 +1029,7 @@ static const char* HandleGetTextCmd(const char* cmd, DDEACK& ack) {
 [MarkWord("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
 [MarkWord("<pdffilepath>", "<Text>", "<Text>", ...)]
 */
-static const char* HandleMarkWordCmd(const char* cmd, DDEACK& ack)
+static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
 {
     AutoFreeStr pdfFile ;
     float zoom = kInvalidZoom;
@@ -1039,7 +1093,7 @@ static const char* HandleMarkWordCmd(const char* cmd, DDEACK& ack)
     */
     // ---------------------------------------------
     MainWindowRerender(win);
-    ack.fAck = 1;
+    *ack = true;
     return next;
 }
 
@@ -1048,7 +1102,7 @@ static const char* HandleMarkWordCmd(const char* cmd, DDEACK& ack)
  CPS Lab.
 [Select("<pdffilepath>", "<Category>", "<Text>", "<Text>", ...)]
 */
-static const char* HandleSelectCmd(const char* cmd, DDEACK& ack)
+static const char* HandleSelectCmd(const char* cmd, bool* ack)
 {
     AutoFreeStr pdfFile ;
     float zoom = kInvalidZoom;
@@ -1087,7 +1141,7 @@ static const char* HandleSelectCmd(const char* cmd, DDEACK& ack)
     tab->markers->selectWords(win, words);
     // ---------------------------------------------
     MainWindowRerender(win);
-    ack.fAck = 1;
+    *ack = true;
     return next;
 }
 
@@ -1096,7 +1150,7 @@ static const char* HandleSelectCmd(const char* cmd, DDEACK& ack)
 Handle all commands as defined in Commands.h
 eg: [CmdClose]
 */
-static const char* HandleCmdCommand(HWND hwnd, const char* cmd, DDEACK& ack) {
+static const char* HandleCmdCommand(HWND hwnd, const char* cmd, bool* ack) {
     AutoFreeStr cmdName;
     const char* next = str::Parse(cmd, "[%s]", &cmdName);
     if (!next) {
@@ -1113,80 +1167,159 @@ static const char* HandleCmdCommand(HWND hwnd, const char* cmd, DDEACK& ack) {
     }
     logfa("HandleCmdCommand: sending %d (%s) command\n", cmdId, cmdName.Get());
     SendMessageW(win->hwndFrame, WM_COMMAND, cmdId, 0);
-    ack.fAck = 1;
+    *ack = true;
     return next;
 }
 
-static void HandleDdeCmds(HWND hwnd, const char* cmd, DDEACK& ack) {
+// returns true if did handle a message
+static bool HandleExecuteCmds(HWND hwnd, const char* cmd) {
+    gMostRecentlyOpenedDoc = nullptr;
+
+    bool didHandle = false;
     while (!str::IsEmpty(cmd)) {
         {
-            logf("HandleDdeCmds: '%s'\n", cmd);
+            logf("HandleExecuteCmds: '%s'\n", cmd);
         }
 
-        const char* nextCmd = HandleSyncCmd(cmd, ack);
+        const char* nextCmd = HandleSyncCmd(cmd, &didHandle);
         if (!nextCmd) {
-            nextCmd = HandleOpenCmd(cmd, ack);
+            nextCmd = HandleOpenCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleGotoCmd(cmd, ack);
+            nextCmd = HandleGotoCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandlePageCmd(hwnd, cmd, ack);
+            nextCmd = HandlePageCmd(hwnd, cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleSetViewCmd(cmd, ack);
+            nextCmd = HandleSetViewCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleSearchCmd(cmd, ack);
+            nextCmd = HandleSearchCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleGetTextCmd(cmd, ack);
+            nextCmd = HandleGetTextCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleMarkWordCmd(cmd, ack);
+            nextCmd = HandleMarkWordCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleSelectCmd(cmd, ack);
+            nextCmd = HandleSelectCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleCmdCommand(hwnd, cmd, ack);
+            nextCmd = HandleCmdCommand(hwnd, cmd, &didHandle);
         }
+        if (!nextCmd) {
+            nextCmd = HandleNewWindowCmd(cmd, &didHandle);
+        }
+        if (!nextCmd) {
+            // forwards compatibility: ignore unknown commands (maybe from newer version)
+            AutoFreeStr tmp;
+            nextCmd = str::Parse(cmd, "%s]", &tmp);
+        }
+        cmd = nextCmd;
+    }
+    return didHandle;
+}
+
+static bool HandleRequestCmds(HWND hwnd, const char* cmd, str::Str& rsp) {
+    bool didHandle = false;
+    while (!str::IsEmpty(cmd)) {
+        {
+            logf("HandleRequestCmds: '%s'\n", cmd);
+        }
+
+        const char* nextCmd = HandleGetFileStateCmd(hwnd, cmd, &didHandle, rsp);
         if (!nextCmd) {
             AutoFreeStr tmp;
             nextCmd = str::Parse(cmd, "%s]", &tmp);
         }
         cmd = nextCmd;
     }
+    return didHandle;
+}
+
+LRESULT OnDDERequest(HWND hwnd, WPARAM wp, LPARAM lp) {
+    // window that is sending us the message
+    HWND hwndClient = (HWND)wp;
+
+    UINT fmt = LOWORD(lp);
+    switch (fmt) {
+        case CF_TEXT:
+        case CF_UNICODETEXT:
+            // we handle those
+            break;
+        default:
+            logf("OnDDERequest: invalid fmt '%s'\n", (int)fmt);
+            return 0;
+    }
+    ATOM a = HIWORD(lp);
+    TempStr cmd = AtomToStrTemp(a);
+    if (!cmd) {
+        return 0;
+    }
+
+    str::Str str;
+    bool didHandle = HandleRequestCmds(hwnd, cmd, str);
+    if (!didHandle) {
+        str.Set("error: unknoqn command");
+    }
+
+    void* data;
+    int cbData;
+    if (fmt == CF_TEXT) {
+        data = (void*)str.Get();
+        cbData = str.isize() + 1;
+    } else if (fmt == CF_UNICODETEXT) {
+        TempWStr tmp = ToWStrTemp(str.Get());
+        data = (void*)tmp;
+        cbData = (str::Len(tmp) + 1) * 2;
+    } else {
+        CrashIf(true);
+        return 0;
+    }
+
+    int cbDdeData = sizeof(DDEDATA);
+    u8* res = (u8*)Allocator::AllocZero(GetTempAllocator(), cbDdeData + cbData);
+    DDEDATA* ddeData = (DDEDATA*)res;
+    ddeData->fRelease = 1; // tell client to free HGLOBAL
+    ddeData->cfFormat = fmt;
+    memcpy(res + cbDdeData, data, cbData);
+
+    HGLOBAL h = MemToHGLOBAL(res, cbDdeData + cbData, GMEM_MOVEABLE | GMEM_DDESHARE);
+    LPARAM lpres = MAKELPARAM(h, a);
+    PostMessageW(hwndClient, WM_DDE_DATA, (WPARAM)hwnd, lpres);
+    return 0;
 }
 
 LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
-    UINT_PTR lo = 0, hi = 0;
-    if (!UnpackDDElParam(WM_DDE_EXECUTE, lp, &lo, &hi)) {
-        return 0;
-    }
+    HWND hwndClient = (HWND)wp;
+    HGLOBAL hCommand = (HGLOBAL)lp;
+    bool isUnicode = IsWindowUnicode(hwndClient);
 
+    TempStr cmd = HGLOBALToStrTemp((HGLOBAL)hCommand, isUnicode);
+    bool didHandle = HandleExecuteCmds(hwnd, cmd);
     DDEACK ack{};
-    LPVOID command = GlobalLock((HGLOBAL)hi);
-    if (!command) {
-        return 0;
-    }
+    ack.fAck = didHandle ? 0 : 1;
+    LPARAM lpres = PackDDElParam(WM_DDE_ACK, *(WORD*)&ack, (UINT_PTR)hCommand);
+    PostMessageW(hwndClient, WM_DDE_ACK, (WPARAM)hwnd, lpres);
+    return 0;
+}
 
-    char* cmd;
-    if (IsWindowUnicode((HWND)wp)) {
-        cmd = ToUtf8Temp((WCHAR*)command);
+LRESULT OnDDEInitiate(HWND hwnd, WPARAM wp, LPARAM lp) {
+    ATOM aServer = GlobalAddAtom(kSumatraDdeServer);
+    ATOM aTopic = GlobalAddAtom(kSumatraDdeTopic);
+
+    if (LOWORD(lp) == aServer && HIWORD(lp) == aTopic) {
+        SendMessageW((HWND)wp, WM_DDE_ACK, (WPARAM)hwnd, MAKELPARAM(aServer, 0));
     } else {
-        cmd = (char*)command;
+        GlobalDeleteAtom(aServer);
+        GlobalDeleteAtom(aTopic);
     }
-    HandleDdeCmds(hwnd, cmd, ack);
-    GlobalUnlock((HGLOBAL)hi);
-
-    lp = ReuseDDElParam(lp, WM_DDE_EXECUTE, WM_DDE_ACK, *(WORD*)&ack, hi);
-    PostMessageW((HWND)wp, WM_DDE_ACK, (WPARAM)hwnd, lp);
     return 0;
 }
 
 LRESULT OnDDETerminate(HWND hwnd, WPARAM wp, LPARAM) {
-    // Respond with another WM_DDE_TERMINATE message
     PostMessageW((HWND)wp, WM_DDE_TERMINATE, (WPARAM)hwnd, 0L);
     return 0;
 }
@@ -1202,8 +1335,20 @@ LRESULT OnCopyData(HWND hwnd, WPARAM wp, LPARAM lp) {
         return FALSE;
     }
 
-    DDEACK ack{};
-    char* cmd = ToUtf8Temp(cmdW);
-    HandleDdeCmds(hwnd, cmd, ack);
-    return ack.fAck ? TRUE : FALSE;
+    TempStr cmd = ToUtf8Temp(cmdW);
+    bool didHandle = HandleExecuteCmds(hwnd, cmd);
+    return didHandle ? TRUE : FALSE;
 }
+
+#if 0
+bool RegisterDDeServer() {
+    DWORD ddeInst = (DWORD)-1;
+    auto err = DdeInitializeW(&ddeInst, nullptr, APPCMD_CLIENTONLY | CBF_FAIL_ADVISES, 0);
+    if (err != DMLERR_NO_ERROR) {
+        // Handle initialization error
+        logf("RegisterDDeServer: DdeInitializeW() failed with '%d'\n", (int)err);
+        return false;
+    }
+    return true;
+}
+#endif

@@ -46,7 +46,7 @@
 #include "uia/Provider.h"
 #include "SearchAndDDE.h"
 #include "Selection.h"
-#include "SumatraAbout.h"
+#include "HomePage.h"
 #include "Tabs.h"
 #include "Toolbar.h"
 #include "Translations.h"
@@ -622,13 +622,6 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
 static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
     // lf("Left button clicked on %d %d", x, y);
     auto isLeft = bit::IsMaskSet(key, (WPARAM)MK_LBUTTON);
-    if (isLeft && (win->presentation || win->isFullScreen)) {
-        // note: before 3.5 used to turn 2 pages
-        // OnMouseLeftButtonDown(win, x, y, key);
-        ExitFullScreen(win);
-        return;
-    }
-
     if (gGlobalPrefs->enableTeXEnhancements && isLeft) {
         bool dontSelect = OnInverseSearch(win, x, y);
         if (dontSelect) {
@@ -638,6 +631,13 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
 
     Point mousePos = Point(x, y);
     DisplayModel* dm = win->AsFixed();
+    bool isOverText = dm->IsOverText(mousePos);
+    if (!isOverText && isLeft && (win->presentation || win->isFullScreen)) {
+        // note: before 3.5 used to turn 2 pages
+        // OnMouseLeftButtonDown(win, x, y, key);
+        ExitFullScreen(win);
+        return;
+    }
     int elementPageNo = -1;
     IPageElement* pageEl = dm->GetElementAtPos(mousePos, &elementPageNo);
 
@@ -649,7 +649,7 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         return;
     }
 #endif
-    if (dm->IsOverText(mousePos)) {
+    if (isOverText) {
         int pageNo = dm->GetPageNoByPoint(mousePos);
         if (win->ctrl->ValidPageNo(pageNo)) {
             PointF pt = dm->CvtFromScreen(mousePos, pageNo);
@@ -781,13 +781,13 @@ static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect& pageRect, bool 
 
     // Draw shadow
     if (!presentation) {
-        ScopedGdiObj<HBRUSH> brush(CreateSolidBrush(COL_PAGE_SHADOW));
+        AutoDeleteBrush brush = CreateSolidBrush(COL_PAGE_SHADOW);
         FillRect(hdc, &shadow.ToRECT(), brush);
     }
 
     // Draw frame
     ScopedGdiObj<HPEN> pe(CreatePen(PS_SOLID, 1, presentation ? TRANSPARENT : COL_PAGE_FRAME));
-    ScopedGdiObj<HBRUSH> brush(CreateSolidBrush(gCurrentTheme->window.backgroundColor));
+    AutoDeleteBrush brush = CreateSolidBrush(gCurrentTheme->window.backgroundColor);
     SelectObject(hdc, pe);
     SelectObject(hdc, brush);
     Rectangle(hdc, frame.x, frame.y, frame.x + frame.dx, frame.y + frame.dy);
@@ -795,7 +795,7 @@ static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect& pageRect, bool 
 #else
 static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect&, bool) {
     AutoDeletePen pen(CreatePen(PS_NULL, 0, 0));
-    auto col = GetMainWindowBackgroundColor();
+    auto col = ThemeMainWindowBackgroundColor();
     AutoDeleteBrush brush(CreateSolidBrush(col));
     ScopedSelectPen restorePen(hdc, pen);
     ScopedSelectObject restoreBrush(hdc, brush);
@@ -805,13 +805,13 @@ static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect&, bool) {
 
 /* debug code to visualize links (can block while rendering) */
 static void DebugShowLinks(DisplayModel* dm, HDC hdc) {
-    if (!gDebugShowLinks) {
+    if (!gGlobalPrefs->showLinks) {
         return;
     }
 
     Rect viewPortRect(Point(), dm->GetViewPort().Size());
-    HPEN pen = CreatePen(PS_SOLID, 1, RGB(0x00, 0xff, 0xff));
-    HGDIOBJ oldPen = SelectObject(hdc, pen);
+
+    ScopedSelectObject autoPen(hdc, CreatePen(PS_SOLID, 1, RGB(0x00, 0x00, 0xff)), true);
 
     for (int pageNo = dm->PageCount(); pageNo >= 1; --pageNo) {
         PageInfo* pageInfo = dm->GetPageInfo(pageNo);
@@ -828,18 +828,14 @@ static void DebugShowLinks(DisplayModel* dm, HDC hdc) {
             Rect rect = dm->CvtToScreen(pageNo, el->GetRect());
             Rect isect = viewPortRect.Intersect(rect);
             if (!isect.IsEmpty()) {
+                isect.Inflate(2, 2);
                 DrawRect(hdc, isect);
             }
         }
     }
 
-    DeletePen(SelectObject(hdc, oldPen));
-
-    if (dm->GetZoomVirtual() == kZoomFitContent) {
+    if (false && dm->GetZoomVirtual() == kZoomFitContent) {
         // also display the content box when fitting content
-        pen = CreatePen(PS_SOLID, 1, RGB(0xff, 0x00, 0xff));
-        oldPen = SelectObject(hdc, pen);
-
         for (int pageNo = dm->PageCount(); pageNo >= 1; --pageNo) {
             PageInfo* pageInfo = dm->GetPageInfo(pageNo);
             if (!pageInfo->shown || 0.0 == pageInfo->visibleRatio) {
@@ -850,8 +846,6 @@ static void DebugShowLinks(DisplayModel* dm, HDC hdc) {
             Rect rect = dm->CvtToScreen(pageNo, cbbox);
             DrawRect(hdc, rect);
         }
-
-        DeletePen(SelectObject(hdc, oldPen));
     }
 }
 
@@ -917,11 +911,11 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
     auto gcols = gGlobalPrefs->fixedPageUI.gradientColors;
     auto nGCols = gcols->size();
     if (paintOnBlackWithoutShadow) {
-        ScopedGdiObj<HBRUSH> brush(CreateSolidBrush(WIN_COL_BLACK));
+        AutoDeleteBrush brush = CreateSolidBrush(WIN_COL_BLACK);
         FillRect(hdc, rcArea, brush);
     } else if (0 == nGCols) {
-        auto col = GetMainWindowBackgroundColor();
-        ScopedGdiObj<HBRUSH> brush(CreateSolidBrush(col));
+        auto col = ThemeMainWindowBackgroundColor();
+        AutoDeleteBrush brush = CreateSolidBrush(col);
         FillRect(hdc, rcArea, brush);
     } else {
         COLORREF colors[3];
@@ -1007,9 +1001,9 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
         int renderDelay = gRenderCache.Paint(hdc, bounds, dm, pageNo, pageInfo, &renderOutOfDateCue);
 
         if (renderDelay != 0) {
-            AutoDeleteFont fontRightTxt(CreateSimpleFont(hdc, "MS Shell Dlg", 14));
+            HFONT fontRightTxt = CreateSimpleFont(hdc, "MS Shell Dlg", 14);
             HGDIOBJ hPrevFont = SelectObject(hdc, fontRightTxt);
-            auto col = gCurrentTheme->window.textColor;
+            auto col = ThemeWindowTextColor();
             SetTextColor(hdc, col);
             if (renderDelay != RENDER_DELAY_FAILED) {
                 if (renderDelay < REPAINT_MESSAGE_DELAY_IN_MS) {
@@ -1594,10 +1588,10 @@ static void OnPaintError(MainWindow* win) {
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(win->hwndCanvas, &ps);
 
-    AutoDeleteFont fontRightTxt(CreateSimpleFont(hdc, "MS Shell Dlg", 14));
+    HFONT fontRightTxt = CreateSimpleFont(hdc, "MS Shell Dlg", 14);
     HGDIOBJ hPrevFont = SelectObject(hdc, fontRightTxt);
-    auto bgCol = GetMainWindowBackgroundColor();
-    ScopedGdiObj<HBRUSH> bgBrush(CreateSolidBrush(bgCol));
+    auto bgCol = ThemeMainWindowBackgroundColor();
+    AutoDeleteBrush bgBrush = CreateSolidBrush(bgCol);
     FillRect(hdc, &ps.rcPaint, bgBrush);
     // TODO: should this be "Error opening %s"?
     auto tab = win->CurrentTab();
@@ -1756,7 +1750,7 @@ static void OnDropFiles(MainWindow* win, HDROP hDrop, bool dragFinish) {
             win = CreateAndShowMainWindow(nullptr);
             args.win = win;
         }
-        LoadDocumentAsync(&args, false);
+        LoadDocumentAsync(&args);
     }
 }
 

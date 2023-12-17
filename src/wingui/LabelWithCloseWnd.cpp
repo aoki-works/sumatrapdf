@@ -41,7 +41,7 @@ static void PaintHDC(LabelWithCloseWnd* w, HDC hdc, const PAINTSTRUCT& ps) {
     }
     char* s = HwndGetTextTemp(w->hwnd);
     RECT rs{x, y, x + cr.dx, y + cr.dy};
-    HdcDrawText(hdc, s, (int)str::Len(s), &rs, format);
+    HdcDrawText(hdc, s, &rs, format);
 
     // Text might be too long and invade close button area. We just re-paint
     // the background, which is not the pretties but works.
@@ -166,7 +166,7 @@ HWND LabelWithCloseWnd::Create(const LabelWithCloseCreateArgs& args) {
 
 Size LabelWithCloseWnd::GetIdealSize() const {
     char* s = HwndGetTextTemp(this->hwnd);
-    Size size = TextSizeInHwnd(this->hwnd, s);
+    Size size = HwndMeasureText(this->hwnd, s);
     int btnDx = DpiScale(this->hwnd, kCloseBtnDx);
     int btnDy = DpiScale(this->hwnd, kCloseBtnDy);
     size.dx += btnDx;

@@ -15,7 +15,7 @@ struct ChmModel : DocController {
     const char* GetFilePath() const override;
     const char* GetDefaultFileExt() const override;
     int PageCount() const override;
-    char* GetProperty(DocumentProperty prop) override;
+    TempStr GetPropertyTemp(DocumentProperty prop) override;
 
     // page navigation (stateful)
     int CurrentPageNo() const override;
@@ -87,7 +87,7 @@ struct ChmModel : DocController {
     PoolAllocator poolAlloc;
 
     bool Load(const char* fileName);
-    void DisplayPage(const char* pageUrl);
+    bool DisplayPage(const char* pageUrl);
 
     ChmCacheEntry* FindDataForUrl(const char* url) const;
 

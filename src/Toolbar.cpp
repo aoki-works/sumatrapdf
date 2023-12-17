@@ -50,7 +50,6 @@ static int kButtonSpacingX = 4;
 
 // distance between label and edit field
 constexpr int kTextPaddingRight = 6;
-constexpr int kPageBoxDx = 40;
 
 struct ToolbarButtonInfo {
     /* index in the toolbar bitmap (-1 for separators) */
@@ -243,6 +242,26 @@ void UpdateToolbarButtonsToolTipsForWindow(MainWindow* win) {
     }
 }
 
+static void SetToolbarInfoText(MainWindow* win, const char* s) {
+    HWND hwnd = win->hwndTbInfoText;
+    HwndSetText(hwnd, s);
+    Size size = HwndMeasureText(hwnd, s);
+
+    bool hide = size.dx == 0;
+    SendMessageW(hwnd, TB_HIDEBUTTON, CmdInfoText, hide);
+    if (hide) {
+        MoveWindow(hwnd, 0, 0, 0, 0, TRUE);
+        return;
+    }
+
+    TbSetButtonDx(win->hwndToolbar, CmdInfoText, size.dx);
+    RECT r{};
+    TbGetRect(win->hwndToolbar, CmdFindMatch, &r);
+    int x = r.right + DpiScale(win->hwndToolbar, 10);
+    int y = (r.bottom - size.dy) / 2;
+    MoveWindow(hwnd, x, y, size.dx, size.dy, TRUE);
+}
+
 constexpr LPARAM kStateEnabled = (LPARAM)MAKELONG(1, 0);
 constexpr LPARAM kStateDisabled = (LPARAM)MAKELONG(0, 0);
 
@@ -267,10 +286,10 @@ void ToolbarUpdateStateForWindow(MainWindow* win, bool setButtonsVisibility) {
     if (setButtonsVisibility && NeedsFindUI(win)) {
         UpdateToolbarFindText(win);
     }
-    const WCHAR* msg = L"";
+    const char* msg = "";
     DisplayModel* dm = win->AsFixed();
     if (dm && EngineHasUnsavedAnnotations(dm->GetEngine())) {
-        //msg = _TR("You have unsaved annotations");
+        //msg = _TRA("You have unsaved annotations");
     }
     SetToolbarInfoText(win, msg);
 }
@@ -283,7 +302,7 @@ void ShowOrHideToolbar(MainWindow* win) {
         ShowWindow(win->hwndReBar, SW_SHOW);
     } else {
         // Move the focus out of the toolbar
-        if (IsFocused(win->hwndFindEdit) || IsFocused(win->hwndPageEdit)) {
+        if (HwndIsFocused(win->hwndFindEdit) || HwndIsFocused(win->hwndPageEdit)) {
             SetFocus(win->hwndFrame);
         }
         ShowWindow(win->hwndReBar, SW_HIDE);
@@ -292,8 +311,11 @@ void ShowOrHideToolbar(MainWindow* win) {
 }
 
 void UpdateFindbox(MainWindow* win) {
-    SetWindowStyle(win->hwndFindBg, SS_WHITERECT, win->IsDocLoaded());
-    SetWindowStyle(win->hwndPageBg, SS_WHITERECT, win->IsDocLoaded());
+    if (!ThemeColorizeControls()) {
+        // this looks ugly in dark themes i.e. non-default i.e. non-colorized
+        SetWindowStyle(win->hwndFindBg, SS_WHITERECT, win->IsDocLoaded());
+        SetWindowStyle(win->hwndPageBg, SS_WHITERECT, win->IsDocLoaded());
+    }
 
     InvalidateRect(win->hwndToolbar, nullptr, TRUE);
     UpdateWindow(win->hwndToolbar);
@@ -309,13 +331,13 @@ void UpdateFindbox(MainWindow* win) {
 
 LRESULT CALLBACK BgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass,
                                 DWORD_PTR dwRefData) {
-    if (WM_ERASEBKGND == uMsg && gCurrentTheme->colorizeControls) {
+    if (WM_ERASEBKGND == uMsg && ThemeColorizeControls()) {
         HDC hdc = (HDC)wParam;
         RECT rect;
         GetClientRect(hWnd, &rect);
-        SetTextColor(hdc, gCurrentTheme->window.textColor);
-        SetBkColor(hdc, GetControlBackgroundColor());
-        auto bg = CreateSolidBrush(GetControlBackgroundColor());
+        SetTextColor(hdc, ThemeWindowTextColor());
+        SetBkColor(hdc, ThemeControlBackgroundColor());
+        auto bg = CreateSolidBrush(ThemeControlBackgroundColor());
         FillRect(hdc, &rect, bg);
         DeleteObject(bg);
         return 1;
@@ -345,7 +367,7 @@ static LRESULT CALLBACK WndProcToolbar(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         if ((win->hwndFindBg != hStatic && win->hwndPageBg != hStatic) || theme::IsAppThemed()) {
             // Set color used in "Page:" and "Find:" labels
             auto col = RGB(0x00, 0x00, 0x00);
-            SetTextColor(hdc, gCurrentTheme->window.textColor);
+            SetTextColor(hdc, ThemeWindowTextColor());
             SetBkMode(hdc, TRANSPARENT);
             return (LRESULT)win->brControlBgColor;
         }
@@ -453,7 +475,7 @@ void UpdateToolbarFindText(MainWindow* win) {
         return;
     }
 
-    const WCHAR* text = _TR("Find:");
+    const char* text = _TRA("Find:");
     HwndSetText(win->hwndFindLabel, text);
 
     Rect findWndRect = WindowRect(win->hwndFindBg);
@@ -465,7 +487,7 @@ void UpdateToolbarFindText(MainWindow* win) {
     int currX = r.right + DpiScale(win->hwndToolbar, 10);
     int currY = (r.bottom - findWndRect.dy) / 2;
 
-    Size size = TextSizeInHwnd(win->hwndFindLabel, text);
+    Size size = HwndMeasureText(win->hwndFindLabel, text);
     size.dx += DpiScale(win->hwndFrame, kTextPaddingRight);
     size.dx += DpiScale(win->hwndFrame, kButtonSpacingX);
 
@@ -483,26 +505,6 @@ void UpdateToolbarFindText(MainWindow* win) {
 
     dx = size.dx + findWndRect.dx + 12;
     TbSetButtonDx(win->hwndToolbar, CmdFindFirst, dx);
-}
-
-void SetToolbarInfoText(MainWindow* win, const WCHAR* s) {
-    HWND hwnd = win->hwndTbInfoText;
-    HwndSetText(hwnd, s);
-    Size size = TextSizeInHwnd(hwnd, s);
-
-    bool hide = size.dx == 0;
-    SendMessageW(hwnd, TB_HIDEBUTTON, CmdInfoText, hide);
-    if (hide) {
-        MoveWindow(hwnd, 0, 0, 0, 0, TRUE);
-        return;
-    }
-
-    TbSetButtonDx(win->hwndToolbar, CmdInfoText, size.dx);
-    RECT r{};
-    TbGetRect(win->hwndToolbar, CmdFindMatch, &r);
-    int x = r.right + DpiScale(win->hwndToolbar, 10);
-    int y = (r.bottom - size.dy) / 2;
-    MoveWindow(hwnd, x, y, size.dx, size.dy, TRUE);
 }
 
 void UpdateToolbarState(MainWindow* win) {
@@ -554,7 +556,7 @@ void UpdateToolbarState(MainWindow* win) {
 }
 
 static void CreateFindBox(MainWindow* win, HFONT hfont, int iconDy) {
-    int findBoxDx = DpiScale(win->hwndFrame, 160);
+    int findBoxDx = HwndMeasureText(win->hwndFrame, "this is a story of my", hfont).dx;
     HMODULE hmod = GetModuleHandleW(nullptr);
     HWND p = win->hwndToolbar;
     DWORD style = WS_VISIBLE | WS_CHILD | WS_BORDER;
@@ -599,7 +601,7 @@ static void CreateInfoText(MainWindow* win, HFONT font) {
     SetWindowFont(labelInfo, font, FALSE);
 
     win->hwndTbInfoText = labelInfo;
-    SetToolbarInfoText(win, L"");
+    SetToolbarInfoText(win, "");
 }
 
 static WNDPROC DefWndProcPageBox = nullptr;
@@ -648,11 +650,11 @@ static LRESULT CALLBACK WndProcPageBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 }
 
 void UpdateToolbarPageText(MainWindow* win, int pageCount, bool updateOnly) {
-    const WCHAR* text = _TR("Page:");
+    const char* text = _TRA("Page:");
     if (!updateOnly) {
         HwndSetText(win->hwndPageLabel, text);
     }
-    Size size = TextSizeInHwnd(win->hwndPageLabel, text);
+    Size size = HwndMeasureText(win->hwndPageLabel, text);
     size.dx += DpiScale(win->hwndFrame, kTextPaddingRight);
     size.dx += DpiScale(win->hwndFrame, kButtonSpacingX);
 
@@ -679,12 +681,12 @@ void UpdateToolbarPageText(MainWindow* win, int pageCount, bool updateOnly) {
     } else {
         txt = str::FormatTemp(" (%d / %d)", win->ctrl->CurrentPageNo(), pageCount);
         TempStr txt2 = str::FormatTemp(" (%d / %d)", pageCount, pageCount);
-        size2 = TextSizeInHwnd(win->hwndPageTotal, txt2);
+        size2 = HwndMeasureText(win->hwndPageTotal, txt2);
     }
 
     HwndSetText(win->hwndPageTotal, txt);
     if (0 == size2.dx) {
-        size2 = TextSizeInHwnd(win->hwndPageTotal, txt);
+        size2 = HwndMeasureText(win->hwndPageTotal, txt);
     }
     size2.dx += DpiScale(win->hwndFrame, kTextPaddingRight);
     size2.dx += DpiScale(win->hwndFrame, kButtonSpacingX);
@@ -739,7 +741,7 @@ void UpdateToolbarPageText(MainWindow* win, int pageCount, bool updateOnly) {
 static void CreatePageBox(MainWindow* win, HFONT font, int iconDy) {
     auto hwndFrame = win->hwndFrame;
     auto hwndToolbar = win->hwndToolbar;
-    int boxWidth = DpiScale(hwndFrame, kPageBoxDx);
+    int boxWidth = HwndMeasureText(hwndFrame, "99999", font).dx;
     DWORD style = WS_VISIBLE | WS_CHILD;
     auto h = GetModuleHandle(nullptr);
     int dx = boxWidth;
@@ -835,8 +837,9 @@ void CreateToolbar(MainWindow* win) {
     // tbMetrics.dwMask = TBMF_PAD;
     tbMetrics.dwMask = TBMF_BUTTONSPACING;
     TbGetMetrics(hwndToolbar, &tbMetrics);
+    int yPad = DpiScale(win->hwndFrame, 2);
     tbMetrics.cxPad += DpiScale(win->hwndFrame, 14);
-    tbMetrics.cyPad += DpiScale(win->hwndFrame, 2);
+    tbMetrics.cyPad += yPad;
     tbMetrics.cxButtonSpacing += DpiScale(win->hwndFrame, kButtonSpacingX);
     // tbMetrics.cyButtonSpacing += DpiScale(win->hwndFrame, 4);
     TbSetMetrics(hwndToolbar, &tbMetrics);
@@ -897,13 +900,19 @@ void CreateToolbar(MainWindow* win) {
     int defFontSize = GetSizeOfDefaultGuiFont();
     // 18 was the default toolbar size, we want to scale the fonts in proportion
     int newSize = (defFontSize * gGlobalPrefs->toolbarSize) / kDefaultIconSize;
+    int maxFontSize = iconSize - yPad * 2 - 2; // -2 determined empirically
+    if (newSize > maxFontSize) {
+        logfa("CreateToolbar: setting toolbar font size to %d (scaled was %d, default size: %d)\n", maxFontSize,
+              newSize, defFontSize);
+        newSize = maxFontSize;
+    } else {
+        logfa("CreateToolbar: setting toolbar font size to %d (default size: %d)\n", newSize, defFontSize);
+    }
     auto font = GetDefaultGuiFontOfSize(newSize);
 
     CreatePageBox(win, font, iconSize);
     CreateFindBox(win, font, iconSize);
     CreateInfoText(win, font);
-
-    // TODO: leaking font
 
     UpdateToolbarPageText(win, -1);
     UpdateToolbarFindText(win);

@@ -42,7 +42,7 @@ struct pdf_js
 
 FZ_NORETURN static void rethrow(pdf_js *js)
 {
-	js_newerror(js->imp, fz_caught_message(js->ctx));
+	js_newerror(js->imp, fz_convert_error(js->ctx, NULL));
 	js_throw(js->imp);
 }
 
@@ -1053,7 +1053,7 @@ static pdf_js *pdf_new_js(fz_context *ctx, pdf_document *doc)
 		/* Initialise the javascript engine, passing the fz_context for use in memory allocation. */
 		js->imp = js_newstate(pdf_js_alloc, ctx, 0);
 		if (!js->imp)
-			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot initialize javascript engine");
+			fz_throw(ctx, FZ_ERROR_LIBRARY, "cannot initialize javascript engine");
 
 		/* Also set our pdf_js context, so we can retrieve it in callbacks. */
 		js_setcontext(js->imp, js);
@@ -1062,9 +1062,9 @@ static pdf_js *pdf_new_js(fz_context *ctx, pdf_document *doc)
 		js->console_user = js->ctx;
 
 		if (declare_dom(js))
-			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot initialize dom interface");
+			fz_throw(ctx, FZ_ERROR_LIBRARY, "cannot initialize dom interface");
 		if (preload_helpers(js))
-			fz_throw(ctx, FZ_ERROR_GENERIC, "cannot initialize helper functions");
+			fz_throw(ctx, FZ_ERROR_LIBRARY, "cannot initialize helper functions");
 	}
 	fz_catch(ctx)
 	{

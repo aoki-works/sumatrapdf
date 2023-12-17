@@ -720,6 +720,9 @@
     <ClCompile Include="..\src\previewer\PdfPreviewDll.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\src\previewer\PdfPreview.aps" />
+  </ItemGroup>
+  <ItemGroup>
     <ResourceCompile Include="..\src\previewer\PdfPreview.rc" />
   </ItemGroup>
   <ItemGroup>

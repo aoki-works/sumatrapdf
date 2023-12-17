@@ -294,9 +294,9 @@ def make_fncall( tu, cursor, return_type, fncall, out, refcheck_if):
                 uses_fz_context = True
                 break
     if uses_fz_context:
-        icg = rename.internal( 'context_get')
-        te = rename.internal( 'throw_exception')
-        out.write( f'    fz_context* auto_ctx = {icg}();\n')
+        context_get = rename.internal( 'context_get')
+        throw_exception = rename.internal( 'throw_exception')
+        out.write( f'    fz_context* auto_ctx = {context_get}();\n')
 
     # Output code that writes diagnostics to std::cerr if $MUPDF_trace is set.
     #
@@ -333,6 +333,8 @@ def make_fncall( tu, cursor, return_type, fncall, out, refcheck_if):
             # appears to kill std::cerr on Linux.
             out.write( f'        if ({arg.name}) std::cerr << " {arg.name}=\'" << {arg.name} << "\'";\n')
             out.write( f'        else std::cerr << " {arg.name}:null";\n')
+        elif parse.is_( arg.cursor.type, 'va_list'):
+            out.write( f'        std::cerr << " {arg.name}:va_list";\n')
         elif (0
                 or parse.is_( arg.cursor.type, 'signed char')
                 or parse.is_( arg.cursor.type, 'unsigned char')
@@ -406,7 +408,7 @@ def make_fncall( tu, cursor, return_type, fncall, out, refcheck_if):
         out.write(      f'            std::cerr << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__ << "(): fz_catch() has caught exception.\\n";\n')
         out.write(      f'        }}\n')
         out.write(      f'        #endif\n')
-        out.write(      f'        {te}(auto_ctx);\n')
+        out.write(      f'        {throw_exception}(auto_ctx);\n')
         out.write(      f'    }}\n')
 
     if uses_fz_context:
@@ -456,6 +458,8 @@ class Generated:
         self.swig_cpp = io.StringIO()
         self.swig_cpp_python = io.StringIO()
         self.swig_python = io.StringIO()
+        self.swig_python_exceptions = io.StringIO()
+        self.swig_python_set_error_classes = io.StringIO()
         self.swig_csharp = io.StringIO()
         self.virtual_fnptrs = []    # List of extra wrapper class names with virtual fnptrs.
         self.cppyy_extra = ''
@@ -478,7 +482,7 @@ def make_outparam_helper(
     Create extra C++, Python and C# code to make tuple-returning wrapper of
     specified function.
 
-    We write the code to Python code to generated.swig_python and C++ code to
+    We write Python code to generated.swig_python and C++ code to
     generated.swig_cpp.
     '''
     verbose = False
@@ -571,15 +575,15 @@ def make_python_class_method_outparam_override(
         tu,
         cursor,
         fnname,
-        out,
+        generated,
         structname,
         classname,
         return_type,
         ):
     '''
-    Writes Python code to <out> that monkey-patches Python function or method
-    to make it call the underlying MuPDF function's Python wrapper, which will
-    return out-params in a tuple.
+    Writes Python code to `generated.swig_python` that monkey-patches Python
+    function or method to make it call the underlying MuPDF function's Python
+    wrapper, which will return out-params in a tuple.
 
     This is necessary because C++ doesn't support out-params so the C++ API
     supports wrapper class out-params by taking references to a dummy wrapper
@@ -592,6 +596,7 @@ def make_python_class_method_outparam_override(
     to the underlying MuPDF function and wrap the out-params into wrapper
     classes.
     '''
+    out = generated.swig_python
     # Underlying fn.
     main_name = rename.ll_fn(cursor.spelling)
 
@@ -825,7 +830,7 @@ def function_wrapper(
     '''
     assert cursor.kind == state.clang.cindex.CursorKind.FUNCTION_DECL
     if cursor.type.is_function_variadic() and fnname != 'fz_warn':
-        jlib.log( 'Not writing low-level wrapper because variadic: {fnname=}')
+        jlib.log( 'Not writing low-level wrapper because variadic: {fnname=}', 1)
         return
 
     verbose = state.state_.show_details( fnname)
@@ -1005,6 +1010,16 @@ g_extra_declarations = textwrap.dedent(f'''
         C++ alternative to fz_search_page() that returns information in a std::vector.
         */
         FZ_FUNCTION std::vector<fz_search_page2_hit> fz_search_page2(fz_context* ctx, fz_document *doc, int number, const char *needle, int hit_max);
+
+        /**
+        C++ alternative to fz_string_from_text_language() that returns information in a std::string.
+        */
+        FZ_FUNCTION std::string fz_string_from_text_language2(fz_text_language lang);
+
+        /**
+        C++ alternative to fz_get_glyph_name() that returns information in a std::string.
+        */
+        FZ_FUNCTION std::string fz_get_glyph_name2(fz_context *ctx, fz_font *font, int glyph);
         ''')
 
 g_extra_definitions = textwrap.dedent(f'''
@@ -1108,6 +1123,20 @@ g_extra_definitions = textwrap.dedent(f'''
                 ret[i].mark = marks[i];
             }}
             return ret;
+        }}
+
+        FZ_FUNCTION std::string fz_string_from_text_language2(fz_text_language lang)
+        {{
+            char    str[8];
+            fz_string_from_text_language(str, lang);
+            return std::string(str);
+        }}
+
+        FZ_FUNCTION std::string fz_get_glyph_name2(fz_context *ctx, fz_font *font, int glyph)
+        {{
+            char name[32];
+            fz_get_glyph_name(ctx, font, glyph, name, sizeof(name));
+            return std::string(name);
         }}
         ''')
 
@@ -1471,15 +1500,18 @@ def make_function_wrappers(
                     if len( name) > fz_error_names_maxlen:
                         fz_error_names_maxlen = len( name)
 
-    def errors():
+    def errors(include_error_base=False):
         '''
         Yields (enum, typename, padding) for each error.
         E.g.:
-            enum=FZ_ERROR_MEMORY
+            enum=FZ_ERROR_SYSTEM
             typename=mupdf_error_memory
             padding='  '
         '''
-        for name in fz_error_names:
+        names = fz_error_names
+        if include_error_base:
+            names = ['BASE'] + names
+        for name in names:
             enum = f'{error_name_prefix}{name}'
             typename = rename.error_class( enum)
             padding = (fz_error_names_maxlen - len(name)) * ' '
@@ -1496,6 +1528,7 @@ def make_function_wrappers(
             {{
                 int         m_code;
                 std::string m_text;
+                mutable std::string m_what;
                 FZ_FUNCTION const char* what() const throw();
                 FZ_FUNCTION {base_name}(int code, const char* text);
             }};
@@ -1504,29 +1537,86 @@ def make_function_wrappers(
     out_exceptions_cpp.write( textwrap.dedent(
             f'''
             FZ_FUNCTION {base_name}::{base_name}(int code, const char* text)
-            : m_code(code)
+            :
+            m_code(code),
+            m_text(text)
             {{
-                char    code_text[32];
-                snprintf(code_text, sizeof(code_text), "%i", code);
-                m_text = std::string("code=") + code_text + ": " + text;
                 {refcheck_if}
                 if (s_trace_exceptions)
                 {{
-                    std::cerr << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__ << "(): {base_name}: m_code=" << m_code << " m_text: " << m_text << "\\n";
+                    std::cerr << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__ << "(): {base_name}: " << m_text << "\\n";
                 }}
                 #endif
             }};
 
             FZ_FUNCTION const char* {base_name}::what() const throw()
             {{
-                return m_text.c_str();
+                m_what = "code=" + std::to_string(m_code) + ": " + m_text;
+                return m_what.c_str();
             }};
 
             '''))
 
-    # Declare exception class for each FZ_ERROR_*.
-    #
+    # Generate SWIG Python code to allow conversion of our error class
+    # exceptions into equivalent Python exceptions.
+    error_classes_n = 0
     for enum, typename, padding in errors():
+        error_classes_n += 1
+
+    error_classes_n += 1    # Extra space for FzErrorBase.
+    generated.swig_python_exceptions.write( textwrap.dedent( f'''
+
+            void internal_set_error_classes(PyObject* classes);
+
+            %{{
+            /* A Python list of Error classes, [FzErrorNone, FzErrorMemory, FzErrorGeneric, ...]. */
+            static PyObject* s_error_classes[{error_classes_n}] = {{}};
+
+            /* Called on startup by mupdf.py, with a list of error classes
+            to be copied into s_error_classes. This will allow us to create
+            instances of these error classes in SWIG's `%exception ...`, so
+            Python code will see exceptions as instances of Python error
+            classes. */
+            void internal_set_error_classes(PyObject* classes)
+            {{
+                assert(PyList_Check(classes));
+                int n = PyList_Size(classes);
+                assert(n == {error_classes_n});
+                for (int i=0; i<n; ++i)
+                {{
+                    PyObject* class_ = PyList_GetItem(classes, i);
+                    s_error_classes[i] = class_;
+                }}
+            }}
+
+            /* Sets Python exception to a new mupdf.<name> object constructed
+            with `text`. */
+            void set_exception(PyObject* class_, int code, const std::string& text)
+            {{
+                PyObject* args = Py_BuildValue("(s)", text.c_str());
+                PyObject* instance = PyObject_CallObject(class_, args);
+                PyErr_SetObject(class_, instance);
+                Py_XDECREF(instance);
+                Py_XDECREF(args);
+            }}
+
+            /* Exception handler for swig-generated code. Uses internal
+            `throw;` to recover the current C++ exception then uses
+            `set_exception()` to set the current Python exception. Caller
+            should do `SWIG_fail;` after we return. */
+            void handle_exception()
+            {{
+                try
+                {{
+                    throw;
+                }}
+            '''
+            ))
+
+    # Declare exception class for each FZ_ERROR_*. Also append catch blocks for
+    # each of these exception classes to `handle_exception()`.
+    #
+    for i, (enum, typename, padding) in enumerate(errors()):
         out_exceptions_h.write( textwrap.dedent(
                 f'''
                 /** For `{enum}`. */
@@ -1536,6 +1626,108 @@ def make_function_wrappers(
                 }};
 
                 '''))
+
+        generated.swig_python_exceptions.write( textwrap.dedent( f'''
+                /**/
+                    catch (mupdf::{typename}& e)
+                    {{
+                        if (g_mupdf_trace_exceptions)
+                        {{
+                            std::cerr
+                                    #ifndef _WIN32
+                                    << __PRETTY_FUNCTION__ << ": "
+                                    #endif
+                                    << "Converting C++ std::exception mupdf::{typename} into Python exception: "
+                                    << "    e.m_code: " << e.m_code << "\\n"
+                                    << "    e.m_text: " << e.m_text << "\\n"
+                                    << "    e.what():" << e.what() << "\\n"
+                                    << "\\n";
+                        }}
+                        set_exception(s_error_classes[{i}], e.m_code, e.m_text);
+
+                    }}'''))
+
+    # Append less specific exception handling.
+    generated.swig_python_exceptions.write( textwrap.dedent( f'''
+                catch (mupdf::FzErrorBase& e)
+                {{
+                    if (g_mupdf_trace_exceptions)
+                    {{
+                        std::cerr
+                                #ifndef _WIN32
+                                << __PRETTY_FUNCTION__ << ": "
+                                #endif
+                                << "Converting C++ std::exception mupdf::{typename} into Python exception: "
+                                << "    e.m_code: " << e.m_code << "\\n"
+                                << "    e.m_text: " << e.m_text << "\\n"
+                                << "    e.what():" << e.what() << "\\n"
+                                << "\\n";
+                    }}
+                    set_exception(s_error_classes[{error_classes_n-1}], e.m_code, e.m_text);
+                }}
+                catch (std::exception& e)
+                {{
+                    if (g_mupdf_trace_exceptions)
+                    {{
+                        std::cerr
+                                #ifndef _WIN32
+                                << __PRETTY_FUNCTION__ << ": "
+                                #endif
+                                << "Converting C++ std::exception into Python exception: "
+                                << e.what()
+                                << "\\n";
+                    }}
+                    SWIG_Error(SWIG_RuntimeError, e.what());
+
+                }}
+                catch (...)
+                {{
+                    if (g_mupdf_trace_exceptions)
+                    {{
+                        std::cerr
+                                #ifndef _WIN32
+                                << __PRETTY_FUNCTION__ << ": "
+                                #endif
+                                << "Converting unknown C++ exception into Python exception."
+                                << "\\n";
+                    }}
+                    SWIG_Error(SWIG_RuntimeError, "Unknown exception");
+                }}
+            }}
+
+            %}}
+
+            %exception
+            {{
+                try
+                {{
+                    $action
+                }}
+                catch (...)
+                {{
+                    handle_exception();
+                    SWIG_fail;
+                }}
+            }}
+            '''))
+
+    generated.swig_python_set_error_classes.write( f'# Define __str()__ for each error/exception class, to use self.what().\n')
+    for enum, typename, padding in errors(include_error_base=1):
+        generated.swig_python_set_error_classes.write( f'{typename}.__str__ = lambda self: self.what()\n')
+
+    generated.swig_python_set_error_classes.write( textwrap.dedent( f'''
+            # This must be after the declaration of mupdf::FzError*
+            # classes in mupdf/exceptions.h and declaration of
+            # `internal_set_error_classes()`, otherwise generated code is
+            # before the declaration of the Python class or similar. */
+            internal_set_error_classes([
+            '''))
+    for enum, typename, padding in errors():
+        generated.swig_python_set_error_classes.write(f'        {typename},\n')
+    generated.swig_python_set_error_classes.write( textwrap.dedent( f'''
+                    FzErrorBase,
+                    ])
+            '''))
 
     # Define constructor for each exception class.
     #
@@ -1557,25 +1749,25 @@ def make_function_wrappers(
 
     # Generate function that throws an appropriate exception from a fz_context.
     #
-    te = rename.internal( 'throw_exception')
+    throw_exception = rename.internal( 'throw_exception')
     out_exceptions_h.write( textwrap.dedent(
             f'''
             /** Throw exception appropriate for error in `ctx`. */
-            FZ_FUNCTION void {te}(fz_context* ctx);
+            FZ_FUNCTION void {throw_exception}(fz_context* ctx);
 
             '''))
     out_exceptions_cpp.write( textwrap.dedent(
             f'''
-            FZ_FUNCTION void {te}(fz_context* ctx)
+            FZ_FUNCTION void {throw_exception}(fz_context* ctx)
             {{
-                int code = fz_caught(ctx);
+                int code;
+                const char* text = fz_convert_error(ctx, &code);
                 {refcheck_if}
                 if (s_trace_exceptions)
                 {{
                     std::cerr << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__ << "(): code=" << code << "\\n";
                 }}
                 #endif
-                const char* text = fz_caught_message(ctx);
                 {refcheck_if}
                 if (s_trace_exceptions)
                 {{
@@ -2611,7 +2803,7 @@ def function_wrapper_class_aware(
     '''
     verbose = state.state_.show_details( fnname)
     if fn_cursor and fn_cursor.type.is_function_variadic() and fnname != 'fz_warn':
-        jlib.log( 'Not writing class-aware wrapper because variadic: {fnname=}')
+        jlib.log( 'Not writing class-aware wrapper because variadic: {fnname=}', 1)
         return
     if verbose:
         jlib.log( 'Writing class-aware wrapper for {fnname=}')
@@ -2803,7 +2995,7 @@ def function_wrapper_class_aware(
                         # For now we just output a diagnostic, but eventually
                         # we might make C++ wrappers return a std::string here,
                         # free()-ing the char* before returning.
-                        jlib.log( '### Function name implies kept reference and returns char*:'
+                        jlib.log( 'Function name implies kept reference and returns char*:'
                                 ' {fnname}(): {fn_cursor.result_type.spelling=}'
                                 ' -> {return_pointee.spelling=}.'
                                 )
@@ -2934,7 +3126,7 @@ def function_wrapper_class_aware(
                 tu,
                 fn_cursor,
                 fnname,
-                generated.swig_python,
+                generated,
                 struct_name,
                 class_name,
                 return_type,
@@ -4544,8 +4736,11 @@ def cpp_source(
                     e = util.update_file_regress( text, self.filename, check_regression=cr)
                     jlib.log('util.update_file_regress() returned => {e}', 1)
                     if e:
-                        jlib.log('util.update_file_regress() => {e=}')
+                        jlib.log('util.update_file_regress() => {e=}', 1)
                         self.regressions = True
+                        jlib.log(f'File updated: {os.path.relpath(self.filename)}')
+                    else:
+                        jlib.log(f'File unchanged: {os.path.relpath(self.filename)}')
             def get( self):
                 return self.file.getvalue()
     else:
@@ -4740,9 +4935,10 @@ def cpp_source(
             for diagnostic2 in diagnostic.children:
                 show_clang_diagnostic( diagnostic2, depth + 1)
             jlib.log( '{" "*4*depth}{diagnostic}')
-        jlib.log( 'tu.diagnostics():')
-        for diagnostic in tu.diagnostics:
-            show_clang_diagnostic(diagnostic, 1)
+        if tu.diagnostics:
+            jlib.log( 'tu.diagnostics():')
+            for diagnostic in tu.diagnostics:
+                show_clang_diagnostic(diagnostic, 1)
 
     finally:
         if os.path.isfile( temp_h):
@@ -4975,7 +5171,7 @@ def cpp_source(
             # These fns do not work in windows.def, probably because they are
             # usually inline?
             #
-            jlib.log('Not adding to windows_def because static: {fnname}()')
+            jlib.log('Not adding to windows_def because static: {fnname}()', 1)
         elif fnname in (
                 'fz_lookup_metadata2',
                 'fz_md5_pixmap2',
@@ -4986,6 +5182,8 @@ def cpp_source(
                 'fz_md5_final2',
                 'fz_highlight_selection2',
                 'fz_search_page2',
+                'fz_string_from_text_language2',
+                'fz_get_glyph_name2',
                 ):
             # These are excluded from windows_def because are C++ so
             # we'd need to use the mangled name in. Instead we mark them

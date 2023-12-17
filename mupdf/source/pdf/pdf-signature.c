@@ -51,7 +51,7 @@ void pdf_write_digest(fz_context *ctx, fz_output *out, pdf_obj *byte_range, pdf_
 	fz_var(cstr);
 
 	if (hexdigest_length < 4)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "Bad parameters to pdf_write_digest");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "Bad parameters to pdf_write_digest");
 
 	len = (hexdigest_length - 2) / 2;
 
@@ -73,9 +73,9 @@ void pdf_write_digest(fz_context *ctx, fz_output *out, pdf_obj *byte_range, pdf_
 		digest = fz_malloc(ctx, len);
 		digest_len = signer->create_digest(ctx, signer, in, digest, len);
 		if (digest_len == 0)
-			fz_throw(ctx, FZ_ERROR_GENERIC, "signer provided no signature digest");
+			fz_throw(ctx, FZ_ERROR_ARGUMENT, "signer provided no signature digest");
 		if (digest_len > len)
-			fz_throw(ctx, FZ_ERROR_GENERIC, "signature digest larger than space for digest");
+			fz_throw(ctx, FZ_ERROR_ARGUMENT, "signature digest larger than space for digest");
 
 		fz_drop_stream(ctx, in);
 		in = NULL;
@@ -218,7 +218,7 @@ pdf_sign_signature_with_appearance(fz_context *ctx, pdf_annot *widget, pdf_pkcs7
 	pdf_document *doc = widget->page->doc;
 
 	if (pdf_widget_is_readonly(ctx, widget))
-		fz_throw(ctx, FZ_ERROR_GENERIC, "Signature is read only, it cannot be signed.");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "Signature is read only, it cannot be signed.");
 
 	pdf_begin_operation(ctx, doc, "Sign signature");
 
@@ -421,7 +421,7 @@ void pdf_clear_signature(fz_context *ctx, pdf_annot *widget)
 
 		pdf_begin_operation(ctx, widget->page->doc, "Clear Signature");
 		if (pdf_widget_is_readonly(ctx, widget))
-			fz_throw(ctx, FZ_ERROR_GENERIC, "Signature read only, it cannot be cleared.");
+			fz_throw(ctx, FZ_ERROR_ARGUMENT, "Signature read only, it cannot be cleared.");
 
 		pdf_xref_remove_unsaved_signature(ctx, ((pdf_annot *)widget)->page->doc, ((pdf_annot *)widget)->obj);
 
@@ -605,76 +605,4 @@ pdf_signature_error pdf_check_certificate(fz_context *ctx, pdf_pkcs7_verifier *v
 	fz_catch(ctx)
 		fz_rethrow(ctx);
 	return result;
-}
-
-int pdf_check_signature(fz_context *ctx, pdf_pkcs7_verifier *verifier, pdf_document *doc, pdf_obj *signature, char *ebuf, size_t ebufsize)
-{
-	int res = 0;
-
-	if (pdf_xref_obj_is_unsaved_signature(doc, signature))
-	{
-		fz_strlcpy(ebuf, "Signed but document yet to be saved.", ebufsize);
-		if (ebufsize > 0)
-			ebuf[ebufsize-1] = 0;
-		return 0;
-	}
-
-	fz_var(res);
-	fz_try(ctx)
-	{
-		if (pdf_signature_is_signed(ctx, doc, signature))
-		{
-			pdf_signature_error err;
-
-			err = pdf_check_digest(ctx, verifier, doc, signature);
-			if (err == PDF_SIGNATURE_ERROR_OKAY)
-				err = pdf_check_certificate(ctx, verifier, doc, signature);
-
-			fz_strlcpy(ebuf, pdf_signature_error_description(err), ebufsize);
-			res = (err == PDF_SIGNATURE_ERROR_OKAY);
-
-			switch (err)
-			{
-			case PDF_SIGNATURE_ERROR_SELF_SIGNED:
-			case PDF_SIGNATURE_ERROR_SELF_SIGNED_IN_CHAIN:
-			case PDF_SIGNATURE_ERROR_NOT_TRUSTED:
-			{
-				pdf_pkcs7_distinguished_name *dn;
-
-				dn = pdf_signature_get_signatory(ctx, verifier, doc, signature);
-				if (dn)
-				{
-					char *s = pdf_signature_format_distinguished_name(ctx, dn);
-					pdf_signature_drop_distinguished_name(ctx, dn);
-					fz_strlcat(ebuf, " (", ebufsize);
-					fz_strlcat(ebuf, s, ebufsize);
-					fz_free(ctx, s);
-				}
-				else
-				{
-					fz_strlcat(ebuf, "()", ebufsize);
-				}
-
-				break;
-			}
-			default:
-				break;
-			}
-		}
-		else
-		{
-			res = 0;
-			fz_strlcpy(ebuf, "Not signed.", ebufsize);
-		}
-	}
-	fz_catch(ctx)
-	{
-		res = 0;
-		fz_strlcpy(ebuf, fz_caught_message(ctx), ebufsize);
-	}
-
-	if (ebufsize > 0)
-		ebuf[ebufsize-1] = 0;
-
-	return res;
 }

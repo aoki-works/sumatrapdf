@@ -399,46 +399,17 @@ struct fz_story
 	fz_archive *zip;
 };
 
-enum
-{
-	FZ_HTML_STRUCT_UNKNOWN = 0,
-	FZ_HTML_STRUCT_BODY,
-	FZ_HTML_STRUCT_DIV,
-	FZ_HTML_STRUCT_SPAN,
-	FZ_HTML_STRUCT_BLOCKQUOTE,
-	FZ_HTML_STRUCT_P,
-	FZ_HTML_STRUCT_H1,
-	FZ_HTML_STRUCT_H2,
-	FZ_HTML_STRUCT_H3,
-	FZ_HTML_STRUCT_H4,
-	FZ_HTML_STRUCT_H5,
-	FZ_HTML_STRUCT_H6,
-	FZ_HTML_STRUCT_L,
-	FZ_HTML_STRUCT_LI,
-	FZ_HTML_STRUCT_TABLE,
-	FZ_HTML_STRUCT_TR,
-	FZ_HTML_STRUCT_TH,
-	FZ_HTML_STRUCT_TD,
-	FZ_HTML_STRUCT_THEAD,
-	FZ_HTML_STRUCT_TBODY,
-	FZ_HTML_STRUCT_TFOOT
-};
-
-
 struct fz_html_box_s
 {
 	unsigned int type : 3;
 	unsigned int is_first_flow : 1; /* for text-indent */
 	unsigned int markup_dir : 2;
-	unsigned int structure : 5;
+	unsigned int heading : 3;
 	unsigned int list_item : 21;
 
 	fz_html_box *up, *down, *next;
 
-#ifndef NDEBUG
-	const char *tag;
-#endif
-	const char *id, *href;
+	const char *tag, *id, *href;
 	const fz_css_style *style;
 
 	union {
@@ -561,6 +532,26 @@ fz_html *fz_parse_html5(fz_context *ctx, fz_html_font_set *htx, fz_archive *zip,
 fz_html *fz_parse_xhtml(fz_context *ctx, fz_html_font_set *htx, fz_archive *zip, const char *base_uri, fz_buffer *buf, const char *user_css);
 fz_html *fz_parse_mobi(fz_context *ctx, fz_html_font_set *htx, fz_archive *zip, const char *base_uri, fz_buffer *buf, const char *user_css);
 fz_html *fz_parse_txt(fz_context *ctx, fz_html_font_set *htx, fz_archive *zip, const char *base_uri, fz_buffer *buf, const char *user_css);
+fz_html *fz_parse_office(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const char *base_uri, fz_buffer *buf, const char *user_css);
+
+/* Defaults are all 0's. FIXME: Very subject to change. Possibly might be removed entirely. */
+typedef struct
+{
+	int output_page_numbers;
+	int output_sheet_names;
+	int output_cell_markers;
+	int output_cell_row_markers;
+	int output_cell_names;
+	int output_formatting;
+	int output_filenames;
+	int output_errors;
+}
+fz_office_to_html_opts;
+
+/*
+ * Returns html representation of office archive in `buf`.
+ */
+fz_buffer *fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buf, const char *user_css, fz_office_to_html_opts *opts);
 
 void fz_layout_html(fz_context *ctx, fz_html *html, float w, float h, float em);
 void fz_draw_html(fz_context *ctx, fz_device *dev, fz_matrix ctm, fz_html *html, int page);
@@ -584,8 +575,6 @@ fz_html_flow *fz_html_split_flow(fz_context *ctx, fz_pool *pool, fz_html_flow *f
 
 fz_archive *fz_extract_html_from_mobi(fz_context *ctx, fz_buffer *mobi);
 
-int fz_html_heading_from_struct(int structure);
-const char *fz_html_structure_to_string(int structure);
-fz_structure fz_html_structure_to_structure(int s);
+fz_structure fz_html_tag_to_structure(const char *tag);
 
 #endif

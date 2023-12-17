@@ -249,7 +249,7 @@ int pdfposter_main(int argc, char **argv)
 		doc = pdf_open_document(ctx, infile);
 		if (pdf_needs_password(ctx, doc))
 			if (!pdf_authenticate_password(ctx, doc, password))
-				fz_throw(ctx, FZ_ERROR_GENERIC, "cannot authenticate password: %s", infile);
+				fz_throw(ctx, FZ_ERROR_ARGUMENT, "cannot authenticate password: %s", infile);
 
 		decimatepages(ctx, doc);
 
@@ -259,7 +259,7 @@ int pdfposter_main(int argc, char **argv)
 		pdf_drop_document(ctx, doc);
 	fz_catch(ctx)
 	{
-		fz_log_error(ctx, fz_caught_message(ctx));
+		fz_report_error(ctx);
 		ret = 1;
 	}
 	fz_drop_context(ctx);

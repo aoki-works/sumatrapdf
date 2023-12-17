@@ -22,7 +22,7 @@
 #include "Commands.h"
 #include "Canvas.h"
 #include "Menu.h"
-#include "SumatraAbout.h"
+#include "HomePage.h"
 #include "Translations.h"
 #include "Theme.h"
 
@@ -31,11 +31,11 @@ static void OnPaintAbout(MainWindow* win) {
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(win->hwndCanvas, &ps);
 
-    auto txtCol = gCurrentTheme->window.textColor;
-    auto bgCol = GetMainWindowBackgroundColor();
+    auto txtCol = ThemeWindowTextColor();
+    auto bgCol = ThemeMainWindowBackgroundColor();
     if (HasPermission(Perm::SavePreferences | Perm::DiskAccess) && gGlobalPrefs->rememberOpenedFiles &&
         gGlobalPrefs->showStartPage) {
-        DrawStartPage(win, win->buffer->GetDC(), gFileHistory, txtCol, bgCol);
+        DrawHomePage(win, win->buffer->GetDC(), gFileHistory, txtCol, bgCol);
     } else {
         DrawAboutPage(win, win->buffer->GetDC());
     }
@@ -90,10 +90,10 @@ static void OnMouseLeftButtonUpAbout(MainWindow* win, int x, int y, WPARAM) {
         // assume it's a thumbnail of a document
         auto path = url;
         CrashIf(!path);
-        // ctrl forces always opening
-        bool activateExisting = !IsCtrlPressed();
         LoadArgs args(path, win);
-        LoadDocumentAsync(&args, activateExisting);
+        // ctrl forces always opening
+        args.activateExisting = !IsCtrlPressed();
+        LoadDocumentAsync(&args);
     }
     // SetFocus(win->hwndFrame);
 }

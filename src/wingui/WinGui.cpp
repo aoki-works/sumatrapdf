@@ -374,7 +374,7 @@ int Wnd::OnCreate(CREATESTRUCT*) {
     /*
     LOGFONT logfont;
     ::GetObject(::GetStockObject(DEFAULT_GUI_FONT), sizeof(logfont), &logfont);
-    font = ::CreateFontIndirect(&logfont);
+    font = ::CreateFontIndirectW(&logfont);
     ::SendMessage(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(font), FALSE);
     */
 
@@ -584,7 +584,7 @@ void Wnd::SetBounds(Rect bounds) {
     bounds.dx -= (insets.right + insets.left);
     bounds.dy -= (insets.bottom + insets.top);
 
-    auto r = RectToRECT(bounds);
+    auto r = ToRECT(bounds);
     ::MoveWindow(hwnd, &r);
     // TODO: optimize if doesn't change position
     ::InvalidateRect(hwnd, nullptr, TRUE);
@@ -1137,7 +1137,7 @@ void Wnd::SetFocus() const {
 }
 
 bool Wnd::IsFocused() const {
-    BOOL isFocused = ::IsFocused(hwnd);
+    BOOL isFocused = HwndIsFocused(hwnd);
     return tobool(isFocused);
 }
 
@@ -1857,7 +1857,7 @@ int ListBox::GetItemHeight(int idx) {
         // if failed for some reason, fallback to measuring text in default font
         // HFONT f = GetFont();
         HFONT f = GetDefaultGuiFont();
-        Size sz = HwndMeasureText(hwnd, L"A", f);
+        Size sz = HwndMeasureText(hwnd, "A", f);
         res = sz.dy;
     }
     return res;
@@ -2144,13 +2144,12 @@ void DropDown::SetItemsSeqStrings(const char* items) {
 
 Size DropDown::GetIdealSize() {
     HFONT hfont = GetWindowFont(hwnd);
-    Size s1 = TextSizeInHwnd(hwnd, L"Minimal", hfont);
+    Size s1 = HwndMeasureText(hwnd, "Minimal", hfont);
 
     int n = items.Size();
     for (int i = 0; i < n; i++) {
         char* s = items[i];
-        WCHAR* ws = ToWStrTemp(s);
-        Size s2 = TextSizeInHwnd(hwnd, ws, hfont);
+        Size s2 = HwndMeasureText(hwnd, s, hfont);
         s1.dx = std::max(s1.dx, s2.dx);
         s1.dy = std::max(s1.dy, s2.dy);
     }
@@ -3445,8 +3444,7 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
     gfx.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     gfx.SetPageUnit(UnitPixel);
 
-    Theme* theme = gCurrentTheme;
-    SolidBrush br(GdipCol(GetControlBackgroundColor()));
+    SolidBrush br(GdipCol(ThemeControlBackgroundColor()));
 
     Font f(hdc, GetDefaultGuiFont());
 
@@ -3463,8 +3461,8 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
     Rect r;
     Gdiplus::RectF rTxt;
 
-    COLORREF textColor = theme->window.textColor;
-    COLORREF tabBgSelected = GetControlBackgroundColor();
+    COLORREF textColor = ThemeWindowTextColor();
+    COLORREF tabBgSelected = ThemeControlBackgroundColor();
     COLORREF tabBgHighlight;
     COLORREF tabBgBackground;
     if (IsLightColor(tabBgSelected)) {
@@ -4015,7 +4013,6 @@ int TabsCtrl::InsertTab(int idx, TabInfo* tab) {
 }
 
 void TabsCtrl::SetTextAndTooltip(int idx, const char* text, const char* tooltip) {
-    logfa("TabsCtrl::SetTextAndTooltip: text: '%s', tooltip: '%s'\n", text, tooltip);
     TabInfo* tab = GetTab(idx);
     str::ReplaceWithCopy(&tab->text, text);
     str::ReplaceWithCopy(&tab->tooltip, tooltip);

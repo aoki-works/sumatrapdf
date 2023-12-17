@@ -222,15 +222,11 @@ cbz_load_page(fz_context *ctx, fz_document *doc_, int chapter, int number)
 	fz_buffer *buf = NULL;
 
 	if (number < 0 || number >= doc->page_count)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot load page %d", number);
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "invalid page number %d", number);
 
 	fz_var(page);
 
-	if (doc->arch)
-		buf = fz_read_archive_entry(ctx, doc->arch, doc->page[number]);
-	if (!buf)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "cannot load cbz page");
-
+	buf = fz_read_archive_entry(ctx, doc->arch, doc->page[number]);
 	fz_try(ctx)
 	{
 		page = fz_new_derived_page(ctx, cbz_page, doc_);
@@ -288,6 +284,9 @@ cbz_open_document_with_stream(fz_context *ctx, fz_stream *file)
 
 static const char *cbz_extensions[] =
 {
+#ifdef HAVE_LIBARCHIVE
+	"cbr",
+#endif
 	"cbt",
 	"cbz",
 	"tar",
@@ -297,7 +296,13 @@ static const char *cbz_extensions[] =
 
 static const char *cbz_mimetypes[] =
 {
+#ifdef HAVE_LIBARCHIVE
+	"application/vnd.comicbook-rar",
+#endif
 	"application/vnd.comicbook+zip",
+#ifdef HAVE_LIBARCHIVE
+	"application/x-cbr",
+#endif
 	"application/x-cbt",
 	"application/x-cbz",
 	"application/x-tar",
