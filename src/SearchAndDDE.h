@@ -33,9 +33,4 @@ void FindTextOnThread(MainWindow* win, TextSearchDirection direction, const char
 
 extern bool gIsStartup;
 extern StrVec gDdeOpenOnStartup;
-extern WCHAR* PDFSYNC_DDE_SERVICE;
-extern WCHAR* PDFSYNC_DDE_TOPIC;
-extern WCHAR* USERAPP_DDE_SERVICE;
-extern WCHAR* USERAPP_DDE_TOPIC;
-extern WCHAR* USERAPP_DDE_DEBUG_TOPIC;
 

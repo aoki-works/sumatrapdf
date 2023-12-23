@@ -50,8 +50,6 @@
 
 bool gIsStartup = false;
 StrVec gDdeOpenOnStartup;
-WCHAR* PDFSYNC_DDE_SERVICE = nullptr;
-WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
 Kind kNotifGroupFindProgress = "findProgress";
 
 
@@ -1307,8 +1305,10 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
 }
 
 LRESULT OnDDEInitiate(HWND hwnd, WPARAM wp, LPARAM lp) {
-    ATOM aServer = GlobalAddAtom(kSumatraDdeServer);
-    ATOM aTopic = GlobalAddAtom(kSumatraDdeTopic);
+    //ATOM aServer = GlobalAddAtom(kSumatraDdeServer);
+    //ATOM aTopic = GlobalAddAtom(kSumatraDdeTopic);
+    ATOM aServer = GlobalAddAtom(cpslab::PDFSYNC_DDE_SERVICE);
+    ATOM aTopic = GlobalAddAtom(cpslab::PDFSYNC_DDE_TOPIC);
 
     if (LOWORD(lp) == aServer && HIWORD(lp) == aTopic) {
         SendMessageW((HWND)wp, WM_DDE_ACK, (WPARAM)hwnd, MAKELPARAM(aServer, 0));

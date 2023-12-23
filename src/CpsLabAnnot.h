@@ -16,6 +16,8 @@ class Markers;
 extern WCHAR* USERAPP_DDE_SERVICE;
 extern WCHAR* USERAPP_DDE_TOPIC;
 extern WCHAR* USERAPP_DDE_DEBUG_TOPIC;
+extern WCHAR* PDFSYNC_DDE_SERVICE;
+extern WCHAR* PDFSYNC_DDE_TOPIC;
 
 extern void SaveWordsToFile(MainWindow* win, const char* fname);
 extern void SaveTextToFile(MainWindow* win, const char* fname);

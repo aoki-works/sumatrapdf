@@ -220,7 +220,8 @@ static void SendMyselfDDE(const char* cmdA, HWND targetHwnd) {
         }
         // fall-through to DDEExecute if wasn't handled
     }
-    DDEExecute(kSumatraDdeServer, kSumatraDdeTopic, cmd);
+    //DDEExecute(kSumatraDdeServer, kSumatraDdeTopic, cmd);
+    DDEExecute(cpslab::PDFSYNC_DDE_SERVICE, cpslab::PDFSYNC_DDE_TOPIC, cmd);
 }
 
 // delegate file opening to a previously running instance by sending a DDE message
@@ -1234,13 +1235,13 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
 
     // DDE Server/Topic name for PdfSync
     if(flags.pdfsync_dde_service != nullptr) {
-        PDFSYNC_DDE_SERVICE = strconv::Utf8ToWstr(flags.pdfsync_dde_service);
+        cpslab::PDFSYNC_DDE_SERVICE = strconv::Utf8ToWstr(flags.pdfsync_dde_service);
     }
-    logf("PDFSYNC_DDE_SERVICE : '%ls'\n", PDFSYNC_DDE_SERVICE);
+    // logf("PDFSYNC_DDE_SERVICE : '%ls'\n", PDFSYNC_DDE_SERVICE);
     if(flags.pdfsync_dde_topic != nullptr) {
-        PDFSYNC_DDE_TOPIC = strconv::Utf8ToWstr(flags.pdfsync_dde_topic);
+        cpslab::PDFSYNC_DDE_TOPIC = strconv::Utf8ToWstr(flags.pdfsync_dde_topic);
     }
-    logf("PDFSYNC_DDE_TOPIC : '%ls'\n", PDFSYNC_DDE_TOPIC);
+    // logf("PDFSYNC_DDE_TOPIC : '%ls'\n", PDFSYNC_DDE_TOPIC);
 
     // DDE Server/Topic name for UserApp
     if(flags.userapp_dde_service != nullptr) {
