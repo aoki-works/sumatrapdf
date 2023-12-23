@@ -171,7 +171,7 @@ const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool 
 // =============================================================
 Markers::Markers(WindowTab* tab) {
     tab_ = tab;
-    select_ = (0x01 | 0x02);
+    select_ = (0x01 | 0x02 | 0x04);
 }
 
 Markers::~Markers() {
@@ -184,6 +184,8 @@ bool Markers::isSelection(const char* keyword)
         return select_ & 0x01;
     } else if (str::Eq(keyword, "Cell")) {
         return select_ & 0x02;
+    } else if (str::Eq(keyword, "Pin")) {
+        return select_ & 0x04;
     }
     return false;
 }
@@ -194,6 +196,8 @@ void Markers::setSelection(const char* keyword)
         select_ |= 0x01;
     } else if (str::Eq(keyword, "Cell")) {
         select_ |= 0x02;
+    } else if (str::Eq(keyword, "Pin")) {
+        select_ |= 0x04;
     }
 }
 
@@ -203,6 +207,8 @@ void Markers::unsetSelection(const char* keyword)
         select_ &= ~0x01;
     } else if (str::Eq(keyword, "Cell")) {
         select_ &= ~0x02;
+    } else if (str::Eq(keyword, "Pin")) {
+        select_ &= ~0x04;
     }
 }
 

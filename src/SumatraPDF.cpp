@@ -5480,6 +5480,17 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             SelectNextTheme();
             break;
 
+        case CmdSelectPins: {  // CPS Lab.
+            if (tab != nullptr) {
+                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectPins, 0);
+                if (iResult & TBSTATE_CHECKED) {
+                    tab->markers->setSelection("Pin");
+                } else {
+                    tab->markers->unsetSelection("Pin");
+                }
+            }
+        } break;
+
         case CmdSelectCells: {  // CPS Lab.
             if (tab != nullptr) {
                 auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectCells, 0);
@@ -5489,7 +5500,6 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
                     tab->markers->unsetSelection("Cell");
                 }
             }
-
         } break;
 
         case CmdSelectNets: {  // CPS Lab.

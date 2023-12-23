@@ -70,6 +70,7 @@ static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::None, 0, nullptr}, // separator                // CPS Lab
     {TbIcon::Net, CmdSelectNets, _TRN("Select Nets")},     // CPS Lab
     {TbIcon::Cell, CmdSelectCells, _TRN("Select Cells")},   // CPS Lab
+    {TbIcon::Pin, CmdSelectPins, _TRN("Select Pins")},   // CPS Lab
     {TbIcon::None, CmdFindFirst, nullptr},
     {TbIcon::SearchPrev, CmdFindPrev, _TRN("Find Previous")},
     {TbIcon::SearchNext, CmdFindNext, _TRN("Find Next")},
@@ -135,6 +136,7 @@ static bool IsVisibleToolbarButton(MainWindow* win, int buttonNo) {
             return (tab == nullptr);
         }
         case CmdSelectNets:
+        case CmdSelectPins:
         case CmdSelectCells: {
             return true;    // CPS Lab.
         }
@@ -198,7 +200,7 @@ static TBBUTTON TbButtonFromButtonInfo(int i) {
     } else {
         info.iBitmap = (int)btInfo.bmpIndex;
         info.fsState = TBSTATE_ENABLED;
-        if (btInfo.cmdId == CmdSelectNets || btInfo.cmdId == CmdSelectCells) {
+        if (btInfo.cmdId == CmdSelectNets || btInfo.cmdId == CmdSelectCells || btInfo.cmdId == CmdSelectPins) {
             info.fsStyle = TBSTYLE_CHECK;   // CPS Lab
         } else {
             info.fsStyle = TBSTYLE_BUTTON;
@@ -483,7 +485,8 @@ void UpdateToolbarFindText(MainWindow* win) {
     RECT r{};
     //TbGetRect(win->hwndToolbar, CmdZoomIn, &r);   CPS. Lab
     //SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
-    SendMessageW(win->hwndToolbar, TB_GETRECT, CmdSelectCells, (LPARAM)&r); // CPS. Lab
+    //SendMessageW(win->hwndToolbar, TB_GETRECT, CmdSelectCells, (LPARAM)&r); // CPS. Lab
+    SendMessageW(win->hwndToolbar, TB_GETRECT, CmdSelectPins, (LPARAM)&r); // CPS. Lab
     int currX = r.right + DpiScale(win->hwndToolbar, 10);
     int currY = (r.bottom - findWndRect.dy) / 2;
 
@@ -553,6 +556,13 @@ void UpdateToolbarState(MainWindow* win) {
     }
     SendMessage(hwnd, TB_SETSTATE, CmdSelectCells, s);
 
+    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectPins, 0);
+    if (win->CurrentTab()->markers->isSelection("Pin")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectPins, s);
 }
 
 static void CreateFindBox(MainWindow* win, HFONT hfont, int iconDy) {

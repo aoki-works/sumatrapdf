@@ -177,6 +177,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdSelectNextTheme, "Select next theme")                            \
     V(CmdSelectNets, " Select nets")                            \
     V(CmdSelectCells, "Select cells")                            \
+    V(CmdSelectPins, "Select pins")                            \
     V(CmdToggleFrequentlyRead, "Toggle Frequently Read")                  \
     V(CmdNone, "Do nothing")
 

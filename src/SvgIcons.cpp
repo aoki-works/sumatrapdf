@@ -160,6 +160,17 @@ static const char* gIconCell =
   <rect x="0" y="0" width="24" height="24" stroke="1"></rect>
 </svg>)";
 
+// CPS Lab (CELL)
+static const char* gIconPin =
+    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path d="M4 12h2a2 2 0 1 0 0 -4h-2v8" />
+  <path d="M12 8v1" />
+  <path d="M12 12v4" />
+  <path d="M16 16v-8l4 8v-8" />
+  <rect x="0" y="0" width="24" height="24" stroke="1"></rect>
+</svg>)";
+
 
 // must match order in enum class TbIcon
 // clang-format off
@@ -181,6 +192,7 @@ static const char* gAllIcons[] = {
     gIconRotateRight,
     gIconNet,
     gIconCell,
+    gIconPin,
 };
 // clang-format on
 

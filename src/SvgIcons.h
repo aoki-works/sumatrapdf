@@ -23,4 +23,5 @@ enum class TbIcon {
     RotateRight,
     Net,
     Cell,
+    Pin,
 };
