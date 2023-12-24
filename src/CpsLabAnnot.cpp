@@ -117,7 +117,10 @@ bool MarkFileParser::Visit(const char* path, const char* value, json::Type type)
 //
 // =============================================================
 MarkerNode::MarkerNode(WindowTab* tab)
-    : tab_(tab), filePath_(), keyword(), mark_color(0xff00ffff), select_color(0xff00ffff), words(), annotations() {
+    : tab_(tab), filePath_(), keyword(), mark_color(0xff00ffff), select_color(0xff00ffff),
+      words(), annotations(), mark_words(), rects(), pages(),
+      selected_words(), assoc_cells()
+{
     mark_color = 0xff00ffff;
     select_color = 0xff0000ff;
 }
@@ -166,10 +169,22 @@ const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool 
     return first_word;
 }
 
+size_t MarkerNode::getMarkWordsByPageNo(const int pageNo, StrVec& result) {
+    int i = 0;
+    for (auto pno : pages) {
+        if (pno == pageNo) {
+            auto w = mark_words.at(i);
+            result.Append(w);
+        }
+        ++i;
+    }
+    return result.Size();
+}
+
 // =============================================================
 //
 // =============================================================
-Markers::Markers(WindowTab* tab) {
+Markers::Markers(WindowTab* tab) : tab_(), select_(), page_in_cell_() {
     tab_ = tab;
     select_ = (0x01 | 0x02 | 0x04);
 }
@@ -219,6 +234,7 @@ void Markers::parse(const char* fname) {
     for(auto m : mfp.markerTable) {
         markerTable.Append(m);
     }
+    page_in_cell_.Reset();
 }
 
 void Markers::deleteAnnotations() {
@@ -227,6 +243,7 @@ void Markers::deleteAnnotations() {
         delete m;
     }
     markerTable.Reset();
+    page_in_cell_.Reset();
 }
 
 MarkerNode* Markers::getMarker(const char* keyword) {
@@ -294,6 +311,25 @@ size_t Markers::getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result) {
     return n;
 }
 
+const char* Markers::getCellsInPage(const int pageNo) {
+    for (PageInCell& c : page_in_cell_) {
+        if (c.pageNo == pageNo) {
+            return c.cells.Get();
+        }
+    }
+    str::Str cellsInPage;
+    for (auto m : markerTable) {
+        if (m->keyword != nullptr && str::Eq(m->keyword, "Cell")) {
+            StrVec cellVect;
+            m->getMarkWordsByPageNo(pageNo, cellVect);
+            for (auto c : cellVect) { cellsInPage.AppendFmt(", \"%s\"", c); }
+        }
+    }
+    page_in_cell_.Append(PageInCell());
+    page_in_cell_.Last().pageNo = pageNo;
+    page_in_cell_.Last().cells = cellsInPage;
+    return page_in_cell_.Last().cells.Get();
+}
 
 void Markers::sendSelectMessage(MainWindow* win, bool conti) {
     if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
@@ -312,13 +348,15 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
     if (dm->GetEngine()->IsImageCollection()) {
         return;
     }
-    for (auto m : markerTable) { m->selected_words.Reset(); }
+    for (auto m : markerTable) {
+        m->selected_words.Reset();
+        m->assoc_cells.Reset();
+    }
 
     //StrVec str_vec;
     for (SelectionOnPage& sel : *tab_->selectionOnPage) {
         char* text;
         Rect regionI = sel.rect.Round();
-
         bool isTextOnlySelectionOut = dm->textSelection->result.len > 0;
         if (isTextOnlySelectionOut) {
             WCHAR* s = dm->textSelection->ExtractText(sep);
@@ -332,6 +370,9 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
                 for (auto m : nodes) {
                     if (!m->selected_words.Contains(text)) {
                         m->selected_words.Append(text);
+                        if (m->keyword != nullptr && str::Eq(m->keyword, "Pin")) {
+                            m->assoc_cells.Append(getCellsInPage(sel.pageNo));
+                        }
                     }
                 }
             }
@@ -351,27 +392,48 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
     }
     UpdateTextSelection(win, false);
 
-    StrVec selected_words;
     for (auto m : markerTable) {
+        StrVec selected_words;
+        StrVec assoc_cells;
+        bool is_pin = (m->keyword != nullptr && str::Eq(m->keyword, "Pin"));
         if (m->selected_words.Size() == 0) {
             continue;
         }
-        for (auto s : m->selected_words) {
+        for (int i = 0; i < m->selected_words.Size(); i++) {
+            auto s = m->selected_words.at(i);
             if (!selected_words.Contains(s)) {
                 selected_words.Append(s);
+                if (is_pin) {
+                    auto c = m->assoc_cells.at(i);
+                    assoc_cells.Append(c);
+                }
             }
         }
-    }
-    if (0 < selected_words.Size()) {
+        // -----------------------------------------------
         str::Str cmd;
-        if (conti) {
-            cmd.AppendFmt("[CSelect(\"%s\"", tab_->filePath.Get());
+        if (is_pin) {
+            if (conti) {
+                cmd.AppendFmt("[CPinSelect(\"%s\"", tab_->filePath.Get());
+            } else {
+                cmd.AppendFmt("[PinSelect(\"%s\"", tab_->filePath.Get());
+            }
+            for (int i = 0; i < selected_words.Size(); i++) {
+                auto s = selected_words.at(i);
+                auto c = assoc_cells.at(i);
+                cmd.AppendFmt(", \"(%s %s)\"", s, c);
+            }
         } else {
-            cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
-        }
-        for (int i = 0; i < selected_words.Size(); i++) {
-            auto s = selected_words.at(i);
-            cmd.AppendFmt(", \"%s\"", s);
+            if (conti) {
+                // Continue selection
+                cmd.AppendFmt("[CSelect(\"%s\"", tab_->filePath.Get());
+            } else {
+                // Newly selection
+                cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
+            }
+            for (int i = 0; i < selected_words.Size(); i++) {
+                auto s = selected_words.at(i);
+                cmd.AppendFmt(", \"%s\"", s);
+            }
         }
         cmd.AppendFmt(")]");
         DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
@@ -598,6 +660,9 @@ const WCHAR* SelectWordAt(const DisplayModel* dm, int pageNo, const WCHAR* pageT
                 char* s = ToUtf8(begin, end - begin);
                 if (!m->selected_words.Contains(s)) {
                     m->selected_words.Append(s);
+                    if (markers != nullptr && m->keyword != nullptr && str::Eq(m->keyword, "Pin")) {
+                        m->assoc_cells.Append(markers->getCellsInPage(pageNo));
+                    }
                 }
                 str::Free(s);
             }
@@ -740,7 +805,7 @@ const char* MarkWords(MainWindow* win) {
     WindowTab* tab = win->CurrentTab();
     DisplayModel* dm = tab->AsFixed();
     auto engine = dm->GetEngine();
-    // ---------------------------------------------
+    const char* sep = "\r\n";
     // ---------------------------------------------
     //StrVec markedWords;
     dm->textSearch->wordSearch = true;
@@ -752,7 +817,7 @@ const char* MarkWords(MainWindow* win) {
         // -- ClearSearchResult ------------
         DeleteOldSelectionInfo(win, true);
         RepaintAsync(win, 0);
-        // ---------------------------------
+        // - Select all words in PDF file -----------------------
         dm->textSearch->SetDirection(TextSearchDirection::Forward);
         bool conti = false;
         for (auto term : marker_node->words) {
@@ -769,6 +834,8 @@ const char* MarkWords(MainWindow* win) {
             do {
                 for (int ixi = 0; ixi < sel->len; ixi++) {
                     marker_node->rects.Append(sel->rects[ixi]);
+                    marker_node->pages.Append(sel->pages[ixi]);
+                    marker_node->mark_words.Append(term);
                 }
                 dm->textSelection->CopySelection(dm->textSearch, conti);
                 UpdateTextSelection(win, false);
@@ -777,36 +844,37 @@ const char* MarkWords(MainWindow* win) {
             } while (sel);
             str::Free(wsep);
         }
-        //  ---------------------------------------------
-        Vec<SelectionOnPage>* s = tab->selectionOnPage;
-        if (s != nullptr) {
-            Vec<int> pageNos;
-            for (auto& sel : *s) {
-                int pno = sel.pageNo;
-                if (!dm->ValidPageNo(pno)) {
+        // -- Create 'Annotation' for each page. -------------
+        Vec<SelectionOnPage>* selections = tab->selectionOnPage;
+        if (selections != nullptr) {
+            Vec<int> pageNos;   // page number list where selected words.
+            for (auto& sel : *selections) {
+                int pageno = sel.pageNo;
+                if (!dm->ValidPageNo(pageno)) {
                     continue;
                 }
                 bool fo = false;
                 for (auto n : pageNos) {
-                    if (n == pno) {
+                    if (n == pageno) {
                         fo = true;
-                        break;
+                        break;  // 'pageno' has been isted in 'pageNos'.
                     }
                 }
                 if (!fo) {
-                    pageNos.Append(pno);
+                    pageNos.Append(pageno);
                 }
             }
-            Vec<RectF> rects;
-            for (auto pno : pageNos) {
+            Vec<RectF> rects;   // rectangle for selected words.
+            for (auto pageno : pageNos) {
+                // -- create annotation ----------------------------
                 rects.Reset();
-                for (auto& sel : *s) {
-                    if (pno != sel.pageNo) {
+                for (auto& sel : *selections) {
+                    if (pageno != sel.pageNo) {
                         continue;
                     }
                     rects.Append(sel.rect);
                 }
-                Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pno, PointF{});
+                Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pageno, PointF{});
                 SetQuadPointsAsRect(annot, rects);
                 SetColor(annot, marker_node->mark_color); // Acua
                 SetContents(annot, annot_key_content.Get());

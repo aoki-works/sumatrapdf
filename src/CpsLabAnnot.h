@@ -47,13 +47,18 @@ class MarkerNode
     AutoFreeStr filePath_;
 
   public:
-    AutoFreeStr keyword;
-    PdfColor mark_color;
-    PdfColor select_color;
-    StrVec words;
-    StrVec selected_words;
-    Vec<Annotation*> annotations;
-    Vec<Rect> rects;
+    AutoFreeStr keyword;        // [Cell|Net|Pin| etc..]
+    PdfColor mark_color;        // marker color
+    PdfColor select_color;      // selector color
+    StrVec words;               // all marker words
+    Vec<Annotation*> annotations;   // marker annotations
+    Vec<char*> mark_words;         // mark wores in annotations
+    Vec<Rect> rects;                // marker rectangles.
+    Vec<int> pages;                 // marker pages.
+
+  public:   // working area
+    StrVec selected_words;      // selected_words
+    Vec<const char*> assoc_cells;    // Cell that associated with the selected pin.
 
   public:
     MarkerNode(WindowTab* tab);
@@ -61,14 +66,21 @@ class MarkerNode
 
   public:
     const char* selectWords(MainWindow* win, StrVec& words, bool conti=false);
+    size_t getMarkWordsByPageNo(const int pageNo, StrVec& result);
 };
 
+struct PageInCell
+{
+    int pageNo;
+    str::Str cells;
+};
 
 class Markers
 {
   private:
     WindowTab*  tab_;
     uint select_;
+    Vec<PageInCell> page_in_cell_;
 
   public:
     Vec<MarkerNode*> markerTable;
@@ -92,6 +104,7 @@ class Markers
     void setSelection(const char* keyword);
     void unsetSelection(const char* keyword);
     bool isSelection(const char* keyword);
+    const char* getCellsInPage(const int pageNo);
 };
 
 } // namespace cpslab
