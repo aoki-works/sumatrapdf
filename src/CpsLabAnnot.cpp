@@ -131,43 +131,56 @@ MarkerNode::~MarkerNode() {
     }
 }
 
-const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti) {
+const char* MarkerNode::selectWord(MainWindow* win, const int pageNo, char* wd, bool conti) {
+
     char* first_word = nullptr;
     DisplayModel* dm = win->AsFixed();
     dm->textSearch->SetDirection(TextSearchDirection::Forward);
     dm->textSearch->wordSearch = true;
-    for(auto wd : select_words) {
-        for (size_t i = 0; i < words.size(); ++i) {
-            char* mkwd = words.at(i);
-            if (!str::Eq(wd, mkwd)) {
-                continue;
-            }
-            const WCHAR* wsep = strconv::Utf8ToWstr(wd);
-            TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(wd), nullptr, conti);
-            if (sel == nullptr) {
-                str::Free(wsep);
-                continue;
-            }
-            if (!conti) {
-                //bool prev = gGlobalPrefs->showToolbar;
-                //gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
-                //HwndSetText(win->hwndFindEdit, wd);
-                //gGlobalPrefs->showToolbar = prev;
-                first_word = wd;
-                dm->ShowResultRectToScreen(sel);
-                //moveto = false;
-            }
-            do {
-                dm->textSelection->CopySelection(dm->textSearch, conti);
-                conti = true;
-                sel = dm->textSearch->FindNext(nullptr, conti);
-            } while (sel);
-            str::Free(wsep);
+    for (size_t i = 0; i < words.size(); ++i) {
+        char* mark_word = words.at(i);
+        if (!str::Eq(wd, mark_word)) {
+            continue;
         }
+        const WCHAR* wsep = strconv::Utf8ToWstr(wd);
+        //TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(wd), nullptr, conti);
+        TextSel* sel = dm->textSearch->FindFirst(pageNo, wsep, nullptr, conti);
+        if (sel == nullptr) {
+            str::Free(wsep);
+            continue;
+        }
+        //if (is_pin) { sel->pages; }
+        if (!conti) {
+            //bool prev = gGlobalPrefs->showToolbar;
+            //gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
+            //HwndSetText(win->hwndFindEdit, wd);
+            //gGlobalPrefs->showToolbar = prev;
+            first_word = wd;
+            dm->ShowResultRectToScreen(sel);
+            //moveto = false;
+        }
+        do {
+            dm->textSelection->CopySelection(dm->textSearch, conti);
+            conti = true;
+            sel = dm->textSearch->FindNext(nullptr, conti);
+        } while (sel);
+        str::Free(wsep);
     }
     dm->textSearch->wordSearch = false;
     return first_word;
 }
+
+
+const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti) {
+    const char* first_word = nullptr;
+    for(auto wd : select_words) {
+        const char* ret = selectWord(win, 1, wd, conti);
+        if (ret != nullptr) { first_word = ret; }
+    }
+    return first_word;
+}
+
+
 
 size_t MarkerNode::getMarkWordsByPageNo(const int pageNo, StrVec& result) {
     int i = 0;
@@ -179,6 +192,31 @@ size_t MarkerNode::getMarkWordsByPageNo(const int pageNo, StrVec& result) {
         ++i;
     }
     return result.Size();
+}
+
+int MarkerNode::getPage(const char* cell) {
+    int i = 0;
+    for (char* w : mark_words) {
+        if (str::Eq(cell, w)) {
+            return pages.at(i);
+        }
+        ++i;
+    }
+    return -1;
+}
+
+bool MarkerNode::tExist(const int pageNo, const char* cell) {
+    int i = 0;
+    for (auto pno : pages) {
+        if (pno == pageNo) {
+            auto w = mark_words.at(i);
+            if (str::Eq(cell, w)) {
+                return true;
+            }
+        }
+        ++i;
+    }
+    return false;
 }
 
 // =============================================================
@@ -465,12 +503,37 @@ void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
 void Markers::selectWords(MainWindow* win, StrVec& words) {
     DeleteOldSelectionInfo(win, true);
     RepaintAsync(win, 0);
+    MarkerNode* cn = getMarker("Cell");
+    MarkerNode* pn = getMarker("Pin");
     bool conti = false;
+    for (auto w : words) {
+        AutoFreeStr cellName, pinName;
+        const char* next = str::Parse(w, "%s.%s", &cellName, &pinName);
+        bool is_pin = (next != nullptr);
+        if (is_pin) {
+            int pageNo = cn->getPage(cellName.Get());
+            if (0 < pageNo) {
+                if (pn->tExist(pageNo, pinName.Get())) {
+                    if (pn->selectWord(win, pageNo, pinName.Get(), conti) != nullptr) {
+                        conti = true;
+                    }
+                }
+            }
+        } else {
+            for (auto node : markerTable) {
+                if (node->selectWord(win, 1, w, conti) != nullptr) {
+                    conti = true;
+                }
+            }
+        }
+    }
+    /*
     for (auto node : markerTable) {
         if (node->selectWords(win, words, conti) != nullptr) {
             conti = true;
         }
     }
+    */
     SetSelectedWordToFindEdit(win, words);
     UpdateTextSelection(win, false);
 }
@@ -822,7 +885,8 @@ const char* MarkWords(MainWindow* win) {
         bool conti = false;
         for (auto term : marker_node->words) {
             const WCHAR* wsep = strconv::Utf8ToWstr(term);
-            TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
+            // TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(term), nullptr, conti);
+            TextSel* sel = dm->textSearch->FindFirst(1, wsep, nullptr, conti);
             if (!sel) {
                 str::Free(wsep);
                 continue;

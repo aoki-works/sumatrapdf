@@ -65,8 +65,11 @@ class MarkerNode
     ~MarkerNode();
 
   public:
+    const char* selectWord(MainWindow* win, const int pageNo, char* word, bool conti=false);
     const char* selectWords(MainWindow* win, StrVec& words, bool conti=false);
     size_t getMarkWordsByPageNo(const int pageNo, StrVec& result);
+    int getPage(const char* word);
+    bool tExist(const int pageNo, const char* word);
 };
 
 struct PageInCell
