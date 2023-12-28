@@ -149,7 +149,6 @@ const char* MarkerNode::selectWord(MainWindow* win, const int pageNo, char* wd, 
             str::Free(wsep);
             continue;
         }
-        //if (is_pin) { sel->pages; }
         if (!conti) {
             //bool prev = gGlobalPrefs->showToolbar;
             //gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
@@ -458,7 +457,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
             for (int i = 0; i < selected_words.Size(); i++) {
                 auto s = selected_words.at(i);
                 auto c = assoc_cells.at(i);
-                cmd.AppendFmt(", \"(%s %s)\"", s, c);
+                cmd.AppendFmt(", (\"%s\" %s)", s, c);
             }
         } else {
             if (conti) {
@@ -508,7 +507,7 @@ void Markers::selectWords(MainWindow* win, StrVec& words) {
     bool conti = false;
     for (auto w : words) {
         AutoFreeStr cellName, pinName;
-        const char* next = str::Parse(w, "%s.%s", &cellName, &pinName);
+        const char* next = str::Parse(w, "%s:%s", &cellName, &pinName);
         bool is_pin = (next != nullptr);
         if (is_pin) {
             int pageNo = cn->getPage(cellName.Get());
