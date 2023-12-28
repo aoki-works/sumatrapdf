@@ -1298,7 +1298,8 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
     TempStr cmd = HGLOBALToStrTemp((HGLOBAL)hCommand, isUnicode);
     bool didHandle = HandleExecuteCmds(hwnd, cmd);
     DDEACK ack{};
-    ack.fAck = didHandle ? 0 : 1;
+    // ack.fAck = didHandle ? 0 : 1;    CPS. Lab
+    ack.fAck = didHandle ? 1 : 0;
     LPARAM lpres = PackDDElParam(WM_DDE_ACK, *(WORD*)&ack, (UINT_PTR)hCommand);
     PostMessageW(hwndClient, WM_DDE_ACK, (WPARAM)hwnd, lpres);
     return 0;
