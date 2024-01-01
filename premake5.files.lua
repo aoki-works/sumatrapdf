@@ -931,6 +931,7 @@ function mupdf_files()
     "transition.c",
     "tree.c",
     "ucdn.c",
+    "uncfb.c",
     "unchm.c",
     "unlibarchive.c",
     "untar.c",
@@ -955,6 +956,7 @@ function mupdf_files()
     "mobi.c",
     "office.c",
     "story-writer.c",
+    "txt.c",
     "xml-dom.c",
   })
 
