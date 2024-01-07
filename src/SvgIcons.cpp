@@ -134,41 +134,46 @@ static const char* gIconRotateRight =
   <circle cx="11" cy="19.94" r="0.15"/>
 </svg>)";
 
-// CPS Lab (NET)
+// CPS Lab (NET : N)
 static const char* gIconNet =
-    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-  <path d="M3 16v-8l4 8v-8" />
-  <path d="M14 8h-4v8h4" />
-  <path d="M10 12h2.5" />
-  <path d="M17 8h4" />
-  <path d="M19 8v8" />
-  <rect x="0" y="0" width="24" height="24" stroke="1"></rect>
+    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke-width="2" stroke="#0000ff" d="M 3.5 6.0 10.0 6.0 14.0 2.0 20.5 2.0"/>
+  <rect stroke-width="1" height="3" width="3" x="0.5"  y="4.5" stroke="#000" fill="#222222"/>
+  <rect stroke-width="1" height="3" width="3" x="20.5" y="0.0" stroke="#000" fill="#222222"/>
+  <path stroke-width="2" stroke="#0000ff" d="M 3.5 14.0 10.0 14.0 14.0 10.0 20.5 10.0"/>
+  <rect stroke-width="1" height="3" width="3" x="0.5"  y="12.5" stroke="#000" fill="#222222"/>
+  <rect stroke-width="1" height="3" width="3" x="20.5" y="8.0"  stroke="#000" fill="#222222"/>
+  <path stroke-width="2" stroke="#0000ff" d="M 3.5 22.0 10.0 22.0 14.0 18.0 20.5 18.0"/>
+  <rect stroke-width="1" height="3" width="3" x="0.5"  y="20.5" stroke="#000" fill="#222222"/>
+  <rect stroke-width="1" height="3" width="3" x="20.5" y="16.0" stroke="#000" fill="#222222"/>
 </svg>)";
 
-// CPS Lab (CELL)
+// CPS Lab (CELL : P)
 static const char* gIconCell =
-    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-  <path d="M7 10a2 2 0 1 0 -4 0v4a2 2 0 1 0 4 0" />
-  <path d="M11.5 8h-2.5v8h2.5" />
-  <path d="M9 12h2.5" />
-  <path d="M13.5 8v8" />
-  <path d="M13.5 16h2.5" />
-  <path d="M18 8v8" />
-  <path d="M18 16h2.5" />
-  <rect x="0" y="0" width="24" height="24" stroke="1"></rect>
+    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="2.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="7.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="13.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="18.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="2.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="7.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="13.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="18.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" stroke="#000" fill="#444444" x="6.0" y="2.0" width="12.0" height="20.0" />
 </svg>)";
 
-// CPS Lab (CELL)
+// CPS Lab (PIN : T)
 static const char* gIconPin =
-    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-  <path d="M4 12h2a2 2 0 1 0 0 -4h-2v8" />
-  <path d="M12 8v1" />
-  <path d="M12 12v4" />
-  <path d="M16 16v-8l4 8v-8" />
-  <rect x="0" y="0" width="24" height="24" stroke="1"></rect>
+    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="2.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="7.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="13.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="18.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="2.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="7.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="13.0" width="4.0" height="3.0" />
+  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="18.5" width="4.0" height="3.0" />
+  <rect stroke-width="1" stroke-dasharray="2,2" stroke="#555555" fill="#fff" x="6.0" y="2.0" width="12.0" height="20.0" />
 </svg>)";
 
 

@@ -14526,6 +14526,12 @@ cy:Dewis:
 de:Auswahl:
 dk:Markering:
 el:Επιλογή:
+:Select Parts
+ja:部品を選択する
+:Select Nets
+ja:ネットを選択する
+:Select Pins
+ja:端子を選択する
 es:Selección:
 et:Valik:
 eu:Hautatpena:

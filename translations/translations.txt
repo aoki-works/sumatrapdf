@@ -18194,6 +18194,12 @@ tw:選擇 SumatraPDF 應安裝的資料夾:
 uk:Виберіть папку, в яку буде встановлено SumatraPDF
 uz:SumatraPDF o'rnatish uchun jildni tanlang:
 vn:Chọn thư mục nơi mà SumatraPDF sẽ được cài đặt:
+:Select Parts
+ja:部品を選択する
+:Select Nets
+ja:ネットを選択する
+:Select Pins
+ja:端子を選択する
 :Selection:
 am:Նշվածը.
 ar:التحديد
