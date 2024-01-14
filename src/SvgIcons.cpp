@@ -165,15 +165,16 @@ static const char* gIconCell =
 // CPS Lab (PIN : T)
 static const char* gIconPin =
     R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="2.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="7.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="13.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#000" stroke="#000" x="0.0" y="18.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="2.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="7.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="13.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#000" stroke="#000" x="20.0" y="18.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" stroke-dasharray="2,2" stroke="#555555" fill="#fff" x="6.0" y="2.0" width="12.0" height="20.0" />
+  <path id="pin" stroke-width="2" d="M 12 20 12 4" />
+  <circle cx="12" cy="5" r="5" stroke-width="0" fill="#0000ff"/>
+  <path id="round"
+        stroke-width="1"
+        d="M 8.49,14.91
+           C 6.64,14.87 0.95,17.43 0.93,19.00
+             0.94,20.88 6.44,22.82 7.56,22.80
+             7.56,22.80 17.69,22.78 17.69,22.78
+             18.84,22.62 23.49,20.02 23.49,18.84
+             23.46,16.89 19.39,14.87 15.33,14.87" />
 </svg>)";
 
 
