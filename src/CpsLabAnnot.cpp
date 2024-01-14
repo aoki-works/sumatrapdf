@@ -193,11 +193,18 @@ size_t MarkerNode::getMarkWordsByPageNo(const int pageNo, StrVec& result) {
     return result.Size();
 }
 
-int MarkerNode::getPage(const char* cell) {
+int MarkerNode::getPage(const char* cell, const int pageNo) {
     int i = 0;
     for (char* w : mark_words) {
         if (str::Eq(cell, w)) {
-            return pages.at(i);
+            int target_pageNo = pages.at(i);
+            if (0 < pageNo) {
+                if (pageNo <= target_pageNo) {
+                    return target_pageNo;
+                }
+            } else {
+                return target_pageNo;
+            }
         }
         ++i;
     }
@@ -510,14 +517,21 @@ void Markers::selectWords(MainWindow* win, StrVec& words) {
         const char* next = str::Parse(w, "%s:%s", &cellName, &pinName);
         bool is_pin = (next != nullptr);
         if (is_pin) {
-            int pageNo = cn->getPage(cellName.Get());
-            if (0 < pageNo) {
-                if (pn->tExist(pageNo, pinName.Get())) {
-                    if (pn->selectWord(win, pageNo, pinName.Get(), conti) != nullptr) {
-                        conti = true;
+            int curPageNo = -1;
+            int pageNo = -1;
+            do {
+                pageNo = cn->getPage(cellName.Get(), curPageNo);
+                if (0 < pageNo) {
+                    if (pn->tExist(pageNo, pinName.Get())) {
+                        if (pn->selectWord(win, pageNo, pinName.Get(), conti) != nullptr) {
+                            conti = true;
+                        }
+                        break;
+                    } else {
+                        curPageNo = pageNo + 1;
                     }
                 }
-            }
+            } while (0 < pageNo);
         } else {
             for (auto node : markerTable) {
                 if (node->selectWord(win, 1, w, conti) != nullptr) {

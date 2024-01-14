@@ -68,7 +68,7 @@ class MarkerNode
     const char* selectWord(MainWindow* win, const int pageNo, char* word, bool conti=false);
     const char* selectWords(MainWindow* win, StrVec& words, bool conti=false);
     size_t getMarkWordsByPageNo(const int pageNo, StrVec& result);
-    int getPage(const char* word);
+    int getPage(const char* word, const int pageNo=-1);
     bool tExist(const int pageNo, const char* word);
 };
 
