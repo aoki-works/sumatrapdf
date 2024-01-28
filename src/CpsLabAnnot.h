@@ -12,7 +12,9 @@ struct Rect;
 namespace cpslab {
 
 class Markers;
+enum class CpsMode;
 
+extern CpsMode MODE;
 extern WCHAR* USERAPP_DDE_SERVICE;
 extern WCHAR* USERAPP_DDE_TOPIC;
 extern WCHAR* USERAPP_DDE_DEBUG_TOPIC;
@@ -29,6 +31,13 @@ extern void CloseEvent(WindowTab* tab);
 extern void CloseEvent(MainWindow* win);
 extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
 extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
+extern void sendSelectText(MainWindow* win, bool conti=false);
+
+enum class CpsMode {
+    None = 0,
+    MarkerXref = 1,
+    Document = 2
+};
 
 struct TmpAllocator : Allocator {
     void* p;

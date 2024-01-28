@@ -508,7 +508,10 @@ static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
     if (isMoveableAnnot || !canCopy || (isShift || !isOverText) && !isCtrl) {
         StartMouseDrag(win, x, y);
     } else {
-        if (IsCtrlPressed() && !isOverText) { // CPS Lab
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            OnSelectionStart(win, x, y, key);
+        }
+        else if (IsCtrlPressed() && !isOverText) { // CPS Lab
             OnSelectionStart(win, x, y, key);
         }
     }
@@ -542,7 +545,11 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         }
         /* callback to user application via DDE. CPS Lab.*/
         WindowTab* tab = win->CurrentTab();
-        tab->markers->sendSelectMessage(win);
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            cpslab::sendSelectText(win);
+        } else {
+            tab->markers->sendSelectMessage(win);
+        }
     }
 
     win->mouseAction = MouseAction::None;

@@ -26,11 +26,13 @@
 
 namespace cpslab {
 
+
 WCHAR* USERAPP_DDE_SERVICE = nullptr;
 WCHAR* USERAPP_DDE_TOPIC = nullptr;
 WCHAR* USERAPP_DDE_DEBUG_TOPIC = nullptr;
 WCHAR* PDFSYNC_DDE_SERVICE = nullptr;
 WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
+CpsMode MODE = CpsMode::Document;
 
 // =============================================================
 //
@@ -397,12 +399,12 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
         m->assoc_cells.Reset();
     }
 
-    //StrVec str_vec;
     for (SelectionOnPage& sel : *tab_->selectionOnPage) {
         char* text;
         Rect regionI = sel.rect.Round();
         bool isTextOnlySelectionOut = dm->textSelection->result.len > 0;
         if (isTextOnlySelectionOut) {
+            // Selected by w-click.
             WCHAR* s = dm->textSelection->ExtractText(sep);
             text = ToUtf8(s);
             Rect r = dm->textSelection->result.rects[dm->textSelection->result.len - 1];
@@ -422,6 +424,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
             }
             str::Free(s);
         } else {
+            // Selected by area.
             if (gGlobalPrefs->circularSelectionRegion) {
                 text = GetWordsInCircle(dm, sel.pageNo, regionI, sep, this);
 
@@ -1063,6 +1066,50 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
     return ToUtf8(ws);
 }
 
+// =============================================================
+//
+// =============================================================
+void sendSelectText(MainWindow* win, bool conti) {
+    if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
+        return;
+    }
+
+    const char* sep = "\r\n";
+    WindowTab* tab = win->CurrentTab();
+    if (!tab->selectionOnPage) {
+        return;
+    }
+    if (tab->selectionOnPage->size() == 0) {
+        return;
+    }
+
+    DisplayModel* dm = win->AsFixed();
+    if (dm->GetEngine()->IsImageCollection()) {
+        return;
+    }
+
+    str::Str text;
+    for (SelectionOnPage& sel : *tab->selectionOnPage) {
+        Rect regionI = sel.rect.Round();
+        if (dm->textSelection->result.len <= 0) {
+            continue;
+        }
+        WCHAR* s = dm->textSelection->ExtractText(sep);
+        char* utf8txt = ToUtf8(s);
+        str::Free(s);
+        if (!str::IsEmpty(utf8txt)) {
+            text.AppendAndFree(utf8txt);
+            break;
+        }
+    }
+    UpdateTextSelection(win, false);
+
+    if (0 < text.size()) {
+        str::Str cmd;
+        cmd.AppendFmt("[Select(\"%s\")]", text.Get());
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
+    }
+}
 
 
 } // end of namespace cpslab
