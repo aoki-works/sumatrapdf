@@ -992,6 +992,48 @@ const char* MarkWords(MainWindow* win, StrVec& words) {
     return MarkWords(win);
 }
 
+
+// =============================================================
+//
+// =============================================================
+char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep) {
+    Rect* coords;
+    const WCHAR* pageText = dm->textCache->GetTextForPage(pageNo, nullptr, &coords);
+    if (str::IsEmpty(pageText)) {
+        return nullptr;
+    }
+    const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
+    int wsep_len = str::Len(wsep);
+    str::WStr result;
+    const WCHAR* begin = nullptr;
+    for (const WCHAR* src = pageText; *src; ) {
+        if (begin == nullptr) {
+            begin = src;
+        }
+        Rect rect = coords[src - pageText]; // boundary rectangle of this 'letter'.
+        Rect isect = regionI.Intersect(rect);
+        if (isect.IsEmpty() || 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) < 0.3) {
+            if (begin < src) {
+                result.Append(begin, src - begin); // append 'word' to result.
+                result.Append(wsep, wsep_len);
+            }
+            ++src;
+            begin = nullptr;
+        } else {
+            while (*src && *src != '\n' && !isspace(*src)) { ++src; }
+            if (*src) {
+                ++src;  // skip white space.
+            } else {
+                result.Append(begin, src - begin); // append 'word' to result.
+                result.Append(wsep, wsep_len);
+                break;
+            }
+        }
+    }
+    str::Free(wsep);
+    WCHAR* ws = result.Get();
+    return ToUtf8(ws);
+}
 // =============================================================
 //
 // =============================================================
@@ -1091,15 +1133,20 @@ void sendSelectText(MainWindow* win, bool conti) {
     str::Str text;
     for (SelectionOnPage& sel : *tab->selectionOnPage) {
         Rect regionI = sel.rect.Round();
-        if (dm->textSelection->result.len <= 0) {
-            continue;
-        }
-        WCHAR* s = dm->textSelection->ExtractText(sep);
-        char* utf8txt = ToUtf8(s);
-        str::Free(s);
-        if (!str::IsEmpty(utf8txt)) {
-            text.AppendAndFree(utf8txt);
-            break;
+        if (0 < dm->textSelection->result.len) {
+            WCHAR* s = dm->textSelection->ExtractText(sep);
+            char* utf8txt = ToUtf8(s);
+            str::Free(s);
+            if (!str::IsEmpty(utf8txt)) {
+                text.AppendAndFree(utf8txt);
+                break;
+            }
+        } else {
+            char* utf8txt = GetTextInRegion(dm, sel.pageNo, regionI, sep);
+            if (!str::IsEmpty(utf8txt)) {
+                text.AppendAndFree(utf8txt);
+                break;
+            }
         }
     }
     UpdateTextSelection(win, false);

@@ -508,10 +508,12 @@ static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
     if (isMoveableAnnot || !canCopy || (isShift || !isOverText) && !isCtrl) {
         StartMouseDrag(win, x, y);
     } else {
-        if (cpslab::MODE == cpslab::CpsMode::Document) {
+        if (cpslab::MODE == cpslab::CpsMode::Document && isOverText) {
+            // Text selection start
             OnSelectionStart(win, x, y, key);
         }
         else if (IsCtrlPressed() && !isOverText) { // CPS Lab
+            // Start area selection (left-button + Ctrl-key)
             OnSelectionStart(win, x, y, key);
         }
     }
