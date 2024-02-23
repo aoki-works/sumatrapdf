@@ -88,6 +88,9 @@ fz_archive *fz_open_directory(fz_context *ctx, const char *path);
 
 /**
 	Determine if a given path is a directory.
+
+	In the case of the path not existing, or having no access
+	we will return 0.
 */
 int fz_is_directory(fz_context *ctx, const char *path);
 
@@ -208,11 +211,11 @@ int fz_is_tar_archive(fz_context *ctx, fz_stream *file);
 int fz_is_libarchive_archive(fz_context *ctx, fz_stream *file);
 
 /**
-	Detect if stream object is a chm archive.
+	Detect if stream object is a cfb archive.
 
 	Assumes that the stream object is seekable.
 */
-int fz_is_chm_archive(fz_context *ctx, fz_stream *file);
+int fz_is_cfb_archive(fz_context *ctx, fz_stream *file);
 
 /**
 	Open a tar archive file.
@@ -258,24 +261,24 @@ fz_archive *fz_open_libarchive_archive(fz_context *ctx, const char *filename);
 fz_archive *fz_open_libarchive_archive_with_stream(fz_context *ctx, fz_stream *file);
 
 /**
-	Open a chm file as an archive.
+	Open a cfb file as an archive.
 
-	An exception is thrown if the file is not recognised as a chm.
+	An exception is thrown if the file is not recognised as a cfb.
 
 	filename: a path to an archive file as it would be given to
 	open(2).
 */
-fz_archive *fz_open_chm_archive(fz_context *ctx, const char *filename);
+fz_archive *fz_open_cfb_archive(fz_context *ctx, const char *filename);
 
 /**
-	Open a chm file as an archive.
+	Open a cfb file as an archive.
 
 	Open an archive using a seekable stream object rather than
 	opening a file or directory on disk.
 
 	An exception is thrown if the file is not recognised as a chm.
 */
-fz_archive *fz_open_chm_archive_with_stream(fz_context *ctx, fz_stream *file);
+fz_archive *fz_open_cfb_archive_with_stream(fz_context *ctx, fz_stream *file);
 
 /**
 	fz_archive: zip implementation
@@ -409,8 +412,6 @@ typedef struct
 fz_archive_handler;
 
 FZ_DATA extern const fz_archive_handler fz_libarchive_archive_handler;
-
-FZ_DATA extern const fz_archive_handler fz_chm_archive_handler;
 
 void fz_register_archive_handler(fz_context *ctx, const fz_archive_handler *handler);
 

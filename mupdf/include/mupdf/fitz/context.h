@@ -138,6 +138,14 @@ const char *fz_caught_message(fz_context *ctx);
 */
 int fz_caught(fz_context *ctx);
 
+/*
+	Within an fz_catch() block, retrieve the errno code for
+	the current SYSTEM exception.
+
+	Is undefined for non-SYSTEM errors.
+*/
+int fz_caught_errno(fz_context *ctx);
+
 /**
 	Within an fz_catch() block, rethrow the current exception
 	if the errcode of the current exception matches.
@@ -716,6 +724,34 @@ char *fz_strdup(fz_context *ctx, const char *s);
 */
 void fz_memrnd(fz_context *ctx, uint8_t *block, int len);
 
+/*
+	Reference counted malloced C strings.
+*/
+typedef struct
+{
+	int refs;
+	char str[1];
+} fz_string;
+
+/*
+	Allocate a new string to hold a copy of str.
+
+	Returns with a refcount of 1.
+*/
+fz_string *fz_new_string(fz_context *ctx, const char *str);
+
+/*
+	Take another reference to a string.
+*/
+fz_string *fz_keep_string(fz_context *ctx, fz_string *str);
+
+/*
+	Drop a reference to a string, freeing if the refcount
+	reaches 0.
+*/
+void fz_drop_string(fz_context *ctx, fz_string *str);
+
+#define fz_cstring_from_string(A) ((A) == NULL ? NULL : (A)->str)
 
 /* Implementation details: subject to change. */
 
@@ -745,6 +781,7 @@ typedef struct
 	fz_error_stack_slot padding;
 	fz_error_stack_slot *stack_base;
 	int errcode;
+	int errnum; /* errno for SYSTEM class errors */
 	void *print_user;
 	void (*print)(void *user, const char *message);
 	char message[256];

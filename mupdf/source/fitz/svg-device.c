@@ -1087,7 +1087,7 @@ svg_dev_begin_mask(fz_context *ctx, fz_device *dev, fz_rect bbox, int luminosity
 }
 
 static void
-svg_dev_end_mask(fz_context *ctx, fz_device *dev)
+svg_dev_end_mask(fz_context *ctx, fz_device *dev, fz_function *tr)
 {
 	svg_device *sdev = (svg_device*)dev;
 	fz_buffer *out = sdev->out;
@@ -1095,6 +1095,9 @@ svg_dev_end_mask(fz_context *ctx, fz_device *dev)
 
 	if (dev->container_len > 0)
 		mask = dev->container[dev->container_len-1].user;
+
+	if (tr)
+		fz_warn(ctx, "Ignoring Transfer Function");
 
 	fz_append_printf(ctx, out, "\"/>\n</mask>\n");
 	out = end_def(ctx, sdev, 0);
@@ -1283,7 +1286,7 @@ svg_dev_begin_layer(fz_context *ctx, fz_device *dev, const char *name)
 	fz_buffer *out = sdev->out;
 
 	sdev->layers++;
-	fz_append_printf(ctx, out, "<g id=\"layer_%d\" data-name=\"%s\">\n", sdev->layers, name);
+	fz_append_printf(ctx, out, "<g id=\"layer_%d\" data-name=\"%s\">\n", sdev->layers, name ? name : "");
 }
 
 static void

@@ -234,6 +234,9 @@
     <ClInclude Include="..\mupdf\include\mupdf\helpers\pkcs7-openssl.h">
       <Filter>mupdf\include\mupdf\helpers</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\include\mupdf\html.h">
+      <Filter>mupdf\include\mupdf</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\memento.h">
       <Filter>mupdf\include\mupdf</Filter>
     </ClInclude>
@@ -331,9 +334,6 @@
       <Filter>mupdf\source\fitz</Filter>
     </ClInclude>
     <ClInclude Include="..\mupdf\source\fitz\leptonica-wrap.h">
-      <Filter>mupdf\source\fitz</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mupdf\source\fitz\lzxd-imp.h">
       <Filter>mupdf\source\fitz</Filter>
     </ClInclude>
     <ClInclude Include="..\mupdf\source\fitz\paint-glyph.h">
@@ -605,9 +605,6 @@
     <ClCompile Include="..\mupdf\source\fitz\log.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
-    <ClCompile Include="..\mupdf\source\fitz\lzxd.c">
-      <Filter>mupdf\source\fitz</Filter>
-    </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\memento.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
@@ -704,10 +701,19 @@
     <ClCompile Include="..\mupdf\source\fitz\strtof.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\subset-cff.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\subset-ttf.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\svg-device.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\test-device.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\text-decoder.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\text.c">
@@ -731,7 +737,7 @@
     <ClCompile Include="..\mupdf\source\fitz\ucdn.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
-    <ClCompile Include="..\mupdf\source\fitz\unchm.c">
+    <ClCompile Include="..\mupdf\source\fitz\uncfb.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\unlibarchive.c">
@@ -786,6 +792,9 @@
       <Filter>mupdf\source\html</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\html\story-writer.c">
+      <Filter>mupdf\source\html</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\html\txt.c">
       <Filter>mupdf\source\html</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\html\xml-dom.c">
@@ -914,6 +923,9 @@
     <ClCompile Include="..\mupdf\source\pdf\pdf-stream.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\pdf\pdf-subset.c">
+      <Filter>mupdf\source\pdf</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-type3.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
@@ -995,6 +1007,9 @@
       <Filter>mupdf\resources\fonts\noto</Filter>
     </CustomBuild>
     <CustomBuild Include="..\mupdf\resources\fonts\noto\NotoSerifDevanagari-Regular.otf">
+      <Filter>mupdf\resources\fonts\noto</Filter>
+    </CustomBuild>
+    <CustomBuild Include="..\mupdf\resources\fonts\noto\NotoSerifGeorgian-Regular.otf">
       <Filter>mupdf\resources\fonts\noto</Filter>
     </CustomBuild>
     <CustomBuild Include="..\mupdf\resources\fonts\sil\CharisSIL-Bold.cff">

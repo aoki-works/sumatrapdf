@@ -90,9 +90,16 @@ def declaration_text(
 
     pointee = type_.get_pointee()
     if pointee and pointee.spelling:
-        if verbose: jlib.log( '{pointee.spelling=}')
+        if type_.kind == state.clang.cindex.TypeKind.LVALUEREFERENCE:
+            pointee_type = '&'
+        elif type_.kind == state.clang.cindex.TypeKind.POINTER:
+            pointee_type = '*'
+        else:
+            assert 0, f'Unrecognised pointer kind {type_.kind=}.'
+        if verbose: jlib.log( '{type_=} {type_.kind=} {pointee.spelling=}')
         ret = declaration_text(
-                pointee, f'*{name}',
+                pointee,
+                f'{pointee_type}{name}',
                 nest+1,
                 name_is_simple=False,
                 verbose=verbose,
@@ -325,6 +332,8 @@ def make_fncall( tu, cursor, return_type, fncall, out, refcheck_if):
                 out.write( f'        std::cerr << " {arg.name}=" << {arg.name};\n')
             elif arg.cursor.type.kind == state.clang.cindex.TypeKind.POINTER:
                 out.write( f'        if ({varname_enable()}) std::cerr << " {arg.name}=" << {arg.name};\n')
+            elif arg.cursor.type.kind == state.clang.cindex.TypeKind.LVALUEREFERENCE:
+                out.write( f'        if ({varname_enable()}) std::cerr << " &{arg.name}=" << &{arg.name};\n')
             else:
                 out.write( f'        std::cerr << " &{arg.name}=" << &{arg.name};\n')
         elif parse.is_pointer_to(arg.cursor.type, 'char') and state.get_name_canonical( arg.cursor.type.get_pointee()).is_const_qualified():
@@ -350,6 +359,8 @@ def make_fncall( tu, cursor, return_type, fncall, out, refcheck_if):
         elif arg.cursor.type.kind == state.clang.cindex.TypeKind.POINTER:
             # Don't assume non-const 'char*' is a zero-terminated string.
             out.write( f'        if ({varname_enable()}) std::cerr << " {arg.name}=" << (void*) {arg.name};\n')
+        elif arg.cursor.type.kind == state.clang.cindex.TypeKind.LVALUEREFERENCE:
+            out.write( f'        if ({varname_enable()}) std::cerr << " &{arg.name}=" << &{arg.name};\n')
         else:
             out.write( f'        std::cerr << " {arg.name}=" << {arg.name};\n')
     out.write( f'        std::cerr << "\\n";\n')
@@ -1009,7 +1020,7 @@ g_extra_declarations = textwrap.dedent(f'''
         /**
         C++ alternative to fz_search_page() that returns information in a std::vector.
         */
-        FZ_FUNCTION std::vector<fz_search_page2_hit> fz_search_page2(fz_context* ctx, fz_document *doc, int number, const char *needle, int hit_max);
+        FZ_FUNCTION std::vector<fz_search_page2_hit> fz_search_page2(fz_context* ctx, fz_document* doc, int number, const char* needle, int hit_max);
 
         /**
         C++ alternative to fz_string_from_text_language() that returns information in a std::string.
@@ -1019,10 +1030,67 @@ g_extra_declarations = textwrap.dedent(f'''
         /**
         C++ alternative to fz_get_glyph_name() that returns information in a std::string.
         */
-        FZ_FUNCTION std::string fz_get_glyph_name2(fz_context *ctx, fz_font *font, int glyph);
+        FZ_FUNCTION std::string fz_get_glyph_name2(fz_context* ctx, fz_font* font, int glyph);
+
+        /**
+        Extra struct containing fz_install_load_system_font_funcs()'s args,
+        which we wrap with virtual_fnptrs set to allow use from Python/C# via
+        Swig Directors.
+        */
+        typedef struct fz_install_load_system_font_funcs_args
+        {{
+            fz_load_system_font_fn* f;
+            fz_load_system_cjk_font_fn* f_cjk;
+            fz_load_system_fallback_font_fn* f_fallback;
+        }} fz_install_load_system_font_funcs_args;
+
+        /**
+        Alternative to fz_install_load_system_font_funcs() that takes args in a
+        struct, to allow use from Python/C# via Swig Directors.
+        */
+        FZ_FUNCTION void fz_install_load_system_font_funcs2(fz_context* ctx, fz_install_load_system_font_funcs_args* args);
+
+        /** Internal singleton state to allow Swig Director class to find
+        fz_install_load_system_font_funcs_args class wrapper instance. */
+        FZ_DATA extern void* fz_install_load_system_font_funcs2_state;
+
+        /** Helper for calling a `fz_document_open_fn` function pointer via Swig
+        from Python/C#. */
+        FZ_FUNCTION fz_document* fz_document_open_fn_call(fz_context* ctx, fz_document_open_fn fn, fz_stream* stream, fz_stream* accel, fz_archive* dir);
+
+        /** Helper for calling a `fz_document_recognize_content_fn` function
+        pointer via Swig from Python/C#. */
+        FZ_FUNCTION int fz_document_recognize_content_fn_call(fz_context* ctx, fz_document_recognize_content_fn fn, fz_stream* stream, fz_archive* dir);
+
+        /** Swig-friendly wrapper for pdf_choice_widget_options(), returns the
+        options directly in a vector. */
+        FZ_FUNCTION std::vector<std::string> pdf_choice_widget_options2(fz_context* ctx, pdf_annot* tw, int exportval);
+
+        /** Swig-friendly wrapper for fz_new_image_from_compressed_buffer(),
+        uses specified `decode` and `colorkey` if they are not null (in which
+        case we assert that they have size `2*fz_colorspace_n(colorspace)`). */
+        FZ_FUNCTION fz_image* fz_new_image_from_compressed_buffer2(
+                fz_context* ctx,
+                int w,
+                int h,
+                int bpc,
+                fz_colorspace* colorspace,
+                int xres,
+                int yres,
+                int interpolate,
+                int imagemask,
+                const std::vector<float>& decode,
+                const std::vector<int>& colorkey,
+                fz_compressed_buffer* buffer,
+                fz_image* mask
+                );
+
+        /** Swig-friendly wrapper for pdf_rearrange_pages(). */
+        void pdf_rearrange_pages2(fz_context* ctx, pdf_document* doc, const std::vector<int>& pages);
         ''')
 
 g_extra_definitions = textwrap.dedent(f'''
+
         FZ_FUNCTION std::string fz_lookup_metadata2( fz_context* ctx, fz_document* doc, const char* key)
         {{
             /* Find length first. */
@@ -1057,25 +1125,25 @@ g_extra_definitions = textwrap.dedent(f'''
             return ret;
         }}
 
-        FZ_FUNCTION std::vector<unsigned char> fz_md5_pixmap2(fz_context *ctx, fz_pixmap *pixmap)
+        FZ_FUNCTION std::vector<unsigned char> fz_md5_pixmap2(fz_context* ctx, fz_pixmap* pixmap)
         {{
             std::vector<unsigned char>  ret(16);
             fz_md5_pixmap( ctx, pixmap, &ret[0]);
             return ret;
         }}
 
-        FZ_FUNCTION long long fz_pixmap_samples_int(fz_context *ctx, fz_pixmap *pixmap)
+        FZ_FUNCTION long long fz_pixmap_samples_int(fz_context* ctx, fz_pixmap* pixmap)
         {{
             long long ret = (intptr_t) pixmap->samples;
             return ret;
         }}
 
-        FZ_FUNCTION int fz_samples_get(fz_pixmap *pixmap, int offset)
+        FZ_FUNCTION int fz_samples_get(fz_pixmap* pixmap, int offset)
         {{
             return pixmap->samples[offset];
         }}
 
-        FZ_FUNCTION void fz_samples_set(fz_pixmap *pixmap, int offset, int value)
+        FZ_FUNCTION void fz_samples_set(fz_pixmap* pixmap, int offset, int value)
         {{
             pixmap->samples[offset] = value;
         }}
@@ -1087,7 +1155,7 @@ g_extra_definitions = textwrap.dedent(f'''
             return ret;
         }}
 
-        FZ_FUNCTION std::vector<fz_quad> fz_highlight_selection2(fz_context *ctx, fz_stext_page *page, fz_point a, fz_point b, int max_quads)
+        FZ_FUNCTION std::vector<fz_quad> fz_highlight_selection2(fz_context* ctx, fz_stext_page* page, fz_point a, fz_point b, int max_quads)
         {{
             {{
                 std::vector<fz_quad>    ret(max_quads);
@@ -1111,7 +1179,7 @@ g_extra_definitions = textwrap.dedent(f'''
             fz_throw(ctx, FZ_ERROR_GENERIC, "fz_highlight_selection() failed");
         }}
 
-        FZ_FUNCTION std::vector<fz_search_page2_hit> fz_search_page2(fz_context *ctx, fz_document *doc, int number, const char *needle, int hit_max)
+        FZ_FUNCTION std::vector<fz_search_page2_hit> fz_search_page2(fz_context* ctx, fz_document* doc, int number, const char* needle, int hit_max)
         {{
             std::vector<fz_quad>    quads(hit_max);
             std::vector<int>        marks(hit_max);
@@ -1132,11 +1200,86 @@ g_extra_definitions = textwrap.dedent(f'''
             return std::string(str);
         }}
 
-        FZ_FUNCTION std::string fz_get_glyph_name2(fz_context *ctx, fz_font *font, int glyph)
+        FZ_FUNCTION std::string fz_get_glyph_name2(fz_context* ctx, fz_font* font, int glyph)
         {{
             char name[32];
             fz_get_glyph_name(ctx, font, glyph, name, sizeof(name));
             return std::string(name);
+        }}
+
+        void fz_install_load_system_font_funcs2(fz_context* ctx, fz_install_load_system_font_funcs_args* args)
+        {{
+            fz_install_load_system_font_funcs(ctx, args->f, args->f_cjk, args->f_fallback);
+        }}
+
+        void* fz_install_load_system_font_funcs2_state = nullptr;
+
+        FZ_FUNCTION fz_document* fz_document_open_fn_call(fz_context* ctx, fz_document_open_fn fn, fz_stream* stream, fz_stream* accel, fz_archive* dir)
+        {{
+            return fn(ctx, stream, accel, dir);
+        }}
+
+        FZ_FUNCTION int fz_document_recognize_content_fn_call(fz_context* ctx, fz_document_recognize_content_fn fn, fz_stream* stream, fz_archive* dir)
+        {{
+            return fn(ctx, stream, dir);
+        }}
+
+        FZ_FUNCTION std::vector<std::string> pdf_choice_widget_options2(fz_context* ctx, pdf_annot* tw, int exportval)
+        {{
+            int n = pdf_choice_widget_options(ctx, tw, exportval, nullptr);
+            std::vector<const char*> opts(n);
+            int n2 = pdf_choice_widget_options(ctx, tw, exportval, &opts[0]);
+            assert(n2 == n);
+            std::vector<std::string> ret(n);
+            for (int i=0; i<n; ++i)
+            {{
+                ret[i] = opts[i];
+            }}
+            return ret;
+        }}
+
+        FZ_FUNCTION fz_image* fz_new_image_from_compressed_buffer2(
+                fz_context* ctx,
+                int w,
+                int h,
+                int bpc,
+                fz_colorspace* colorspace,
+                int xres,
+                int yres,
+                int interpolate,
+                int imagemask,
+                const std::vector<float>& decode,
+                const std::vector<int>& colorkey,
+                fz_compressed_buffer* buffer,
+                fz_image* mask
+                )
+        {{
+            int n = fz_colorspace_n(ctx, colorspace);
+            assert(decode.empty() || decode.size() == 2 * n);
+            assert(colorkey.empty() || colorkey.size() == 2 * n);
+            const float* decode2 = decode.empty() ? nullptr : &decode[0];
+            const int* colorkey2 = colorkey.empty() ? nullptr : &colorkey[0];
+            fz_image* ret = fz_new_image_from_compressed_buffer(
+                    ctx,
+                    w,
+                    h,
+                    bpc,
+                    colorspace,
+                    xres,
+                    yres,
+                    interpolate,
+                    imagemask,
+                    decode2,
+                    colorkey2,
+                    fz_keep_compressed_buffer(ctx, buffer),
+                    mask
+                    );
+            return ret;
+        }}
+
+        void pdf_rearrange_pages2(fz_context* ctx, pdf_document* doc, const std::vector<int>& pages)
+        {{
+            return pdf_rearrange_pages(ctx, doc, pages.size(), &pages[0]);
         }}
         ''')
 
@@ -1634,13 +1777,15 @@ def make_function_wrappers(
                         if (g_mupdf_trace_exceptions)
                         {{
                             std::cerr
+                                    << __FILE__ << ':' << __LINE__ << ':'
                                     #ifndef _WIN32
-                                    << __PRETTY_FUNCTION__ << ": "
+                                    << __PRETTY_FUNCTION__ << ':'
                                     #endif
-                                    << "Converting C++ std::exception mupdf::{typename} into Python exception: "
+                                    << " Converting C++ std::exception mupdf::{typename} ({i=}) into Python exception:\\n"
                                     << "    e.m_code: " << e.m_code << "\\n"
                                     << "    e.m_text: " << e.m_text << "\\n"
-                                    << "    e.what():" << e.what() << "\\n"
+                                    << "    e.what(): " << e.what() << "\\n"
+                                    << "    typeid(e).name(): " << typeid(e).name() << "\\n"
                                     << "\\n";
                         }}
                         set_exception(s_error_classes[{i}], e.m_code, e.m_text);
@@ -1654,27 +1799,36 @@ def make_function_wrappers(
                     if (g_mupdf_trace_exceptions)
                     {{
                         std::cerr
+                                << __FILE__ << ':' << __LINE__ << ':'
                                 #ifndef _WIN32
-                                << __PRETTY_FUNCTION__ << ": "
+                                << __PRETTY_FUNCTION__ << ':'
                                 #endif
-                                << "Converting C++ std::exception mupdf::{typename} into Python exception: "
+                                << " Converting C++ std::exception mupdf::FzErrorBase ({error_classes_n-1=}) into Python exception:\\n"
                                 << "    e.m_code: " << e.m_code << "\\n"
                                 << "    e.m_text: " << e.m_text << "\\n"
-                                << "    e.what():" << e.what() << "\\n"
+                                << "    e.what(): " << e.what() << "\\n"
+                                << "    typeid(e).name(): " << typeid(e).name() << "\\n"
                                 << "\\n";
                     }}
-                    set_exception(s_error_classes[{error_classes_n-1}], e.m_code, e.m_text);
+                    PyObject* class_ = s_error_classes[{error_classes_n-1}];
+                    PyObject* args = Py_BuildValue("is", e.m_code, e.m_text.c_str());
+                    PyObject* instance = PyObject_CallObject(class_, args);
+                    PyErr_SetObject(class_, instance);
+                    Py_XDECREF(instance);
+                    Py_XDECREF(args);
                 }}
                 catch (std::exception& e)
                 {{
                     if (g_mupdf_trace_exceptions)
                     {{
                         std::cerr
+                                << __FILE__ << ':' << __LINE__ << ':'
                                 #ifndef _WIN32
-                                << __PRETTY_FUNCTION__ << ": "
+                                << __PRETTY_FUNCTION__ << ':'
                                 #endif
-                                << "Converting C++ std::exception into Python exception: "
+                                << " Converting C++ std::exception into Python exception: "
                                 << e.what()
+                                << "    typeid(e).name(): " << typeid(e).name() << "\\n"
                                 << "\\n";
                     }}
                     SWIG_Error(SWIG_RuntimeError, e.what());
@@ -1685,10 +1839,11 @@ def make_function_wrappers(
                     if (g_mupdf_trace_exceptions)
                     {{
                         std::cerr
+                                << __FILE__ << ':' << __LINE__ << ':'
                                 #ifndef _WIN32
-                                << __PRETTY_FUNCTION__ << ": "
+                                << __PRETTY_FUNCTION__ << ':'
                                 #endif
-                                << "Converting unknown C++ exception into Python exception."
+                                << " Converting unknown C++ exception into Python exception."
                                 << "\\n";
                     }}
                     SWIG_Error(SWIG_RuntimeError, "Unknown exception");
@@ -1975,72 +2130,6 @@ def make_function_wrappers(
                 }}
             }}
             '''))
-
-    # Write custom functions to allow calling of fz_document_handler function
-    # pointers.
-    #
-    # Would be good to extend function_wrapper() and
-    # function_wrapper_class_aware() to work with fnptr type as well as actual
-    # functions. But for now we specify things manually and don't support
-    # passing wrapper classes.
-    #
-    def fnptr_wrapper(
-            return_type,
-            fnptr,
-            fnptr_args, # Must include leading comma.
-            fnptr_arg_names, # Must include leading comma.
-            ):
-        decl = f'''FZ_FUNCTION {return_type} {rename.ll_fn(fnptr)}_call({fnptr} fn{fnptr_args})'''
-        out_functions_h.write(
-                textwrap.indent(
-                    textwrap.dedent( f'''
-                        /* Helper for calling a {fnptr}. Provides a `fz_context` and coverts
-                        fz_try..fz_catch exceptions into C++ exceptions. */
-                        {decl};
-                        '''),
-                    '    ',
-                    )
-                )
-        out_functions_cpp.write( textwrap.dedent( f'''
-                {decl}
-                {{
-                    fz_context* ctx = mupdf::internal_context_get();
-                    {return_type} ret;
-                    fz_try(ctx)
-                    {{
-                        ret = fn( ctx{fnptr_arg_names});
-                    }}
-                    fz_catch(ctx)
-                    {{
-                        mupdf::internal_throw_exception( ctx);
-                    }}
-                    return ret;
-                }}
-                '''))
-    fnptr_wrapper(
-            'fz_document*',
-            'fz_document_open_fn',
-            ', const char* filename',
-            ', filename',
-            )
-    fnptr_wrapper(
-            'fz_document*',
-            'fz_document_open_with_stream_fn',
-            ', fz_stream* stream',
-            ', stream',
-            )
-    fnptr_wrapper(
-            'fz_document*',
-            'fz_document_open_accel_fn',
-            ', const char* filename, const char* accel',
-            ', filename, accel',
-            )
-    fnptr_wrapper(
-            'fz_document*',
-            'fz_document_open_accel_with_stream_fn',
-            ', fz_stream* stream, fz_stream* accel',
-            ', stream, accel',
-            )
 
 
 def class_add_iterator( tu, struct_cursor, struct_name, classname, extras, refcheck_if):
@@ -3763,9 +3852,9 @@ def class_wrapper_virtual_fnptrs(
         refcheck_if,
         ):
     '''
-    Generate extra wrapper class for structs that contain function pointers,
-    for use as a SWIG Director class so that the function pointers can be made
-    to effectively point to Python or C# code.
+    Generate extra wrapper class if struct contains function pointers, for
+    use as a SWIG Director class so that the function pointers can be made to
+    effectively point to Python or C# code.
     '''
     if not extras.virtual_fnptrs:
         return
@@ -3887,7 +3976,7 @@ def class_wrapper_virtual_fnptrs(
         out_cpp.write(')')
         out_cpp.write('\n')
         out_cpp.write('{\n')
-        self_expression = self_( f'arg_{self_n}')
+        self_expression = self_() if self_n is None else self_( f'arg_{self_n}')
         out_cpp.write(f'    {classname}2* self = {self_expression};\n')
         out_cpp.write(f'    {refcheck_if}\n')
         out_cpp.write(f'    if (s_trace_director)\n')
@@ -4506,7 +4595,7 @@ def refcount_check_code( out, refcheck_if):
             a static instance of this class template with T set to our wrapper
             class, for example:
 
-                static RefsCheck<fz_document, Document> s_Document_refs_check;
+                static RefsCheck<fz_document, FzDocument> s_FzDocument_refs_check;
 
             Then if s_check_refs is true, each constructor function calls
             .add(), the destructor calls .remove() and other class functions
@@ -5155,8 +5244,12 @@ def cpp_source(
     for structname, cursor in state.state_.structs[ tu].items():
         generated.c_structs.append( structname)
 
+    # Create windows_mupdf.def, containing explicit exports for all MuPDF
+    # global data and functions. We do this instead of explicitly prefixing
+    # everything with FZ_FUNCTION or FZ_DATA in the MuPDF header files.
+    #
+    windows_def_path = os.path.relpath(f'{base}/windows_mupdf.def')
     windows_def = ''
-    #windows_def += 'LIBRARY mupdfcpp\n'    # This breaks things.
     windows_def += 'EXPORTS\n'
 
     for name, cursor in state.state_.find_global_data_starting_with( tu, ('fz_', 'pdf_')):
@@ -5172,35 +5265,21 @@ def cpp_source(
             # usually inline?
             #
             jlib.log('Not adding to windows_def because static: {fnname}()', 1)
-        elif fnname in (
-                'fz_lookup_metadata2',
-                'fz_md5_pixmap2',
-                'fz_pixmap_samples_int',
-                'fz_samples_get',
-                'fz_samples_set',
-                'pdf_lookup_metadata2',
-                'fz_md5_final2',
-                'fz_highlight_selection2',
-                'fz_search_page2',
-                'fz_string_from_text_language2',
-                'fz_get_glyph_name2',
-                ):
-            # These are excluded from windows_def because are C++ so
-            # we'd need to use the mangled name in. Instead we mark them
-            # with FZ_FUNCTION.
-            pass
+        elif os.path.abspath(cursor.extent.start.file.name) == os.path.abspath(out_hs.extra.filename):
+            # Items defined in out_hs.extra are C++ so we would need to use the
+            # mangled name if we added them to windows_def. Instead they are
+            # explicitly prefixed with `FZ_FUNCTION`.
+            #
+            # (We use os.path.abspath() to avoid problems with back and forward
+            # slashes in cursor.extent.start.file.name on Windows.)
+            #
+            jlib.log('Not adding to {windows_def_path} because defined in {os.path.relpath(out_hs.extra.filename)}: {cursor.spelling}')
         else:
             windows_def += f'    {fnname}\n'
     # Add some internal fns that PyMuPDF requires.
     for fnname in (
             'FT_Get_First_Char',
             'FT_Get_Next_Char',
-            'pdf_lookup_page_loc',
-            'fz_scale_pixmap',
-            'fz_pixmap_size',
-            'fz_subsample_pixmap',
-            'fz_copy_pixmap_rect',
-            'fz_write_pixmap_as_jpeg',
             ):
         windows_def += f'    {fnname}\n'
 
@@ -5210,7 +5289,7 @@ def cpp_source(
         windows_def += f'    fz_lock_debug_lock\n'
         windows_def += f'    fz_lock_debug_unlock\n'
 
-    jlib.fs_update( windows_def, f'{base}/windows_mupdf.def')
+    jlib.fs_update( windows_def, windows_def_path)
 
     def register_fn_use( name):
         assert name.startswith( ('fz_', 'pdf_'))

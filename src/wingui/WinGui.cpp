@@ -23,13 +23,6 @@ Kind kindWnd = "wnd";
 
 constexpr bool gLogTabs = false;
 
-static LONG gSubclassId = 0;
-
-UINT_PTR NextSubclassId() {
-    LONG res = InterlockedIncrement(&gSubclassId);
-    return (UINT_PTR)res;
-}
-
 #define WIN_MESSAGES(V)          \
     V(WM_CREATE)                 \
     V(WM_DESTROY)                \
@@ -2404,7 +2397,7 @@ LRESULT Splitter::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         ReleaseCapture();
         SplitterMoveEvent arg;
         arg.w = this;
-        arg.done = true;
+        arg.finishedDragging = true;
         onSplitterMove(&arg);
         HwndScheduleRepaint(hwnd);
         return 0;
@@ -2418,7 +2411,7 @@ LRESULT Splitter::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         if (hwnd == GetCapture()) {
             SplitterMoveEvent arg;
             arg.w = this;
-            arg.done = false;
+            arg.finishedDragging = false;
             onSplitterMove(&arg);
             if (!arg.resizeAllowed) {
                 curId = IDC_NO;

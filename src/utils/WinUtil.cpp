@@ -13,6 +13,13 @@
 
 #include "utils/Log.h"
 
+static LONG gSubclassId = 0;
+
+UINT_PTR NextSubclassId() {
+    LONG res = InterlockedIncrement(&gSubclassId);
+    return (UINT_PTR)res;
+}
+
 bool ToBool(BOOL b) {
     return b ? true : false;
 }
@@ -1690,11 +1697,7 @@ void MenuSetText(HMENU m, int id, const char* s) {
    if no change is needed, the string is returned as is,
    else it's also saved in newResult for automatic freeing */
 TempStr MenuToSafeStringTemp(const char* s) {
-    auto str = str::DupTemp(s);
-    if (!str::FindChar(str, '&')) {
-        return str;
-    }
-    TempStr safe = str::ReplaceTemp(str, "&", "&&");
+    TempStr safe = str::ReplaceTemp(s, "&", "&&");
     return safe;
 }
 

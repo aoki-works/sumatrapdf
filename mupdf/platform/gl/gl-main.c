@@ -499,25 +499,6 @@ static void save_history(void)
 	js_freestate(J);
 }
 
-static int
-fz_mkdir(char *path)
-{
-#ifdef _WIN32
-	int ret;
-	wchar_t *wpath = fz_wchar_from_utf8(path);
-
-	if (wpath == NULL)
-		return -1;
-
-	ret = _wmkdir(wpath);
-
-	free(wpath);
-
-	return ret;
-#else
-	return mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO);
-#endif
-}
 
 static int create_accel_path(char outname[], size_t len, int create, const char *absname, ...)
 {
@@ -1775,7 +1756,7 @@ static void event_cb(fz_context *callback_ctx, pdf_document *callback_doc, pdf_d
 		break;
 
 	default:
-		fz_throw(callback_ctx, FZ_ERROR_GENERIC, "event not yet implemented");
+		fz_throw(callback_ctx, FZ_ERROR_UNSUPPORTED, "event not yet implemented");
 		break;
 	}
 }
@@ -2560,7 +2541,7 @@ static char *short_signature_error_desc(pdf_signature_error err)
 	}
 }
 
-const char *format_date(int64_t secs)
+const char *format_date(int64_t secs64)
 {
 	static char buf[100];
 #ifdef _POSIX_SOURCE
@@ -2568,6 +2549,7 @@ const char *format_date(int64_t secs)
 #else
 	struct tm *tm;
 #endif
+	time_t secs = (time_t)secs64;
 
 	if (secs <= 0)
 		return NULL;

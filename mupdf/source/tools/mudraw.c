@@ -342,7 +342,7 @@ fz_colorspace *proof_cs = NULL;
 static const char *icc_filename = NULL;
 static float gamma_value = 1;
 static int invert = 0;
-static int kill = 0;
+static int s_kill = 0; /* Using `kill` causes problems on Android. */
 static int band_height = 0;
 static int lowmemory = 0;
 
@@ -413,7 +413,7 @@ static int usage(void)
 		"\n"
 		"\t-o -\toutput file name (%%d for page number)\n"
 		"\t-F -\toutput format (default inferred from output file name)\n"
-		"\t\traster: png, pnm, pam, pbm, pkm, pwg, pcl, ps\n"
+		"\t\traster: png, pnm, pam, pbm, pkm, pwg, pcl, ps, pdf, j2k\n"
 		"\t\tvector: svg, pdf, trace, ocr.trace\n"
 		"\t\ttext: txt, html, xhtml, stext, stext.json\n"
 #ifndef OCR_DISABLED
@@ -601,14 +601,14 @@ file_level_trailers(fz_context *ctx)
 
 static void apply_kill_switch(fz_device *dev)
 {
-	if (kill == 1)
+	if (s_kill == 1)
 	{
 		/* kill all non-clipping text operators */
 		dev->fill_text = NULL;
 		dev->stroke_text = NULL;
 		dev->ignore_text = NULL;
 	}
-	else if (kill == 2)
+	else if (s_kill == 2)
 	{
 		/* kill all non-clipping path, image, and shading operators */
 		dev->fill_path = NULL;
@@ -1132,7 +1132,7 @@ static void dodrawpage(fz_context *ctx, fz_page *page, fz_display_list *list, in
 			}
 			if (output_format == OUT_J2K && bands > 1)
 			{
-				fz_throw(ctx, FZ_ERROR_GENERIC, "Can't band with J2k output!");
+				fz_throw(ctx, FZ_ERROR_ARGUMENT, "Can't band with J2k output!");
 			}
 
 			for (band = 0; band < bands; band++)
@@ -1898,26 +1898,6 @@ static void apply_layer_config(fz_context *ctx, fz_document *doc, const char *lc
 #endif
 }
 
-static int
-fz_mkdir(char *path)
-{
-#ifdef _WIN32
-	int ret;
-	wchar_t *wpath = fz_wchar_from_utf8(path);
-
-	if (wpath == NULL)
-		return -1;
-
-	ret = _wmkdir(wpath);
-
-	free(wpath);
-
-	return ret;
-#else
-	return mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO);
-#endif
-}
-
 static int create_accel_path(fz_context *ctx, char outname[], size_t len, int create, const char *absname, ...)
 {
 	va_list args;
@@ -2078,7 +2058,7 @@ int mudraw_main(int argc, char **argv)
 		case 'U': layout_css = fz_optarg; break;
 		case 'X': layout_use_doc_css = 0; break;
 
-		case 'K': ++kill; break;
+		case 'K': ++s_kill; break;
 
 		case 'O': spots = fz_atof(fz_optarg);
 #ifndef FZ_ENABLE_SPOT_RENDERING

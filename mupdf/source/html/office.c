@@ -3,6 +3,20 @@
 
 #undef DEBUG_OFFICE_TO_HTML
 
+/* Defaults are all 0's. FIXME: Very subject to change. Possibly might be removed entirely. */
+typedef struct
+{
+	int output_page_numbers;
+	int output_sheet_names;
+	int output_cell_markers;
+	int output_cell_row_markers;
+	int output_cell_names;
+	int output_formatting;
+	int output_filenames;
+	int output_errors;
+}
+fz_office_to_html_opts;
+
 typedef struct
 {
 	fz_office_to_html_opts opts;
@@ -964,10 +978,15 @@ load_footnotes(fz_context *ctx, fz_archive *arch, fz_xml *rels, doc_info *info, 
 static void
 process_office_document(fz_context *ctx, fz_archive *arch, const char *file, doc_info *info)
 {
-	char *file_rels = make_rel_name(ctx, file);
+	char *file_rels;
 	fz_xml *xml = NULL;
 	fz_xml *rels = NULL;
 	char *resolved_rel = NULL;
+
+	if (file == NULL)
+		return;
+
+	file_rels = make_rel_name(ctx, file);
 
 	fz_var(resolved_rel);
 
@@ -1071,8 +1090,8 @@ process_office_document_properties(fz_context *ctx, fz_archive *arch, const char
 		fz_rethrow(ctx);
 }
 
-fz_buffer *
-fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, const char *user_css, fz_office_to_html_opts *opts)
+static fz_buffer *
+fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, fz_archive *dir, const char *user_css, fz_office_to_html_opts *opts)
 {
 	fz_stream *stream = NULL;
 	fz_archive *archive = NULL;
@@ -1085,9 +1104,8 @@ fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, 
 	doc_info info = { 0 };
 	int i;
 
-	stream = fz_open_buffer(ctx, buffer_in);
-
 	fz_var(archive);
+	fz_var(stream);
 	fz_var(buffer_out);
 	fz_var(xml);
 	fz_var(rels);
@@ -1097,7 +1115,13 @@ fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, 
 
 	fz_try(ctx)
 	{
-		archive = fz_open_archive_with_stream(ctx, stream);
+		if (buffer_in)
+		{
+			stream = fz_open_buffer(ctx, buffer_in);
+			archive = fz_open_archive_with_stream(ctx, stream);
+		}
+		else
+			archive = fz_keep_archive(ctx, dir);
 		buffer_out = fz_new_buffer(ctx, 1024);
 		info.out = fz_new_output_with_buffer(ctx, buffer_out);
 
@@ -1141,7 +1165,8 @@ fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, 
 			while (pos)
 			{
 				const char *file = fz_xml_att(pos, "Target");
-				process_office_document(ctx, archive, file, &info);
+				if (file)
+					process_office_document(ctx, archive, file, &info);
 				pos = fz_xml_find_next_dfs(pos, "Relationship", "Type", schema);
 			}
 		}
@@ -1177,3 +1202,108 @@ fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, 
 
 	return buffer_out;
 }
+
+/* Office document handler */
+
+static fz_buffer *
+office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buf, fz_archive *zip, const char *user_css)
+{
+	fz_office_to_html_opts opts = { 0 };
+
+	return fz_office_to_html(ctx, set, buf, zip, user_css, &opts);
+}
+
+static const fz_htdoc_format_t fz_htdoc_office =
+{
+	"Office document",
+	office_to_html,
+	0, 1, 0
+};
+
+static fz_document *
+office_open_document(fz_context *ctx, fz_stream *file, fz_stream *accel, fz_archive *zip)
+{
+	return fz_htdoc_open_document_with_stream_and_dir(ctx, file, zip, &fz_htdoc_office);
+}
+
+static const char *office_extensions[] =
+{
+	"docx",
+	"xlsx",
+	"pptx",
+	"hwpx",
+	NULL
+};
+
+static const char *office_mimetypes[] =
+{
+	// DOCX
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	// XLSX
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	// PPTX
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	// HWPX
+	"application/haansofthwpx",
+	"application/vnd.hancom.hwpx",
+	NULL
+};
+
+static int
+office_recognize_doc_content(fz_context *ctx, fz_stream *stream, fz_archive *zip)
+{
+	fz_archive *arch = NULL;
+	int ret = 0;
+	fz_xml *xml = NULL;
+
+	fz_var(arch);
+	fz_var(ret);
+	fz_var(xml);
+
+	fz_try(ctx)
+	{
+		if (stream)
+		{
+			arch = fz_try_open_archive_with_stream(ctx, stream);
+			if (arch == NULL)
+				break;
+		}
+		else
+			arch = fz_keep_archive(ctx, zip);
+
+		xml = fz_try_parse_xml_archive_entry(ctx, arch, "META-INF/container.xml", 0);
+		if (xml)
+		{
+			if (fz_xml_find_dfs(xml, "rootfile", "media-type", "application/hwpml-package+xml"))
+				ret = 100; /* HWPX */
+			break;
+		}
+		xml = fz_try_parse_xml_archive_entry(ctx, arch, "_rels/.rels", 0);
+		if (xml)
+		{
+			if (fz_xml_find_dfs(xml, "Relationship", "Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"))
+			{
+				ret = 100; /* DOCX | PPTX | XLSX */
+			}
+			break;
+		}
+	}
+	fz_always(ctx)
+	{
+		fz_drop_xml(ctx, xml);
+		fz_drop_archive(ctx, arch);
+	}
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	return ret;
+}
+
+fz_document_handler office_document_handler =
+{
+	NULL,
+	office_open_document,
+	office_extensions,
+	office_mimetypes,
+	office_recognize_doc_content
+};

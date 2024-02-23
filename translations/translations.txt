@@ -1,5 +1,5 @@
 AppTranslator: SumatraPDF
-f1ff3fd49936859c77f210d76f3619fc22206202
+28c898ae0185da6d73060ebb919ab3d7a265c9d0
 :%s annotation. Ctrl+click to edit.
 am:%s մեկնաբանություն: Ctrl+քլիք՝ խմբագրելու համար:
 ar:ملاحظة %s. اضغط Ctrl للتحرير.
@@ -16,7 +16,9 @@ es:Comentario %s.
 fa:علامت گذاری %s. برای ویرایش Ctrl+click را بزنید
 fr:Annotation %s. Ctrl+clic pour modifier.
 ga:%s nóta mínithe. Brúigh Ctrl+gliogáil chun é a chur in eagar.
+gl:%s anotación. Ctrl+clic para editar.
 he:.כדי לערוך Ctrl +  הערה. לחץ על %s
+hu:Megjegyzés: %s. Szerkesztés: Ctrl+kattintás.
 it:Annotazione %s. Ctrl+clic per modificarla.
 ja:注釈 %s 。”Ctrl + クリック”で編集
 kr:%s 주석. Ctrl+클릭으로 편집
@@ -1491,7 +1493,9 @@ el:Συντομεύσεις πληκτρολογίου
 es:Atajos de teclado
 fa:میانبرهای &صفحه کلید
 fr:&Raccourcis clavier
+gl:Atallos de &teclado
 he:קיצורי דרך במקלדת
+hu:&Gyorsbillentyűk
 it:&Tasti rapidi
 ja:キーボード ショートカット(&K)
 kr:키보드 단축키(&K)
@@ -2009,6 +2013,7 @@ fr:&Ouvrir...
 ga:&Oscail...
 gl:&Abrir...
 he:פתח...
+hi:खोलें
 hr:&Otvori...
 hu:&Megnyitás…
 id:&Buka...
@@ -2312,6 +2317,7 @@ fr:Page &précédente
 ga:&An leathanach roimhe
 gl:&Páxina anterior
 he:עמוד קודם
+hi:पिछला पृष्ठ
 hr:&Prethodna stranica
 hu:&Előző oldal
 id:Halaman Sebelumnya
@@ -2729,6 +2735,7 @@ fr:&Sauvegarder dans le PDF existant
 ga:&Cuir i dtaisce i PDF atá ann
 gl:Gardar a PDF exi&stente
 he:קיים PDF שמירה במסמך
+hi:मौजूदा पीडीएफ में सहेजें
 hr:&Spremi u postojeći PDF
 hu:Meglévő PDF-be mentés
 id:&Simpan ke PDF yang sudah ada
@@ -4467,7 +4474,7 @@ sl:Ali ste prepričani, da želite odstraniti SumatraPDF?
 sn:Une chokwadi chekuti urikuda kubvisa SumatraPDF?
 sp-rs:Da li sigurno želite da uklonite SumatraPDF?
 sq:Jeni i sigurt se doni të çinstaloni SumatraPDF?
-sr-rs:Да ли желите деинсталацију СуматраПДФ
+sr-rs:Да ли сигурно желите да деинсталирате SumatraPDF?
 sv:Är du säker på att du vill avinstallera SumatraPDF?
 ta:சுமத்ரா PDF நிறுவலை நீக்கவா?
 th:คุณแน่ใจหรือไม่ว่าต้องการถอนการติดตั้ง SumatraPDF?
@@ -5932,6 +5939,7 @@ es:Eliminado historial de %d ficheros, miniaturas eliminadas.
 fa:تاریخچه %d پرونده حذف شد. تصاویر بند انگشتی حذف شدند.
 fr:Historique de %d fichiers effacé, vignettes supprimées.
 ga:Glanadh an t-oireas de %d comhad, mionsamhlacha scriosta.
+gl:Limpado historial de %d ficheiros, eliminadas miniaturas.
 he:.קבצים, תמונות ממוזערות נמחקו %d נוקתה היסטוריה של
 hr:Izbrisana povijest %d datoteka, izbrisane minijature.
 hu:Előzmények törölve (%d fájl), miniatűrök eltávolítva.
@@ -5965,6 +5973,7 @@ es:Borrando historial...
 fa:پاک کردن تاریخجه
 fr:Effacement de l'historique…
 ga:Tá an t-oireas á ghlanadh...
+gl:Limpando historial...
 he:...מנקה היסטוריה
 hr:Brisanje povijesti...
 hu:Előzmények törlése...
@@ -6051,6 +6060,7 @@ uz:Yopish
 vn:Đóng lại
 :Close Other Tabs
 am:Փակել այլ ներդիրները
+ar:أغلق علامات التبويب الأخرى
 az:Digər tabları bağla
 bg:Затвори другите отметки
 br:Fechar Outras Abas
@@ -6971,6 +6981,7 @@ uz:&Izohni nusxa olish
 vn:Chép chú thích
 :Copy File Path
 am:Պատճենել ֆայլի ուղին
+ar:نسخ مسار الملف
 az:Faylın yolunu kopyala
 br:Copiar o Caminho do Arquivo
 ca:Copia el camí del fitxer
@@ -6984,6 +6995,7 @@ es:Copiar dirección del archivo
 fa:کپی کردن مسیر فایل
 fr:Copier le chemin du fichier
 ga:Cóipeáil Conair an Chomhaid
+gl:Copiar camiño do ficheiro
 he:העתק את נתיב הקובץ
 hr:Kopiraj putanju datoteke
 hu:Útvonal másolása
@@ -8552,6 +8564,7 @@ es:Eliminar anotación
 fa:حذف علامت‌گذاری‌
 fr:Supprimer l'annotation
 ga:Scrios an nóta mínithe
+gl:Eliminar anotación
 he:מחק הערה
 hr:Izbriši bilješku
 hu:Megjegyzés törlése
@@ -9053,6 +9066,7 @@ es:Editar %s anotación
 fa:ویرایش %s علامت‌گذاری‌
 fr:Modifier l'annotation %s
 ga:Cuir an nóta mínithe %s in eagar
+gl:Editar %s anotación
 hr:Uredi %s bilješku
 hu:%s. megjegyzés szerkesztése
 it:Modifica annotazione %s
@@ -9328,14 +9342,23 @@ vn:Nhập dòng lệnh gọi khi bạn nhấp đúp vào tập tin PDF:
 br:Erro
 cn:错误
 co:Sbagliu
+cy:Gwall
+cz:Chyba
 de:Fehler
 el:Σφάλμα
+es:Error
 fr:Erreur
+gl:Erro
 he:שגיאה
+hu:Hiba
+it:Errore
 nl:Fout
 pl:Błąd
 pt:Erro
+ro:Eroare
 ru:Ошибка
+sk:Chyba
+sr-rs:Грешка
 :Error loading %s
 am:Բացման սխալ %s
 ar:%s خطأ في التحميل
@@ -9686,7 +9709,7 @@ am:Հնարավոր չեղավ ջնջել Գրանցատեղիի բանալին�
 ar:فشل في حذف مفاتيح مكتب تسجيل إلغاء التثبيت
 az:Deinstalyatorun reyestr açarlarını silmək mümkün olmadı
 bg:Неуспешно изтриване на ключовете на деинсталатора в регистъра
-br:Falhou em apagar as chaves de registro do desinstalador
+br:Falhou em apagar as chaves do registro do desinstalador
 bs:Neuspješno brisanje registarskih ključeva deinstalera
 by:Немагчыма знішчыць ключы рэестру знішчальніка
 ca-xv:No es poden suprimir les claus de registre del desinstal·lador
@@ -12704,7 +12727,7 @@ am:Թույլատրել Windows-ին &ցուցադրել PDF ֆայլերի նա
 ar:دع Windows يظهر &معاينات لملفات PDF
 az:PDF sənədlərini Windows alətləri vasitəsilə &görüntülə
 bg:Нека Windows показва &преглед на PDF документи
-br:Deixar o Windows mostrar as &pré-visualizações de documentos PDF
+br:Deixar o Windows mostrar as &pré-visualizações dos documentos PDF
 bs:Omogući Windows-ima da prikažu &pregled PDF dokumenata
 by:Паказваць &перадпрагляд дакументаў PDF у Windows
 ca-xv:Permet al Windows mostrar &visualitzacions prèvies dels documents
@@ -14479,7 +14502,9 @@ es:Abrir en nueva ventana
 fa:بازکردن در پنجره جدید
 fr:Ouvrir dans une nouvelle fenêtre
 ga:Oscail i bhfuinneog nua
+gl:Abrir en xanela nova
 he:פתח בחלון חדש
+hi:नई विंडो में खोलें
 hr:Otvori u novom prozoru
 hu:Megnyitás új ablakban
 it:Apri in una nuova finestra
@@ -15271,6 +15296,7 @@ fr:Pa&ge...
 ga:Leathanach...
 gl:Pá&xina...
 he:עמוד...
+hi:पृष्ठ
 hr:St&ranica...
 hu:&Oldal…
 id:Halaman
@@ -15766,6 +15792,7 @@ fr:Veuillez patienter, chargement…
 ga:Fan le do thoil - tá sé ag luchtú...
 gl:Prégase agardar, cargando...
 he:...אנא המתן - טוען
+hi:कृपया प्रतीक्षा करें - लोड हो रहा है...
 hr:Molim pričekajte - učitavanje...
 hu:Kérem várjon...
 id:Mohon tunggu - sedang memuat...
@@ -15792,7 +15819,7 @@ ar:الرجاء الإنتظار - اعادة...
 az:Görüntü hazırlanır, lütfən gözləyin...
 bg:Моля изчакайте - изображението се създава
 bn:দয়া করে অপেক্ষা করুন, লোড হচ্ছে....
-br:Por favor aguarde, renderizando...
+br:Por favor aguarde - renderizando...
 bs:Molim pričekajte, iscrtavam...
 by:Пачакайце - фармуецца малюнак...
 ca-xv:S'està renderitzant...
@@ -16710,6 +16737,7 @@ es:Propiedades...
 fa:مشخصات
 fr:Propriétés…
 ga:Airíonna...
+gl:Propiedades...
 hr:Svojstva...
 hu:Tulajdonságok
 it:Proprietà
@@ -16751,6 +16779,7 @@ fr:Re&nommer...
 ga:Athai&nmnigh...
 gl:Cambiar &nome...
 he:שנה שם...
+hi:नाम बदलें
 hr:Preime&nuj
 hu:&Átnevezés…
 id:Rubah Nama
@@ -16843,6 +16872,7 @@ fr:Rédiger
 ga:Folaigh
 gl:Redactar
 he:ערוך
+hi:संपादन
 hr:Urediti
 hu:Megrövidít
 id:Menyunting
@@ -17195,6 +17225,7 @@ fr:Rotation vers la d&roite
 ga:Rothlaigh deiseal é
 gl:Rotar de&reita
 he:סובב ימינה
+hi:दाएं घुमाएं
 hr:&Rotiraj desno
 hu:Forgatás &jobbra
 id:Putar Ke Kanan
@@ -17615,6 +17646,7 @@ fr:Enregistrer les modifications dans un nouveau PDF
 ga:Cuir na hathruithe i dtaisce in PDF nua
 gl:Gardar anotacións a un novo PDF
 he:חדש PDF שמור שינויים בקובץ
+hi:परिवर्तनों को एक नई पीडीएफ में सहेजें
 hr:Spremi promjene u novi PDF
 hu:Változtatások elmentése egy új PDF-be
 id:Simpan perubahan ke PDF baru
@@ -19248,7 +19280,7 @@ am:%s ֆայլը չունի համաժամեցման կետ
 ar:الملف المصدر %s لم تتم مزامنته عند هذه النقطة
 az:%s mənbə faylının sinxronlaşdırma mövqeyi yoxdur
 bg:Файлът-източник %s няма точка на синхронизация
-br:O arquivo fonte %s não tem um ponto de sincronização
+br:O arquivo de origem %s não tem um ponto de sincronização
 bs:Izvorni fajl %s nema sinhronizacijske tačke
 by:Адсутнічае кропка сінхранізацыі ў зыходным файле %s
 ca-xv:El fitxer d'origen %s no té un punt de sincronització vàlid
@@ -20882,7 +20914,7 @@ ar:ملف مصدري غير معروف (%s)
 az:Naməlum mənbə faylı (%s)
 bg:Файлът, избран за източник, е непознат (%s)
 bn:অচেনা মূল ফাইল (%s)
-br:Arquivo fonte desconhecido (%s)
+br:Arquivo de origem desconhecido (%s)
 bs:Nepoznat izvorni fajl (%s)
 by:Невядомы зыходны файл (%s)
 ca-xv:Fitxer origen desconegut (%s)
@@ -21504,7 +21536,7 @@ cz:Používáte verzi '%s' a verze '%s' je k dispozici.\nChcete nainstalovat nov
 de:Sie haben Version '%s' und Version '%s' ist verfügbar.\nMöchten Sie die neue Version installieren?
 dk:Du har version '%s' og version '%s' er tilgængelig. \nVil du installere ny version?
 el:Έχετε την έκδοση '%s' και είναι διαθέσιμη η έκδοση '%s'.\nΘέλετε να εγκαταστήσετε τη νέα έκδοση;
-es:Esta es la versión «%s» y ya está disponible la versión «%s».\N¿Quiere instalar la versión nueva?
+es:Esta es la versión «%s» y ya está disponible la versión «%s».\n¿Quiere instalar la versión nueva?
 et:Sul on versioon '%s' ja saadaval on versioon '%s'.\nKas soovid paigaldada uue versiooni?
 eu:'%s' bertsioa duzu eta '%s' bertsioa eskuragarri dago.\nNahi duzu bertsio berria ezartzea?
 fa:شما نسخه '%s' را دارید و نسخه '%s' موجود است.\nآیا می خواهید نسخه جدید را نصب کنید؟

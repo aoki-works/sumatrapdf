@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-'''
+r'''
 Support for generating C++ and python wrappers for the mupdf API.
 
 Overview:
@@ -428,7 +428,7 @@ Building Python bindings:
 
         Windows:
             > py -m venv pylocal
-            > pylocal\\Scripts\\activate
+            > pylocal\Scripts\activate
             (pylocal) > pip install libclang pyqt5
             (pylocal) > cd ...\mupdf
             (pylocal) > python setup.py install
@@ -640,10 +640,10 @@ Usage:
                     Set -j arg used when action 'm' calls make (not
                     Windows). If <N> is 0 we use the number of CPUs
                     (from Python's multiprocessing.cpu_count()).
-                --m-target
+                --m-target <target>
                     Set target for action 'm'. Default is blank, so make will
                     build the default `all` target.
-                --m-vars
+                --m-vars <text>
                     Text to insert near start of the action 'm' make command,
                     typically to set MuPDF build flags, for example:
                         --m-vars 'HAVE_LIBCRYPTO=no'
@@ -898,10 +898,10 @@ Usage:
             Compare generated class methods with functions called by platform/gl
             code.
 
-        python3 -m cProfile -s cumulative ./scripts/mupdfwrap.py -b 0
+        python3 -m cProfile -s cumulative ./scripts/mupdfwrap.py --venv -b 0
             Profile generation of C++ source code.
 
-        ./scripts/mupdfwrap.py --venv --swig-windows-auto -b all -t
+        ./scripts/mupdfwrap.py --venv -b all -t
             Build and test on Windows.
 
 
@@ -1137,7 +1137,7 @@ def _test_get_m_command():
         assert command == expected_command, f'\nExpected: {expected_command}\nBut:      {command}'
 
     mupdf_root = os.path.abspath( f'{__file__}/../../../')
-    infix = 'CXX=clang++ ' if state.state_.openbsd else ''
+    infix = 'CXX=c++ ' if state.state_.openbsd else ''
 
     test(
             'shared-release',
@@ -1161,6 +1161,8 @@ def get_so_version( build_dirs):
     Returns '' on macos.
     '''
     if state.state_.macos or state.state_.pyodide:
+        return ''
+    if os.environ.get('USE_SONAME') == 'no':
         return ''
     d = dict()
     def get_v( name):
@@ -1192,9 +1194,9 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
         if state.state_.openbsd:
             # Need to run gmake, not make. Also for some
             # reason gmake on OpenBSD sets CC to clang, but
-            # CXX to g++, so need to force CXX=clang++ too.
+            # CXX to g++, so need to force CXX=c++ too.
             #
-            make = 'CXX=clang++ gmake'
+            make = 'CXX=c++ gmake'
     if not make:
         make = 'make'
 
@@ -1211,6 +1213,7 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
         make_args += f' {m_vars}'
     suffix = None
     build_prefix = ''
+    build_suffix = ''
     in_prefix = True
     for i, flag in enumerate( flags):
         if flag in ('x32', 'x64') or re.match('py[0-9]', flag):
@@ -1219,6 +1222,7 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
             # when creating wheels; we need to ignore
             # them.
             jlib.log('Ignoring {flag=}')
+            build_suffix += f'-{flag}'
         else:
             if 0: pass  # lgtm [py/unreachable-statement]
             elif flag == 'debug':
@@ -1259,6 +1263,8 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
     assert suffix, f'Leaf must contain "shared-" or "fpic-": build_dirs.dir_so={build_dirs.dir_so}'
     if build_prefix:
         make_args += f' build_prefix={build_prefix}'
+    if build_suffix:
+        make_args += f' build_suffix={build_suffix}'
     if m_target:
         make_args += f' {m_target}'
     command = f'cd {build_dirs.dir_mupdf} &&'
@@ -1456,7 +1462,11 @@ def link_l_flags(sos):
     if state.state_.pyodide:
         # Don't add '-Wl,-rpath*' etc if building for Pyodide.
         ld_origin = False
-    return jlib.link_l_flags( sos, ld_origin)
+    ret = jlib.link_l_flags( sos, ld_origin)
+    r = os.environ.get('LDFLAGS')
+    if r:
+        ret += f' {r}'
+    return ret
 
 
 def build( build_dirs, swig_command, args, vs_upgrade, make_command):
@@ -1696,10 +1706,14 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                 )
 
                     elif 'shared' in dir_so_flags:
+                        link_soname_arg = ''
+                        if state.state_.linux and so_version:
+                            link_soname_arg = f'-Wl,-soname,{os.path.basename(libmupdfcpp)}'
                         command = ( textwrap.dedent(
                                 f'''
                                 {compiler}
                                     -o {os.path.relpath(libmupdfcpp)}
+                                    {link_soname_arg}
                                     {build_dirs.cpp_flags}
                                     -fPIC -shared
                                     -I {include1}
@@ -1716,7 +1730,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                 )
                         if command_was_run:
                             macos_patch( libmupdfcpp, f'{build_dirs.dir_so}/libmupdf.dylib{so_version}')
-                        if so_version:
+                        if so_version and state.state_.linux:
                             jlib.system(f'ln -sf libmupdfcpp.so{so_version} {build_dirs.dir_so}/libmupdfcpp.so')
 
                     elif 'fpic' in dir_so_flags:
@@ -1999,7 +2013,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                     elif build_csharp:
                         cpp_path = f'{build_dirs.dir_mupdf}/platform/csharp/mupdfcpp_swig.cpp'
                         out_so = f'{build_dirs.dir_so}/mupdfcsharp.so'  # todo: append {so_version} ?
-
+                    cpp_path = os.path.relpath(cpp_path)    # So we don't expose build machine details in __FILE__.
                     if state.state_.openbsd:
                         # clang needs around 2G on OpenBSD.
                         #
@@ -2972,17 +2986,21 @@ def main2():
                     jlib.system(f'"{sys.executable}" -m venv --system-site-packages {venv}', out='log', verbose=1)
                 else:
                     jlib.system(f'"{sys.executable}" -m venv {venv}', out='log', verbose=1)
+
                 if state.state_.windows:
-                    command = f'{venv}\\Scripts\\activate.bat'
+                    command_venv_enter = f'{venv}\\Scripts\\activate.bat'
                 else:
-                    command = f'. {venv}/bin/activate'
-                command += f' && python -m pip install --upgrade pip'
+                    command_venv_enter = f'. {venv}/bin/activate'
+
+                command = f'{command_venv_enter} && python -m pip install --upgrade pip'
                 if state.state_.openbsd:
                     jlib.log( 'Not installing libclang on openbsd; we assume py3-llvm is installed.')
                     command += f' && python -m pip install --upgrade swig setuptools'
                 else:
                     command += f' && python -m pip install{force_reinstall} --upgrade libclang swig setuptools'
-                command += f' && python {shlex.quote(sys.argv[0])}'
+                jlib.system(command, out='log', verbose=1)
+
+                command = f'{command_venv_enter} && python {shlex.quote(sys.argv[0])}'
                 while 1:
                     try:
                         command += f' {shlex.quote(args.next())}'

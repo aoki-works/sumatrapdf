@@ -490,14 +490,11 @@ static void layout_line(fz_context *ctx, float indent, float page_w, float line_
 		{
 		default:
 		case VA_BASELINE:
-			va = 0;
-			break;
 		case VA_SUB:
-			va = node->box->s.layout.em * 0.2f;
-			break;
 		case VA_SUPER:
-			va = node->box->s.layout.em * -0.3f;
+			va = node->box->s.layout.baseline;
 			break;
+
 		case VA_TOP:
 		case VA_TEXT_TOP:
 			va = -baseline + node->box->s.layout.em * 0.8f;
@@ -553,6 +550,7 @@ static int flush_line(fz_context *ctx, fz_html_box *box, layout_data *ld, float 
 					restart->end = box;
 					restart->end_flow = a;
 				}
+				restart->reason = FZ_HTML_RESTART_REASON_LINE_HEIGHT;
 				return 1;
 			}
 			box->s.layout.b += avail;
@@ -633,7 +631,7 @@ static void layout_flow(fz_context *ctx, layout_data *ld, fz_html_box *box, fz_h
 	int align;
 	fz_html_restarter *restart = ld->restart;
 
-	float em = box->s.layout.em = fz_from_css_number(box->style->font_size, top->s.layout.em, top->s.layout.em, top->s.layout.em);
+	float em = box->s.layout.em;
 	indent = box->is_first_flow ? fz_from_css_number(top->style->text_indent, em, top->s.layout.w, 0) : 0;
 	align = top->style->text_align;
 
@@ -658,7 +656,37 @@ static void layout_flow(fz_context *ctx, layout_data *ld, fz_html_box *box, fz_h
 			return;
 		/* We match! Remember where we should start. */
 		restart->start = NULL;
-		start_flow = restart->start_flow;
+
+#ifdef DEBUG_LAYOUT_RESTARTING
+		/* Output us some crufty debug */
+		if(restart->start_flow == NULL)
+			printf("<restart>");
+		for (node = box->u.flow.head; node; node = node->next)
+		{
+			if(restart->start_flow == node)
+				printf("<restart>");
+			switch (node->type)
+			{
+			case FLOW_WORD:
+				printf("[%s]", node->content.text);
+				break;
+			case FLOW_BREAK:
+			case FLOW_SBREAK:
+				printf("\n");
+				break;
+			case FLOW_SPACE:
+				printf(" ");
+				break;
+			case FLOW_SHYPHEN:
+				printf("-");
+				break;
+			default:
+				printf("?");
+				break;
+			}
+		}
+		printf("\n");
+#endif
 	}
 
 	/* If we have nothing to flow, nothing to do. */
@@ -666,17 +694,23 @@ static void layout_flow(fz_context *ctx, layout_data *ld, fz_html_box *box, fz_h
 		return;
 
 	/* Measure the size of all the words and images in the flow. */
-	for (node = box->u.flow.head; node; node = node->next)
+	node = box->u.flow.head;
+
+	/* First, if we are restarting, skip over ones we've done already. */
+	if (restart && restart->start_flow)
 	{
-		if (restart && restart->start_flow)
+		while(node && node != restart->start_flow)
 		{
-			if (restart->start_flow != node)
-			{
-				indent = 0;
-				continue;
-			}
-			restart->start_flow = NULL;
+			indent = 0;
+			node = node->next;
 		}
+		start_flow = node;
+		restart->start_flow = NULL;
+	}
+
+	/* Now measure the size of the remaining nodes. */
+	for (; node; node = node->next)
+	{
 		node->breaks_line = 0; /* reset line breaks from previous layout */
 
 		if (node->type == FLOW_IMAGE)
@@ -722,32 +756,23 @@ static void layout_flow(fz_context *ctx, layout_data *ld, fz_html_box *box, fz_h
 	node = box->u.flow.head;
 	if (start_flow)
 	{
-		line = start_flow;
 		line_w = start_flow == node ? indent : 0;
+		node = start_flow;
 	}
 	else
 	{
-		line = node;
 		line_w = indent;
 	}
+	line = node;
 
 	candidate = NULL;
 	candidate_w = 0;
 	desperate = NULL;
 	desperate_w = 0;
 
+	/* Now collate the measured nodes into a line. */
 	while (node)
 	{
-		/* Fast-forward to the restart point. */
-		if (start_flow)
-		{
-			if (start_flow != node)
-			{
-				node = node->next;
-				continue;
-			}
-			start_flow = NULL;
-		}
 
 		switch (node->type)
 		{
@@ -795,8 +820,9 @@ static void layout_flow(fz_context *ctx, layout_data *ld, fz_html_box *box, fz_h
 			break;
 		}
 
-		/* The current node either does not fit or we saw a hard break. */
-		/* Break the line if we have a candidate break point. */
+		/* If we see a hard break...
+		 * or the line doesn't fit, and we have a candidate breakpoint...
+		 * then we can flush the line so far. */
 		if (node->type == FLOW_BREAK || (line_w > box->s.layout.w && (candidate || desperate)))
 		{
 			int line_align = align;
@@ -828,6 +854,17 @@ static void layout_flow(fz_context *ctx, layout_data *ld, fz_html_box *box, fz_h
 			desperate_w = 0;
 			indent = 0;
 			line_w = 0;
+		}
+		else if (restart && (restart->flags & FZ_HTML_RESTARTER_FLAGS_NO_OVERFLOW) && line_w > box->s.layout.w)
+		{
+			/* We are in 'no-overflow' mode, and the line doesn't fit.
+			 * This means our first box is too wide to ever fit in a box of this width. */
+			assert(restart->start == NULL);
+
+			restart->end = box;
+			restart->end_flow = start_flow;
+			restart->reason = FZ_HTML_RESTART_REASON_LINE_WIDTH;
+			return;
 		}
 		else
 		{
@@ -1458,11 +1495,19 @@ static void layout_block(fz_context *ctx, layout_data *ld, fz_html_box *box, fz_
 static void layout_update_styles(fz_context *ctx, fz_html_box *box, fz_html_box *top)
 {
 	float top_em = top->s.layout.em;
+	float top_baseline = top->s.layout.baseline;
 	float top_w = top->s.layout.w;
 	while (box)
 	{
 		const fz_css_style *style = box->style;
 		float em = box->s.layout.em = fz_from_css_number(style->font_size, top_em, top_em, top_em);
+
+		if (style->vertical_align == VA_SUPER)
+			box->s.layout.baseline = top_baseline - top_em / 3;
+		else if (style->vertical_align == VA_SUB)
+			box->s.layout.baseline = top_baseline + top_em / 5;
+		else
+			box->s.layout.baseline = top_baseline;
 
 		if (box->type != BOX_INLINE && box->type != BOX_FLOW)
 		{
@@ -1660,6 +1705,7 @@ fz_restartable_layout_html(fz_context *ctx, fz_html_tree *tree, float start_x, f
 	{
 		fz_warn(ctx, "html: nothing to layout");
 		box->s.layout.em = em;
+		box->s.layout.baseline = 0;
 		box->s.layout.x = start_x;
 		box->s.layout.w = page_w;
 		box->s.layout.y = start_y;
@@ -1688,6 +1734,7 @@ fz_restartable_layout_html(fz_context *ctx, fz_html_tree *tree, float start_x, f
 		if (box->s.layout.em != em || box->s.layout.x != start_x || box->s.layout.w != page_w)
 		{
 			box->s.layout.em = em;
+			box->s.layout.baseline = 0;
 			box->s.layout.x = start_x;
 			box->s.layout.w = page_w;
 			layout_update_styles(ctx, box->down, box);

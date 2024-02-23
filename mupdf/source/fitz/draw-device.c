@@ -926,15 +926,8 @@ fz_draw_clip_stroke_path(fz_context *ctx, fz_device *devp, const fz_path *path, 
 
 	state[1].mask = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
 	fz_clear_pixmap(ctx, state[1].mask);
-	/* When there is no alpha in the current destination (state[0].dest->alpha == 0)
-	 * we have a choice. We can either create the new destination WITH alpha, or
-	 * we can copy the old pixmap contents in. We opt for the latter here, but
-	 * may want to revisit this decision in the future. */
 	state[1].dest = fz_new_pixmap_with_bbox(ctx, model, bbox, state[0].dest->seps, state[0].dest->alpha);
-	if (state[0].dest->alpha)
-		fz_clear_pixmap(ctx, state[1].dest);
-	else
-		fz_copy_pixmap_rect(ctx, state[1].dest, state[0].dest, bbox, dev->default_cs);
+	fz_copy_pixmap_rect(ctx, state[1].dest, state[0].dest, bbox, dev->default_cs);
 	if (state->shape)
 	{
 		state[1].shape = fz_new_pixmap_with_bbox(ctx, NULL, bbox, NULL, 1);
@@ -2275,7 +2268,31 @@ fz_draw_begin_mask(fz_context *ctx, fz_device *devp, fz_rect area, int luminosit
 }
 
 static void
-fz_draw_end_mask(fz_context *ctx, fz_device *devp)
+apply_transform_function_to_pixmap(fz_context *ctx, fz_pixmap *pix, fz_function *tr)
+{
+	int w, h;
+	ptrdiff_t stride;
+	uint8_t *s;
+
+	assert(pix && pix->n == 1);
+
+	s = pix->samples;
+	stride = pix->stride - pix->w;
+	for (h = pix->h; h > 0; h--)
+	{
+		for (w = pix->w; w > 0; w--)
+		{
+			float f = *s / 255.0f;
+			float d;
+			fz_eval_function(ctx, tr, &f, 1, &d, 1);
+			*s++ = (uint8_t)fz_clampi(d*255.0f, 0, 255);
+		}
+		s += stride;
+	}
+}
+
+static void
+fz_draw_end_mask(fz_context *ctx, fz_device *devp, fz_function *tr)
 {
 	fz_draw_device *dev = (fz_draw_device*)devp;
 	fz_pixmap *temp, *dest;
@@ -2315,6 +2332,11 @@ fz_draw_end_mask(fz_context *ctx, fz_device *devp)
 		fz_dump_blend(ctx, "-> Clip ", temp);
 		printf("\n");
 #endif
+		if (tr)
+		{
+			/* Apply transfer function to state[1].mask */
+			apply_transform_function_to_pixmap(ctx, state[1].mask, tr);
+		}
 
 		/* create new dest scratch buffer */
 		bbox = fz_pixmap_bbox(ctx, temp);
