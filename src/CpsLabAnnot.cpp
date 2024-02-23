@@ -1106,7 +1106,7 @@ void sendSelectText(MainWindow* win, bool conti) {
 
     if (0 < text.size()) {
         str::Str cmd;
-        cmd.AppendFmt("[Select(\"%s\")]", text.Get());
+        cmd.AppendFmt("[Select(\"%s\", \"%s\")]", tab->filePath.Get(), text.Get());
         DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
     }
 }
