@@ -685,6 +685,10 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
         win->showSelection = win->CurrentTab()->selectionOnPage != nullptr;
         RepaintAsync(win, 0);
+
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            cpslab::sendSelectImage(win, x, y);
+        }
     }
 }
 

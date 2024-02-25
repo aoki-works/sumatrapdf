@@ -33,6 +33,7 @@ WCHAR* USERAPP_DDE_DEBUG_TOPIC = nullptr;
 WCHAR* PDFSYNC_DDE_SERVICE = nullptr;
 WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
 CpsMode MODE = CpsMode::Document;
+const char* EXPORT_TEXT_BLOCKS = nullptr;
 
 // =============================================================
 //
@@ -785,6 +786,160 @@ void CloseEvent(MainWindow* win) {
 }
 
 // =============================================================
+std::string escape_json(const char c) {
+    std::string output = "";
+    switch (c) {
+        case '"':
+            output = "\\\"";
+            break;
+        case '\\':
+            output = "\\\\";
+            break;
+        case '\b':
+            output = "\\b";
+            break;
+        case '\f':
+            output = "\\f";
+            break;
+        case '\n':
+            output = "\\n";
+            break;
+        case '\r':
+            output = "\\r";
+            break;
+        case '\t':
+            output = "\\t";
+            break;
+        // Add other special characters as needed
+        default:
+            output = c;
+            break;
+    }
+    return output;
+}
+// =============================================================
+std::string base64_encode(const BYTE* data, size_t len) {
+    const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    std::string result;
+    int i = 0;
+    int j = 0;
+    BYTE char_array_3[3];
+    BYTE char_array_4[4];
+
+    while (len--) {
+        char_array_3[i++] = *(data++);
+        if (i == 3) {
+            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+            char_array_4[3] = char_array_3[2] & 0x3f;
+
+            for (i = 0; (i < 4); i++) {
+                result += base64_chars[char_array_4[i]];
+            }
+            i = 0;
+        }
+    }
+
+    if (i) {
+        for (j = i; j < 3; j++) {
+            char_array_3[j] = '\0';
+        }
+
+        char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+        char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+        char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+
+        for (j = 0; (j < i + 1); j++) {
+            result += base64_chars[char_array_4[j]];
+        }
+
+        while ((i++ < 3)) {
+            result += '=';
+        }
+    }
+
+    return result;
+}
+// =============================================================
+//
+// =============================================================
+void SaveBlocksToFile(MainWindow* win, const char* fname) {
+    WCHAR* tmpFileW = ToWStrTemp(fname);
+    FILE* outFile = nullptr;
+    errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
+    if (err != 0) {
+        return;
+    }
+    size_t n = 0;
+    std::fputs("[\n", outFile);
+    TmpAllocator alloc;
+    Vec<PageText*> blocks;
+    Vec<RenderedBitmap*> images;
+    getTextBlocks(win, blocks, images);
+    for (auto b : images) {
+        auto hbmp = b->GetBitmap();
+         if (!hbmp) {
+            continue;
+        }
+        auto imgData = SerializeBitmap(hbmp) ;
+        size_t len = imgData.size();
+        u8* data = imgData.data();
+        /*
+        AutoFree hexData(data ? str::MemToHex(data, len) : nullptr);
+        if (hexData) {
+            std::fputs("{\"image\" : \"", outFile);
+            std::fputs(hexData.Get(), outFile);
+            std::fputs("\"},\n", outFile);
+        }
+        */
+        auto base64 = base64_encode(data, len);
+        if (0 < n) { std::fputs(",\n", outFile); }
+        std::fputs("{\"image\" : \"", outFile);
+        std::fputs(base64.c_str(), outFile);
+        std::fputs("\"}", outFile);
+        str::Free(data);
+        n++;
+        /*
+        BITMAP bmpInfo;
+        GetObject(hbmp, sizeof(BITMAP), &bmpInfo);
+        HANDLE h = nullptr;
+        if (bmpInfo.bmBits != nullptr) {
+            ScopedGdiObj<HBITMAP> ddbBmp((HBITMAP)CopyImage(hbmp, IMAGE_BITMAP, bmpInfo.bmWidth, bmpInfo.bmHeight, 0));
+            h = SetClipboardData(CF_BITMAP, ddbBmp);
+            //h = SetClipboardData(CF_BITMAP, hbmp);
+            //std::fputs(ddbBmp, outFile);
+        } else {
+            h = SetClipboardData(CF_BITMAP, hbmp);
+        }
+        CopyImageToClipboard(hbmp, false);
+        std::fputs("\n", outFile);
+        std::fputs("================\n", outFile);
+        */
+    }
+    for (auto b : blocks) {
+        if (b->len == 0) {
+            continue;
+        }
+        if (str::IsEmpty(b->text)) {
+            continue;
+        }
+        char* w = strconv::WstrToUtf8(b->text, b->len, &alloc);
+        if (0 < n) { std::fputs(",\n", outFile); }
+        std::fputs("{\"en\" : \"", outFile);
+        for (auto c = w; *c; c++) {
+            std::fputs(escape_json(*c).c_str(), outFile);
+        }
+        std::fputs("\"}", outFile);
+        delete b;
+        n++;
+    }
+    std::fputs("\n]\n", outFile);
+    std::fclose(outFile);
+}
+
+// =============================================================
 //
 // =============================================================
 void SaveWordsToFile(MainWindow* win, const char* fname) {
@@ -1158,6 +1313,55 @@ void sendSelectText(MainWindow* win, bool conti) {
     }
 }
 
+
+// =============================================================
+//
+// =============================================================
+void sendSelectImage(MainWindow* win, int x, int y, bool conti) {
+    if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
+        return;
+    }
+    WindowTab* tab = win->CurrentTab();
+    if (!tab->selectionOnPage) {
+        return;
+    }
+    if (tab->selectionOnPage->size() == 0) {
+        return;
+    }
+    /* if (dm->GetEngine()->IsImageCollection()) { return; } */
+    DisplayModel* dm = win->AsFixed();
+    Point cursorPos{x, y};
+    IPageElement* pageEl = dm->GetElementAtPos(cursorPos, nullptr);
+    if (!pageEl) {
+        return;
+    }
+    RenderedBitmap* bmp = dm->GetEngine()->GetImageForPageElement(pageEl);
+    if (bmp) {
+        str::Str cmd;
+        CopyImageToClipboard(bmp->GetBitmap(), false);
+        cmd.AppendFmt("[PasteFromClipBoard(\"%s\")]", tab->filePath.Get());
+        DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
+    }
+}
+
+
+
+// =============================================================
+//
+// =============================================================
+void getTextBlocks(MainWindow* win, int pageNo, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images) {
+    DisplayModel* dm = win->AsFixed();
+    auto engine = dm->GetEngine();
+    engine->ExtractPageBlocks(pageNo, blocks, images);
+}
+
+void getTextBlocks(MainWindow* win, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images) {
+    DisplayModel* dm = win->AsFixed();
+    int pageCount = dm->PageCount();
+    for (int pageNo = 1; pageNo <= pageCount; pageNo++) {
+        getTextBlocks(win, pageNo, blocks, images);
+    }
+}
 
 } // end of namespace cpslab
 

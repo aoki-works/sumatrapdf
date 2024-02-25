@@ -1256,6 +1256,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     if (flags.document_mode) {
         cpslab::MODE = cpslab::CpsMode::Document;
     }
+    if (flags.export_text_blocks) {
+        cpslab::EXPORT_TEXT_BLOCKS = flags.export_text_blocks;
+    }
     // only call FindPrevInstWindow() once
     existingInstanceHwnd = FindPrevInstWindow(&hMutex);
 

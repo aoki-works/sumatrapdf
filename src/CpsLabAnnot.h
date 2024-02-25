@@ -20,9 +20,11 @@ extern WCHAR* USERAPP_DDE_TOPIC;
 extern WCHAR* USERAPP_DDE_DEBUG_TOPIC;
 extern WCHAR* PDFSYNC_DDE_SERVICE;
 extern WCHAR* PDFSYNC_DDE_TOPIC;
+extern const char* EXPORT_TEXT_BLOCKS;
 
 extern void SaveWordsToFile(MainWindow* win, const char* fname);
 extern void SaveTextToFile(MainWindow* win, const char* fname);
+extern void SaveBlocksToFile(MainWindow* win, const char* fname);
 extern bool IsWord(const WCHAR* pageText, const Rect* coords, const WCHAR* begin, const WCHAR* end);
 extern const char* MarkWords(MainWindow* win);
 extern const char* MarkWords(MainWindow* win, const char* json_file);
@@ -32,6 +34,9 @@ extern void CloseEvent(MainWindow* win);
 extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
 extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
 extern void sendSelectText(MainWindow* win, bool conti=false);
+extern void sendSelectImage(MainWindow* win, int x, int y, bool conti=false);
+void getTextBlocks(MainWindow* win, int pageNo, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images);
+void getTextBlocks(MainWindow* win, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images);
 
 enum class CpsMode {
     None = 0,

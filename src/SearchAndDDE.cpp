@@ -991,10 +991,15 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
     bool get_word = false;
+    bool get_block = false;
     const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
     if (!next) {
         next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
         get_word = true;
+    }
+    if (!next) {
+        next = str::Parse(cmd, "[GetBlock(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+        get_block = true;
     }
     if (!next) {
         return nullptr;
@@ -1011,7 +1016,10 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
         }
     }
 
-    if (get_word) {
+    if (get_block) {
+        cpslab::SaveBlocksToFile(win, txtFile.Get());
+    }
+    else if (get_word) {
         cpslab::SaveWordsToFile(win, txtFile.Get());
     } else {
         cpslab::SaveTextToFile(win, txtFile.Get());
@@ -1298,7 +1306,6 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
     TempStr cmd = HGLOBALToStrTemp((HGLOBAL)hCommand, isUnicode);
     bool didHandle = HandleExecuteCmds(hwnd, cmd);
     DDEACK ack{};
-    //ack.fAck = didHandle ? 0 : 1;   CPS Lab
     ack.fAck = didHandle ? 1 : 0;
     LPARAM lpres = PackDDElParam(WM_DDE_ACK, *(WORD*)&ack, (UINT_PTR)hCommand);
     PostMessageW(hwndClient, WM_DDE_ACK, (WPARAM)hwnd, lpres);

@@ -92,7 +92,8 @@
     V(UserAppDDEService, "userapp-dde-service")  \
     V(UserAppDDETopic, "userapp-dde-topic")      \
     V(UserAppDDEDebugTopic, "userapp-dde-debug-topic") \
-    V(DocumentMode, "document-mode")
+    V(DocumentMode, "document-mode") \
+    V(ExportTextBlocks, "export-text-blocks")
 
 #define MAKE_ARG(__arg, __name) __arg,
 #define MAKE_STR(__arg, __name) __name "\0"
@@ -717,6 +718,10 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
         }
         if (arg == Arg::DocumentMode) {
             i.document_mode = true;
+            continue;
+        }
+        if (arg == Arg::ExportTextBlocks) {
+            i.export_text_blocks = str::Dup(param);
             continue;
         }
         // again, argName is any of the known args, so assume it's a file starting with '-'

@@ -435,6 +435,11 @@ class EngineBase {
     // coordinates of the individual glyphs)
     // caller needs to free() the result and *coordsOut (if coordsOut is non-nullptr)
     virtual PageText ExtractPageText(int pageNo) = 0;
+    
+    // CPSLabs.
+    virtual void ExtractPageBlocks(int pageNo,
+                                   Vec<PageText*>&,
+                                   Vec<RenderedBitmap*>&);
     // pages where clipping doesn't help are rendered in larger tiles
     virtual bool HasClipOptimizations(int pageNo) = 0;
 
