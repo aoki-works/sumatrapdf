@@ -401,7 +401,7 @@ bool EngineBase::HandleLink(IPageDestination*, ILinkHandler*) {
 }
 
 void EngineBase::ExtractPageBlocks(int pageNo, Vec<PageText*>& v1,
-                                   Vec<RenderedBitmap*>& v2)
+                                   Vec<IPageElement*>& v2)
 {
 }
 // skip file:// and maybe file:/// from s. It might be added by mupdf

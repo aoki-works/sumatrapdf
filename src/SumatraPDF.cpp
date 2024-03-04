@@ -2563,7 +2563,7 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
         }
     } else {
         CrashIf(gPluginMode && !gWindows.Contains(win));
-        // CPS Lab. file closed event
+        // CP Lab. file closed event
         cpslab::CloseEvent(tab);
         RemoveTab(tab);
         delete tab;

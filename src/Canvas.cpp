@@ -540,6 +540,9 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     bool didDragMouse = !win->dragStartPending || IsDragDistance(x, win->dragStart.x, y, win->dragStart.y);
     if (MouseAction::Dragging == ma) {
         StopMouseDrag(win, x, y, !didDragMouse);
+        if (!didDragMouse) {
+            cpslab::sendClickPoint(win, x, y);
+        }
     } else {
         OnSelectionStop(win, x, y, !didDragMouse);
         if (MouseAction::Selecting == ma && win->showSelection) {
@@ -548,7 +551,11 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         /* callback to user application via DDE. CPS Lab.*/
         WindowTab* tab = win->CurrentTab();
         if (cpslab::MODE == cpslab::CpsMode::Document) {
-            cpslab::sendSelectText(win);
+            if (tab->selectionOnPage && 0 < tab->selectionOnPage->size()) {
+                cpslab::sendSelectText(win);
+            } else {
+                cpslab::sendClickPoint(win, x, y);
+            }
         } else {
             tab->markers->sendSelectMessage(win);
         }

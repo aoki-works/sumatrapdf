@@ -866,6 +866,7 @@ std::string base64_encode(const BYTE* data, size_t len) {
 //
 // =============================================================
 void SaveBlocksToFile(MainWindow* win, const char* fname) {
+    DisplayModel* dm = win->AsFixed();
     WCHAR* tmpFileW = ToWStrTemp(fname);
     FILE* outFile = nullptr;
     errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
@@ -875,65 +876,79 @@ void SaveBlocksToFile(MainWindow* win, const char* fname) {
     size_t n = 0;
     std::fputs("[\n", outFile);
     TmpAllocator alloc;
-    Vec<PageText*> blocks;
-    Vec<RenderedBitmap*> images;
-    getTextBlocks(win, blocks, images);
-    for (auto b : images) {
-        auto hbmp = b->GetBitmap();
-         if (!hbmp) {
-            continue;
+    std::vector<std::pair<Vec<PageText*>, Vec<IPageElement*> > > blocks;
+    getBlocks(win, blocks);
+    size_t pageNo = 0;
+    for (auto page : blocks) {
+        pageNo++;
+        for (IPageElement* pageEl : page.second) { // images) {
+            Rect rect = pageEl->rect.Round();
+            RenderedBitmap* bmp = dm->GetEngine()->GetImageForPageElement(pageEl);
+            auto hbmp = bmp->GetBitmap();
+            if (!hbmp) {
+                continue;
+            }
+            auto imgData = SerializeBitmap(hbmp);
+            size_t len = imgData.size();
+            u8* data = imgData.data();
+            auto base64 = base64_encode(data, len);
+            if (0 < n) {
+                std::fputs(",\n", outFile);
+            }
+            std::fprintf(outFile, "{\"page\" : %d,\n", pageNo);
+            std::fprintf(outFile, "\"rect\" : [%d,%d,%d,%d],\n", rect.x, rect.y, rect.dx, rect.dy);
+            std::fputs("\"image\" : \"", outFile);
+            std::fputs(base64.c_str(), outFile);
+            std::fputs("\"}", outFile);
+            str::Free(data);
+            n++;
         }
-        auto imgData = SerializeBitmap(hbmp) ;
-        size_t len = imgData.size();
-        u8* data = imgData.data();
-        /*
-        AutoFree hexData(data ? str::MemToHex(data, len) : nullptr);
-        if (hexData) {
-            std::fputs("{\"image\" : \"", outFile);
-            std::fputs(hexData.Get(), outFile);
-            std::fputs("\"},\n", outFile);
-        }
-        */
-        auto base64 = base64_encode(data, len);
-        if (0 < n) { std::fputs(",\n", outFile); }
-        std::fputs("{\"image\" : \"", outFile);
-        std::fputs(base64.c_str(), outFile);
-        std::fputs("\"}", outFile);
-        str::Free(data);
-        n++;
-        /*
-        BITMAP bmpInfo;
-        GetObject(hbmp, sizeof(BITMAP), &bmpInfo);
-        HANDLE h = nullptr;
-        if (bmpInfo.bmBits != nullptr) {
-            ScopedGdiObj<HBITMAP> ddbBmp((HBITMAP)CopyImage(hbmp, IMAGE_BITMAP, bmpInfo.bmWidth, bmpInfo.bmHeight, 0));
-            h = SetClipboardData(CF_BITMAP, ddbBmp);
-            //h = SetClipboardData(CF_BITMAP, hbmp);
-            //std::fputs(ddbBmp, outFile);
-        } else {
-            h = SetClipboardData(CF_BITMAP, hbmp);
-        }
-        CopyImageToClipboard(hbmp, false);
-        std::fputs("\n", outFile);
-        std::fputs("================\n", outFile);
-        */
     }
-    for (auto b : blocks) {
-        if (b->len == 0) {
-            continue;
+    pageNo = 0;
+    for (auto page : blocks) {
+        pageNo++;
+        for (PageText* b : page.first) {
+            if (b->len == 0) {
+                continue;
+            }
+            int x1 = b->coords[0].x;
+            int y1 = b->coords[0].y;
+            int x2 = x1 + b->coords[0].dx;
+            int y2 = y1 + b->coords[0].dy;
+            for (int i = 0; i < b->len; i++) {
+                Rect r = b->coords[i];
+                if (!r.IsEmpty()) {
+                    x1 = r.x;
+                    y1 = r.y;
+                    x2 = x1 + r.dx;
+                    y2 = y1 + r.dy;
+                }
+            }
+            for (int i=0; i < b->len; i++) {
+                auto r = b->coords[i];
+                if (r.IsEmpty()) { continue; }
+                if (r.x < x1) x1 = r.x;
+                if (r.y < y1) y1 = r.y;
+                if (x2 < r.x + r.dx) x2 = r.x + r.dx;
+                if (y2 < r.y + r.dy) y2 = r.y + r.dy;
+            }
+            if (str::IsEmpty(b->text)) {
+                continue;
+            }
+            char* w = strconv::WstrToUtf8(b->text, b->len, &alloc);
+            if (0 < n) {
+                std::fputs(",\n", outFile);
+            }
+            std::fprintf(outFile, "{\"page\" : %d,\n", pageNo);
+            std::fprintf(outFile, "\"rect\" : [%d,%d,%d,%d],\n", x1, y1, x2 - x1, y2 - y1);
+            std::fputs("\"en\" : \"", outFile);
+            for (auto c = w; *c; c++) {
+                std::fputs(escape_json(*c).c_str(), outFile);
+            }
+            std::fputs("\"}", outFile);
+            delete b;
+            n++;
         }
-        if (str::IsEmpty(b->text)) {
-            continue;
-        }
-        char* w = strconv::WstrToUtf8(b->text, b->len, &alloc);
-        if (0 < n) { std::fputs(",\n", outFile); }
-        std::fputs("{\"en\" : \"", outFile);
-        for (auto c = w; *c; c++) {
-            std::fputs(escape_json(*c).c_str(), outFile);
-        }
-        std::fputs("\"}", outFile);
-        delete b;
-        n++;
     }
     std::fputs("\n]\n", outFile);
     std::fclose(outFile);
@@ -1171,6 +1186,18 @@ char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, co
             if (begin < src) {
                 result.Append(begin, src - begin); // append 'word' to result.
                 result.Append(wsep, wsep_len);
+                Rect r = coords[begin - pageText]; // boundary rectangle of this 'letter'.
+                int px = r.x + r.dx / 2.0;
+                int py = r.y + r.dy / 2.0;
+                dm->textSelection->StartAt(pageNo, px, py);
+                r = coords[src - pageText - 1];
+                if (r.IsEmpty()) {
+                    // Rect is empty when *src is 'return' code.
+                    r = coords[src - pageText - 2];
+                }
+                px = r.x + r.dx;
+                py = r.y + r.dy / 2.0;
+                dm->textSelection->SelectUpTo(pageNo, px, py, !result.IsEmpty());
             }
             ++src;
             begin = nullptr;
@@ -1178,9 +1205,21 @@ char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, co
             while (*src && *src != '\n' && !isspace(*src)) { ++src; }
             if (*src) {
                 ++src;  // skip white space.
-            } else {
+            } else if (begin != nullptr) {
                 result.Append(begin, src - begin); // append 'word' to result.
                 result.Append(wsep, wsep_len);
+                Rect r = coords[begin - pageText]; // boundary rectangle of this 'letter'.
+                int px = r.x + r.dx / 2.0;
+                int py = r.y + r.dy / 2.0;
+                dm->textSelection->StartAt(pageNo, px, py);
+                r = coords[src - pageText - 1];
+                if (r.IsEmpty()) {
+                    // Rect is empty when *src is 'return' code.
+                    r = coords[src - pageText - 2];
+                }
+                px = r.x + r.dx;
+                py = r.y + r.dy / 2.0;
+                dm->textSelection->SelectUpTo(pageNo, px, py, !result.IsEmpty());
                 break;
             }
         }
@@ -1266,6 +1305,38 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
 // =============================================================
 //
 // =============================================================
+void sendClickPoint(MainWindow* win, int x, int y) {
+    if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
+        return;
+    }
+    WindowTab* tab = win->CurrentTab();
+    if (tab->selectionOnPage) {
+        return;
+    }
+    DisplayModel* dm = win->AsFixed();
+    Point mousePos = Point(x, y);
+    IPageElement* pageEl = dm->GetElementAtPos(mousePos, nullptr);
+    if (!pageEl) {
+        return;
+    }
+    Rect rect = pageEl->rect.Round();
+    if (rect.IsEmpty()) {
+        return;
+    }
+    x = int(rect.x + rect.dx / 2.0);
+    y = int(rect.y + rect.dy / 2.0);
+    int pageNo = dm->GetPageNoByPoint(mousePos);
+    //PointF pos = dm->CvtFromScreen(mousePos, pageNo);
+    //Point pt = ToPoint(pos);
+    str::Str cmd;
+    //cmd.AppendFmt("[Clicked(\"%s\", %d, %d, %d)]", tab->filePath.Get(), pageNo, pt.x, pt.y);
+    cmd.AppendFmt("[Clicked(\"%s\", %d, %d, %d)]", tab->filePath.Get(), pageNo, x, y);
+    DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
+}
+
+// =============================================================
+//
+// =============================================================
 void sendSelectText(MainWindow* win, bool conti) {
     if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
         return;
@@ -1285,10 +1356,31 @@ void sendSelectText(MainWindow* win, bool conti) {
         return;
     }
 
+    int pageNo = 0;
+    Rect rect;
     str::Str text;
     for (SelectionOnPage& sel : *tab->selectionOnPage) {
         Rect regionI = sel.rect.Round();
         if (0 < dm->textSelection->result.len) {
+            pageNo = dm->textSelection->startPage;
+            Rect* coords;
+            dm->textCache->GetTextForPage(pageNo, nullptr, &coords);
+            int x1 = coords[dm->textSelection->startGlyph].x;
+            int y1 = coords[dm->textSelection->startGlyph].y;
+            int x2 = x1 + coords[dm->textSelection->startGlyph].dx;
+            int y2 = y1 + coords[dm->textSelection->startGlyph].dy;
+            for (auto i = dm->textSelection->startGlyph; i <= dm->textSelection->endGlyph; i++) {
+                auto r = coords[i];
+                if (r.IsEmpty()) { continue; }
+                if (r.x < x1) x1 = r.x;
+                if (r.y < y1) y1 = r.y;
+                if (x2 < r.x + r.dx) x2 = r.x + r.dx;
+                if (y2 < r.y + r.dy) y2 = r.y + r.dy;
+            }
+            rect.x = x1;
+            rect.y = y1;
+            rect.dx = x2 - x1;
+            rect.dy = y2 - y1;
             WCHAR* s = dm->textSelection->ExtractText(sep);
             char* utf8txt = ToUtf8(s);
             str::Free(s);
@@ -1297,9 +1389,14 @@ void sendSelectText(MainWindow* win, bool conti) {
                 break;
             }
         } else {
+            pageNo = sel.pageNo;
             char* utf8txt = GetTextInRegion(dm, sel.pageNo, regionI, sep);
             if (!str::IsEmpty(utf8txt)) {
                 text.AppendAndFree(utf8txt);
+                rect.x = regionI.x;
+                rect.y = regionI.y;
+                rect.dx = regionI.dx;
+                rect.dy = regionI.dy;
                 break;
             }
         }
@@ -1308,7 +1405,11 @@ void sendSelectText(MainWindow* win, bool conti) {
 
     if (0 < text.size()) {
         str::Str cmd;
-        cmd.AppendFmt("[Select(\"%s\", \"%s\")]", tab->filePath.Get(), text.Get());
+        cmd.AppendFmt("[Select(\"%s\", \"%s\", %d, %d, %d, %d, %d)]",
+            tab->filePath.Get(), text.Get(),
+            pageNo,
+            rect.x, rect.y, rect.dx, rect.dy
+        );
         DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
     }
 }
@@ -1339,7 +1440,10 @@ void sendSelectImage(MainWindow* win, int x, int y, bool conti) {
     if (bmp) {
         str::Str cmd;
         CopyImageToClipboard(bmp->GetBitmap(), false);
-        cmd.AppendFmt("[PasteFromClipBoard(\"%s\")]", tab->filePath.Get());
+        Rect r = pageEl->rect.Round();
+        cmd.AppendFmt("[PasteFromClipBoard(\"%s\", %d, %d, %d, %d, %d)]",
+            tab->filePath.Get(),
+            pageEl->pageNo, r.x, r.y, r.dx, r.dy);
         DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
     }
 }
@@ -1349,17 +1453,21 @@ void sendSelectImage(MainWindow* win, int x, int y, bool conti) {
 // =============================================================
 //
 // =============================================================
-void getTextBlocks(MainWindow* win, int pageNo, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images) {
+void getPageBlocks(MainWindow* win, int pageNo, Vec<PageText*>& blocks, Vec<IPageElement*>& images) {
     DisplayModel* dm = win->AsFixed();
     auto engine = dm->GetEngine();
     engine->ExtractPageBlocks(pageNo, blocks, images);
 }
 
-void getTextBlocks(MainWindow* win, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images) {
+void getBlocks(MainWindow* win, std::vector< std::pair<Vec<PageText*>, Vec<IPageElement*> > >& blocks) {
     DisplayModel* dm = win->AsFixed();
     int pageCount = dm->PageCount();
     for (int pageNo = 1; pageNo <= pageCount; pageNo++) {
-        getTextBlocks(win, pageNo, blocks, images);
+        Vec<PageText*> texts;
+        Vec<IPageElement*> images;
+        getPageBlocks(win, pageNo, texts, images);
+        auto page = std::make_pair(texts, images);
+        blocks.push_back(page);
     }
 }
 

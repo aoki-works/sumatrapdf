@@ -2983,13 +2983,14 @@ RenderedBitmap* EngineMupdf::GetPageImage(int pageNo, RectF rect, int imageIdx) 
 void EngineMupdf::ExtractPageBlocks(
     int pageNo,
     Vec<PageText*>& blocks,
-    Vec<RenderedBitmap*>& images
+    Vec<IPageElement*>& images
 ) {
 
     RenderPageArgs args(pageNo, 100, 0);
     RenderPage(args);
 
-    FzPageInfo* pageInfo = GetFzPageInfo(pageNo, true);
+    //FzPageInfo* pageInfo = GetFzPageInfo(pageNo, true);
+    FzPageInfo* pageInfo = GetFzPageInfo(pageNo, false);
     if (!pageInfo) {
         return;
     }
@@ -2998,6 +2999,7 @@ void EngineMupdf::ExtractPageBlocks(
     fz_stext_page* stext = nullptr;
     fz_var(stext);
     fz_stext_options opts{};
+    opts.flags = FZ_STEXT_PRESERVE_IMAGES;
     fz_try(ctx) {
         stext = fz_new_stext_page_from_page(ctx, pageInfo->page, &opts);
     }
@@ -3028,13 +3030,17 @@ void EngineMupdf::ExtractPageBlocks(
                 res->len = (int)str::Len(text);
                 res->coords = rects.StealData();
                 blocks.Append(res);
+            } else {
+                printf("%d\n", bk->type);
             }
             bk = bk->next;
         }
     }
+
+
     for (auto& img : pageInfo->images) {
-        auto bitmap = GetImageForPageElement(img->imageElement);
-        images.Append(bitmap);
+        //auto bitmap = GetImageForPageElement(img->imageElement);
+        images.Append(img->imageElement);
     }
 
     return;

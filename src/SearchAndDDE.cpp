@@ -995,11 +995,14 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
     const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
     if (!next) {
         next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
-        get_word = true;
-    }
-    if (!next) {
-        next = str::Parse(cmd, "[GetBlock(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
-        get_block = true;
+        if (next) {
+            get_word = true;
+        } else {
+            next = str::Parse(cmd, "[GetBlock(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+            if (next) {
+                get_block = true;
+            }
+        }
     }
     if (!next) {
         return nullptr;
@@ -1113,8 +1116,21 @@ static const char* HandleSelectCmd(const char* cmd, bool* ack)
     AutoFreeStr pdfFile ;
     float zoom = kInvalidZoom;
     Point scroll(-1, -1);
+    boolean select_block = false;
+    boolean select_image = false;
     // ---------------------------------------------
     const char* next = str::Parse(cmd, "[Select(\"%s\",%? ", &pdfFile);
+    if (!next) {
+        next = str::Parse(cmd, "[SelectBlock(\"%s\",%? ", &pdfFile);
+        if (next) {
+            select_block = true;
+        } else {
+            next = str::Parse(cmd, "[SelectImage(\"%s\",%? ", &pdfFile);
+            if (next) {
+                select_image = true;
+            }
+        }
+    }
     if (!next) {
         return nullptr;
     }
@@ -1130,21 +1146,43 @@ static const char* HandleSelectCmd(const char* cmd, bool* ack)
         }
     }
     // ---------------------------------------------
-    AutoFreeStr wd ;
-    StrVec  words;
-    const char* curcmd = next;
-    while (true) {
-        next = str::Parse(curcmd, "\"%s\",%? ", &wd);
-        if (!next) {
-            next = str::Parse(curcmd, "\"%s\")]", &wd);
-        }
-        if (!next) { break; }
-        words.Append(wd.Get()); 
-        curcmd = next;
-    }
-    // -----------------------------------------------------
+    DisplayModel* dm = win->AsFixed();
     WindowTab* tab = win->CurrentTab();
-    tab->markers->selectWords(win, words);
+    const char* curcmd = next;
+    if (select_image || select_block) {
+        int pageNo;
+        int x, y, dx, dy;
+        next = str::Parse(curcmd, "%d, %d, %d, %d, %d)]", &pageNo, &x, &y, &dx, &dy);
+        if (!win->ctrl->ValidPageNo(pageNo)) {
+            return next;
+        }
+        win->ctrl->GoToPage(pageNo, true);
+        DeleteOldSelectionInfo(win, true);
+        if (select_image) {
+            Rect rc = dm->CvtToScreen(pageNo, ToRectF(Rect(x, y, dx, dy)));
+            win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
+            win->showSelection = (win->CurrentTab()->selectionOnPage != nullptr);
+            RepaintAsync(win, 0);
+        } else {
+            cpslab::GetTextInRegion(dm, pageNo, Rect(x, y, dx, dy));
+            UpdateTextSelection(win, false);
+        }
+    } else {
+        AutoFreeStr wd ;
+        StrVec  words;
+        while (true) {
+            next = str::Parse(curcmd, "\"%s\",%? ", &wd);
+            if (!next) {
+                next = str::Parse(curcmd, "\"%s\")]", &wd);
+            }
+            if (!next) {
+                break;
+            }
+            words.Append(wd.Get());
+            curcmd = next;
+        }
+        tab->markers->selectWords(win, words);
+    }
     // ---------------------------------------------
     MainWindowRerender(win);
     *ack = true;

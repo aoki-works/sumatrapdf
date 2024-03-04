@@ -33,10 +33,12 @@ extern void CloseEvent(WindowTab* tab);
 extern void CloseEvent(MainWindow* win);
 extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
 extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
+extern char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep = "\r\n");
+extern void sendClickPoint(MainWindow* win, int x, int y);
 extern void sendSelectText(MainWindow* win, bool conti=false);
 extern void sendSelectImage(MainWindow* win, int x, int y, bool conti=false);
-void getTextBlocks(MainWindow* win, int pageNo, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images);
-void getTextBlocks(MainWindow* win, Vec<PageText*>& blocks, Vec<RenderedBitmap*>& images);
+void getPageBlocks(MainWindow* win, int pageNo, Vec<PageText*>& blocks, Vec<IPageElement*>& images);
+void getBlocks(MainWindow* win, std::vector<std::pair<Vec<PageText*>, Vec<IPageElement*> > >&);
 
 enum class CpsMode {
     None = 0,

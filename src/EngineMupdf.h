@@ -55,7 +55,7 @@ class EngineMupdf : public EngineBase {
     bool SaveFileAs(const char* copyFileName) override;
     PageText ExtractPageText(int pageNo) override;
     void ExtractPageBlocks(int pageNo, Vec<PageText*>&,
-                           Vec<RenderedBitmap*>&) override;    // CPSLab.
+                           Vec<IPageElement*>&) override;    // CPSLab.
 
     bool HasClipOptimizations(int pageNo) override;
     TempStr GetPropertyTemp(DocumentProperty prop) override;
