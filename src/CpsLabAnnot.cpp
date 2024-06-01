@@ -38,9 +38,9 @@ WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
 struct MarkFileParser : json::ValueVisitor {
     /*
      *  { "Net": {"mark_color" : "coloe_code",
-                  "select_color" : "coloe_code",
-                  "words" : ["xx", "",...] }
-              }
+     *            "select_color" : "coloe_code",
+     *            "word" : ["xx", "",...] }
+     *  }
      */
     WindowTab* tab;
     Vec<MarkerNode*> markerTable;
