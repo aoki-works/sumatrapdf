@@ -68,8 +68,8 @@ static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::Open, CmdOpenFile, _TRN("Open")},
     {TbIcon::Print, CmdPrint, _TRN("Print")},
     {TbIcon::None, 0, nullptr}, // separator                // CPS Lab
+    {TbIcon::Cell, CmdSelectCells, _TRN("Select Parts")},   // CPS Lab
     {TbIcon::Net, CmdSelectNets, _TRN("Select Nets")},     // CPS Lab
-    {TbIcon::Cell, CmdSelectCells, _TRN("Select Cells")},   // CPS Lab
     {TbIcon::Pin, CmdSelectPins, _TRN("Select Pins")},   // CPS Lab
     {TbIcon::None, CmdFindFirst, nullptr},
     {TbIcon::SearchPrev, CmdFindPrev, _TRN("Find Previous")},
@@ -485,7 +485,6 @@ void UpdateToolbarFindText(MainWindow* win) {
     RECT r{};
     //TbGetRect(win->hwndToolbar, CmdZoomIn, &r);   CPS. Lab
     //SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
-    //SendMessageW(win->hwndToolbar, TB_GETRECT, CmdSelectCells, (LPARAM)&r); // CPS. Lab
     SendMessageW(win->hwndToolbar, TB_GETRECT, CmdSelectPins, (LPARAM)&r); // CPS. Lab
     int currX = r.right + DpiScale(win->hwndToolbar, 10);
     int currY = (r.bottom - findWndRect.dy) / 2;

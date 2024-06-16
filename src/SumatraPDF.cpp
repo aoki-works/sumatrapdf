@@ -1998,7 +1998,11 @@ MainWindow* LoadDocument(LoadArgs* args) {
         }
     }
     args->ctrl = ctrl;
-    return LoadDocumentFinish(args);
+    auto rtv = LoadDocumentFinish(args);
+    if (cpslab::EXPORT_TEXT_BLOCKS) {
+        cpslab::SaveBlocksToFile(win, cpslab::EXPORT_TEXT_BLOCKS);
+    }
+    return rtv;
 }
 
 // Loads document data into the MainWindow.
@@ -2559,7 +2563,7 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
         }
     } else {
         CrashIf(gPluginMode && !gWindows.Contains(win));
-        // CPS Lab. file closed event
+        // CP Lab. file closed event
         cpslab::CloseEvent(tab);
         RemoveTab(tab);
         delete tab;

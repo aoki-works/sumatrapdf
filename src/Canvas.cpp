@@ -508,7 +508,12 @@ static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
     if (isMoveableAnnot || !canCopy || (isShift || !isOverText) && !isCtrl) {
         StartMouseDrag(win, x, y);
     } else {
-        if (IsCtrlPressed() && !isOverText) { // CPS Lab
+        if (cpslab::MODE == cpslab::CpsMode::Document && isOverText) {
+            // Text selection start
+            OnSelectionStart(win, x, y, key);
+        }
+        else if (IsCtrlPressed() && !isOverText) { // CPS Lab
+            // Start area selection (left-button + Ctrl-key)
             OnSelectionStart(win, x, y, key);
         }
     }
@@ -535,6 +540,9 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     bool didDragMouse = !win->dragStartPending || IsDragDistance(x, win->dragStart.x, y, win->dragStart.y);
     if (MouseAction::Dragging == ma) {
         StopMouseDrag(win, x, y, !didDragMouse);
+        if (!didDragMouse) {
+            cpslab::sendClickPoint(win, x, y);
+        }
     } else {
         OnSelectionStop(win, x, y, !didDragMouse);
         if (MouseAction::Selecting == ma && win->showSelection) {
@@ -542,7 +550,15 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         }
         /* callback to user application via DDE. CPS Lab.*/
         WindowTab* tab = win->CurrentTab();
-        tab->markers->sendSelectMessage(win);
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            if (tab->selectionOnPage && 0 < tab->selectionOnPage->size()) {
+                cpslab::sendSelectText(win);
+            } else {
+                cpslab::sendClickPoint(win, x, y);
+            }
+        } else {
+            tab->markers->sendSelectMessage(win);
+        }
     }
 
     win->mouseAction = MouseAction::None;
@@ -676,6 +692,10 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
         win->showSelection = win->CurrentTab()->selectionOnPage != nullptr;
         RepaintAsync(win, 0);
+
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            cpslab::sendSelectImage(win, x, y);
+        }
     }
 }
 

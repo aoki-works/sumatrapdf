@@ -346,6 +346,24 @@ WCHAR* TextSelection::ExtractText(const char* lineSep) {
     return ToWstr(res);
 }
 
+WCHAR* TextSelection::ExtractText(const char* lineSep, const int pageNo) {
+    StrVec lines;
+
+    int fromPage, fromGlyph, toPage, toGlyph;
+    GetGlyphRange(&fromPage, &fromGlyph, &toPage, &toGlyph);
+    if (fromPage <= pageNo && pageNo <= toPage) {
+        int textLen;
+        textCache->GetTextForPage(pageNo, &textLen);
+        int glyph = pageNo == fromPage ? fromGlyph : 0;
+        int length = (pageNo == toPage ? toGlyph : textLen) - glyph;
+        if (length > 0) {
+            FillResultRects(this, pageNo, glyph, length, &lines);
+        }
+    }
+    TempStr res = JoinTemp(lines, lineSep);
+    return ToWstr(res);
+}
+
 void TextSelection::GetGlyphRange(int* fromPage, int* fromGlyph, int* toPage, int* toGlyph) const {
     *fromPage = std::min(startPage, endPage);
     *toPage = std::max(startPage, endPage);

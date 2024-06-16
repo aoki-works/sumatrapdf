@@ -2979,6 +2979,74 @@ RenderedBitmap* EngineMupdf::GetPageImage(int pageNo, RectF rect, int imageIdx) 
     return bmp;
 }
 
+// CPSLab.
+void EngineMupdf::ExtractPageBlocks(
+    int pageNo,
+    Vec<PageText*>& blocks,
+    Vec<IPageElement*>& images
+) {
+
+    RenderPageArgs args(pageNo, 100, 0);
+    RenderPage(args);
+
+    //FzPageInfo* pageInfo = GetFzPageInfo(pageNo, true);
+    FzPageInfo* pageInfo = GetFzPageInfo(pageNo, false);
+    if (!pageInfo) {
+        return;
+    }
+
+    ScopedCritSec scope(ctxAccess);
+    fz_stext_page* stext = nullptr;
+    fz_var(stext);
+    fz_stext_options opts{};
+    opts.flags = FZ_STEXT_PRESERVE_IMAGES;
+    fz_try(ctx) {
+        stext = fz_new_stext_page_from_page(ctx, pageInfo->page, &opts);
+    }
+    fz_catch(ctx) {
+        fz_report_error(ctx);
+    }
+    if (stext) {
+        const WCHAR* lineSep = L"\n";
+        size_t lineSepLen = str::Len(lineSep);
+        Vec<Rect> rects;
+        fz_stext_block* bk = stext->first_block;
+        while (bk) {
+            if (bk->type == FZ_STEXT_BLOCK_TEXT) {
+                str::WStr content;
+                fz_stext_line* line = bk->u.t.first_line;
+                while (line) {
+                    fz_stext_char* c = line->first_char;
+                    while (c) {
+                        AddChar(line, c, content, rects);
+                        c = c->next;
+                    }
+                    AddLineSep(content, rects, lineSep, lineSepLen);
+                    line = line->next;
+                }
+                WCHAR* text = content.StealData();
+                PageText* res = new PageText();
+                res->text = text;
+                res->len = (int)str::Len(text);
+                res->coords = rects.StealData();
+                blocks.Append(res);
+            } else {
+                printf("%d\n", bk->type);
+            }
+            bk = bk->next;
+        }
+    }
+
+
+    for (auto& img : pageInfo->images) {
+        //auto bitmap = GetImageForPageElement(img->imageElement);
+        images.Append(img->imageElement);
+    }
+
+    return;
+}
+
+
 PageText EngineMupdf::ExtractPageText(int pageNo) {
     FzPageInfo* pageInfo = GetFzPageInfo(pageNo, true);
     if (!pageInfo) {

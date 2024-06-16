@@ -129,6 +129,8 @@ struct Flags {
     char* userapp_dde_topic = nullptr;
     char* userapp_dde_debug_topic = nullptr;
 #endif
+    bool document_mode = false;  // CPS Lab.
+    char* export_text_blocks = nullptr;  // CPS Lab.
 
     bool testBrowser = false;
 

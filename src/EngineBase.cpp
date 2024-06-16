@@ -400,6 +400,10 @@ bool EngineBase::HandleLink(IPageDestination*, ILinkHandler*) {
     return false;
 }
 
+void EngineBase::ExtractPageBlocks(int pageNo, Vec<PageText*>& v1,
+                                   Vec<IPageElement*>& v2)
+{
+}
 // skip file:// and maybe file:/// from s. It might be added by mupdf
 // do not free the result
 static const char* SkipFileProtocolTemp(const char* s) {

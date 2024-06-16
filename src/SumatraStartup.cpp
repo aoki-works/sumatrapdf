@@ -1253,6 +1253,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     if(flags.userapp_dde_debug_topic != nullptr) {
         cpslab::USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWstr(flags.userapp_dde_debug_topic);
     }
+    if (flags.document_mode) {
+        cpslab::MODE = cpslab::CpsMode::Document;
+    }
+    if (flags.export_text_blocks) {
+        cpslab::EXPORT_TEXT_BLOCKS = flags.export_text_blocks;
+    }
     // only call FindPrevInstWindow() once
     existingInstanceHwnd = FindPrevInstWindow(&hMutex);
 
