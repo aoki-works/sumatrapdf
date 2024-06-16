@@ -891,7 +891,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
                 std::fprintf(outFile, "\n  }");
                 kcount += 1;
             }
-            std::fputs("\n}\n", outFile);
+            std::fputs("n}\n", outFile);
         }
         std::fclose(outFile);
     }
