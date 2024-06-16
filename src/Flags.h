@@ -56,7 +56,10 @@ struct Flags {
     HWND hwndPluginParent = nullptr;
     char* pluginURL = nullptr;
     bool exitImmediately = false;
+    // installer: doesn't show any UI
     bool silent = false;
+    // installer: starts the install immediately and launches the app at end
+    bool fastInstall = false;
     char* appdataDir = nullptr;
     char* inverseSearchCmdLine = nullptr;
     bool invertColors = false;
@@ -131,8 +134,6 @@ struct Flags {
 #endif
     bool document_mode = false;  // CPS Lab.
     char* export_text_blocks = nullptr;  // CPS Lab.
-
-    bool testBrowser = false;
 
     Flags() = default;
     ~Flags();

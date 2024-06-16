@@ -641,8 +641,17 @@ Usage:
                     Windows). If <N> is 0 we use the number of CPUs
                     (from Python's multiprocessing.cpu_count()).
                 --m-target <target>
-                    Set target for action 'm'. Default is blank, so make will
-                    build the default `all` target.
+                    Comma-separated list of target(s) to be built by action 'm'
+                    (Unix) or action '1' (Windows).
+
+                    On Unix, the specified target(s) are used as Make target(s)
+                    instead of implicit `all`. For example `--m-target libs`
+                    can be used to disable the default building of tools.
+
+                    On Windows, for each specified target, `/Project <target>`
+                    is appended to the devenv command. So one can use
+                    `--m-target mutool,muraster` to build mutool.exe and
+                    muraster.exe as well as mupdfcpp64.dll.
                 --m-vars <text>
                     Text to insert near start of the action 'm' make command,
                     typically to set MuPDF build flags, for example:
@@ -1189,7 +1198,8 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
     #jlib.log( '{build_dirs.dir_mupdf=}')
     if not make:
         make = os.environ.get('MUPDF_MAKE')
-        jlib.log('Overriding from $MUPDF_MAKE={make}.')
+        if make:
+            jlib.log('Overriding from $MUPDF_MAKE: {make=}.')
     if not make:
         if state.state_.openbsd:
             # Need to run gmake, not make. Also for some
@@ -1197,6 +1207,7 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
             # CXX to g++, so need to force CXX=c++ too.
             #
             make = 'CXX=c++ gmake'
+            jlib.log('OpenBSD, using: {make=}.')
     if not make:
         make = 'make'
 
@@ -1223,6 +1234,7 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
             # them.
             jlib.log('Ignoring {flag=}')
             build_suffix += f'-{flag}'
+            actual_build_dir += f'-{flag}'
         else:
             if 0: pass  # lgtm [py/unreachable-statement]
             elif flag == 'debug':
@@ -1247,6 +1259,9 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
             elif flag == 'tesseract':
                 make_args += ' HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
                 build_prefix += f'{flag}-'
+            elif flag == 'bsymbolic':
+                make_env += ' XLIB_LDFLAGS=-Wl,-Bsymbolic'
+                build_prefix += f'{flag}-'
             else:
                 if not in_prefix:
                     raise Exception( f'Unrecognised flag {flag!r} in {flags!r} in {build_dirs.dir_so!r}')
@@ -1266,7 +1281,8 @@ def _get_m_command( build_dirs, j=None, make=None, m_target=None, m_vars=None):
     if build_suffix:
         make_args += f' build_suffix={build_suffix}'
     if m_target:
-        make_args += f' {m_target}'
+        for t in m_target.split(','):
+            make_args += f' {t}'
     command = f'cd {build_dirs.dir_mupdf} &&'
     if make_env:
         command += make_env
@@ -1325,9 +1341,9 @@ def macos_patch( library, *sublibraries):
         List of paths of shared libraries; these have typically been
         specified with `-l` when `library` was created.
     '''
-    jlib.log( f'macos_patch(): library={library}  sublibraries={sublibraries}')
     if not state.state_.macos:
         return
+    jlib.log( f'macos_patch(): library={library}  sublibraries={sublibraries}')
     # Find what shared libraries are used by `library`.
     jlib.system( f'otool -L {library}', out='log')
     command = 'install_name_tool'
@@ -1374,10 +1390,10 @@ def build_0(
 
     # On 32-bit Windows, libclang doesn't work. So we attempt to run 64-bit `-b
     # 0` to generate C++ code.
-    jlib.log( '{state.state_.windows=} {build_dirs.cpu.bits=}')
+    jlib.log1( '{state.state_.windows=} {build_dirs.cpu.bits=}')
     if state.state_.windows and build_dirs.cpu.bits == 32:
         try:
-            jlib.log( 'Trying dummy call of clang.cindex.Index.create()')
+            jlib.log( 'Windows 32-bit: trying dummy call of clang.cindex.Index.create()')
             state.clang.cindex.Index.create()
         except Exception as e:
             py = f'py -{state.python_version()}'
@@ -1580,6 +1596,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
         actions = '0123' if state.state_.windows else 'm0123'
 
     dir_so_flags = os.path.basename( build_dirs.dir_so).split( '-')
+    cflags = os.environ.get('XCXXFLAGS', '')
 
     windows_build_type = build_dirs.windows_build_type()
     so_version = get_so_version( build_dirs)
@@ -1641,9 +1658,13 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                             f'"{devenv}"'
                             f' platform/{win32_infix}/mupdf.sln'
                             f' /Build "{build}"'
-                            f' /Project mupdfcpp'
                             )
-                    jlib.system(command, verbose=1, out='log')
+                    projects = ['mupdfcpp']
+                    if m_target:
+                        projects += m_target.split(',')
+                    for project in projects:
+                        command2 = f'{command} /Project {project}'
+                        jlib.system(command2, verbose=1, out='log')
 
                     jlib.fs_copy(
                             f'{build_dirs.dir_mupdf}/platform/{win32_infix}/{build_dirs.cpu.windows_subdir}{windows_build_type}/mupdfcpp{build_dirs.cpu.windows_suffix}.dll',
@@ -1675,6 +1696,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                         -o {o_file}
                                         {build_dirs.cpp_flags}
                                         -fPIC
+                                        {cflags}
                                         -I {include1}
                                         -I {include2}
                                         {cpp_file}
@@ -1716,6 +1738,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                     {link_soname_arg}
                                     {build_dirs.cpp_flags}
                                     -fPIC -shared
+                                    {cflags}
                                     -I {include1}
                                     -I {include2}
                                     {cpp_files_text}
@@ -1752,6 +1775,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                         {build_dirs.cpp_flags}
                                         -fPIC
                                         -c
+                                        {cflags}
                                         -I {include1}
                                         -I {include2}
                                         -o {ofile}
@@ -2047,6 +2071,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                         {build_dirs.cpp_flags}
                                         -fPIC
                                         --shared
+                                        {cflags}
                                         -I {include1}
                                         -I {include2}
                                         {flags_compile}
@@ -2097,6 +2122,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                     {cpp_path}
                                     {build_dirs.cpp_flags}
                                     -fPIC
+                                    {cflags}
                                     -I {include1}
                                     -I {include2}
                                     {flags_compile}
@@ -2152,6 +2178,7 @@ def build( build_dirs, swig_command, args, vs_upgrade, make_command):
                                     {build_dirs.cpp_flags}
                                     -fPIC
                                     -shared
+                                    {cflags}
                                     -I {include1}
                                     -I {include2}
                                     {flags_compile}
@@ -2993,11 +3020,16 @@ def main2():
                     command_venv_enter = f'. {venv}/bin/activate'
 
                 command = f'{command_venv_enter} && python -m pip install --upgrade pip'
-                if state.state_.openbsd:
-                    jlib.log( 'Not installing libclang on openbsd; we assume py3-llvm is installed.')
-                    command += f' && python -m pip install --upgrade swig setuptools'
-                else:
-                    command += f' && python -m pip install{force_reinstall} --upgrade libclang swig setuptools'
+
+                # Required packages are specified by
+                # setup.py:get_requires_for_build_wheel().
+                mupdf_root = os.path.abspath( f'{__file__}/../../../')
+                sys.path.insert(0, f'{mupdf_root}')
+                import setup
+                del sys.path[0]
+                packages = setup.get_requires_for_build_wheel()
+                packages = ' '.join(packages)
+                command += f' && python -m pip install{force_reinstall} --upgrade {packages}'
                 jlib.system(command, out='log', verbose=1)
 
                 command = f'{command_venv_enter} && python {shlex.quote(sys.argv[0])}'

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -132,7 +132,9 @@ void fz_output_xml(fz_context *ctx, fz_output *out, fz_xml *item, int level)
 	/* Skip over the DOC object at the top. */
 	if (item->up == NULL)
 	{
-		fz_output_xml(ctx, out, item->down, level);
+		fz_xml *child;
+		for (child = fz_xml_down(item); child; child = child->u.node.next)
+			fz_output_xml(ctx, out, child, level + 1);
 		return;
 	}
 
@@ -319,11 +321,14 @@ fz_xml *fz_xml_find_next_match(fz_xml *item, const char *tag, const char *att, c
 	if (item && FZ_DOCUMENT_ITEM(item))
 		item = item->down;
 
-	do
+	if (item != NULL)
 	{
-		item = tag ? fz_xml_find_next(item, tag) : item->u.node.next;
+		do
+		{
+			item = tag ? fz_xml_find_next(item, tag) : item->u.node.next;
+		}
+		while (item != NULL && !fz_xml_att_eq(item, att, match));
 	}
-	while (item != NULL && !fz_xml_att_eq(item, att, match));
 
 	return item;
 }

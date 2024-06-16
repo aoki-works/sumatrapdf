@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -159,8 +159,10 @@ int pdf_font_writing_supported(fz_context *ctx, fz_font *font);
 	Subset fonts by scanning the document to establish usage, and then
 	rewriting the font files.
 
+	Calling with pages_len == 0 means do the whole document.
+
 	EXPERIMENTAL AND SUBJECT TO CHANGE.
 */
-void pdf_subset_fonts(fz_context *ctx, pdf_document *doc, int pages_len, int *pages);
+void pdf_subset_fonts(fz_context *ctx, pdf_document *doc, int pages_len, const int *pages);
 
 #endif

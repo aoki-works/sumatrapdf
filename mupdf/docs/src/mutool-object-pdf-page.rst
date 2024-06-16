@@ -1,4 +1,4 @@
-.. Copyright (C) 2001-2023 Artifex Software, Inc.
+.. Copyright (C) 2001-2024 Artifex Software, Inc.
 .. All Rights Reserved.
 
 ----
@@ -72,7 +72,7 @@ Extends :ref:`Page<mutool_run_js_api_page>`.
      - Yes
      -
    * - Link
-     - No
+     - Yes
      - Please use :ref:`Page.createLink()<mutool_run_js_api_page_create_link>`.
    * - FreeText
      - Yes
@@ -81,6 +81,9 @@ Extends :ref:`Page<mutool_run_js_api_page>`.
      - Yes
      -
    * - Circle
+     - Yes
+     -
+   * - Line
      - Yes
      -
    * - Polygon
@@ -120,10 +123,10 @@ Extends :ref:`Page<mutool_run_js_api_page>`.
      - Yes
      -
    * - Sound
-     - Yes
+     - No
      -
    * - Movie
-     - Yes
+     - No
      -
    * - RichMedia
      - No
@@ -220,7 +223,7 @@ Extends :ref:`Page<mutool_run_js_api_page>`.
         pdfPage.process(processor);
 
 
-.. method:: toPixmap(transform, colorspace, alpha, renderExtra, usage)
+.. method:: toPixmap(transform, colorspace, alpha, renderExtra, usage, box)
 
     Render the page into a `Pixmap` using the given `colorspace` and `alpha` while applying the `transform`. Rendering of annotations/widgets can be disabled. A page can be rendered for e.g. "View" or "Print" usage.
 
@@ -229,6 +232,7 @@ Extends :ref:`Page<mutool_run_js_api_page>`.
     :arg alpha: `Boolean`.
     :arg renderExtra: `Boolean` Whether annotations and widgets should be rendered.
     :arg usage: `String` "View" or "Print".
+    :arg box: `String` Default is "CropBox".
 
     :return: `Pixmap`.
 
@@ -240,7 +244,8 @@ Extends :ref:`Page<mutool_run_js_api_page>`.
                                       mupdf.ColorSpace.DeviceRGB,
                                       false,
                                       true,
-                                      "View");
+                                      "View",
+                                      "CropBox");
 
 .. redundant
 
@@ -255,3 +260,46 @@ Extends :ref:`Page<mutool_run_js_api_page>`.
         .. code-block:: javascript
 
             var transform = pdfPage.getTransform();
+
+.. method:: createSignature(name)
+
+    Create a new signature widget with the given name as field label.
+
+    :arg name: `String` The desired field label.
+
+    :return: `PDFWidget`.
+
+    |example_tag|
+
+    .. code-block:: javascript
+
+        var signatureWidget = pdfPage.createSignature("test");
+
+.. method:: countAssociatedFiles()
+
+    Return the number of Associated Files on this page. Note that this is the number of files associated to this page, not necessarily the total number of files associated with elements throughout the entire document.
+
+    :return: `Integer`
+
+
+    |example_tag|
+
+    .. code-block:: javascript
+
+        var count = pdfPage.countAssociatedFiles();
+
+
+
+
+.. method:: associatedFile(n)
+
+    Return the Filespec object that represents the nth Associated File on this page. 0 <= n < count, where count is the value given by countAssociatedFiles().
+
+    :return fileSpecObject: `Object` :ref:`File Specification Object<mutool_run_js_api_file_spec_object>`.
+
+
+    |example_tag|
+
+    .. code-block:: javascript
+
+        var obj = pdfPage.associatedFile(0);

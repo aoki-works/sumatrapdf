@@ -55,13 +55,13 @@ DocumentTextCache::~DocumentTextCache() {
 }
 
 bool DocumentTextCache::HasTextForPage(int pageNo) const {
-    CrashIf(pageNo < 1 || pageNo > nPages);
+    ReportIf(pageNo < 1 || pageNo > nPages);
     PageText* pageText = &pagesText[pageNo - 1];
     return pageText->text != nullptr;
 }
 
 const WCHAR* DocumentTextCache::GetTextForPage(int pageNo, int* lenOut, Rect** coordsOut) {
-    CrashIf(pageNo < 1 || pageNo > nPages);
+    ReportIf(pageNo < 1 || pageNo > nPages);
 
     ScopedCritSec scope(&access);
     PageText* pageText = &pagesText[pageNo - 1];
@@ -139,7 +139,7 @@ static int FindClosestGlyph(TextSelection* ts, int pageNo, double x, double y) {
     if (-1 == result) {
         return 0;
     }
-    CrashIf(result < 0 || result >= textLen);
+    ReportIf(result < 0 || result >= textLen);
 
     // the result indexes the first glyph to be selected in a forward selection
     RectF bbox = ts->engine->Transform(ToRectF(coords[result]), pageNo, 1.0, 0);
@@ -151,7 +151,7 @@ static int FindClosestGlyph(TextSelection* ts, int pageNo, double x, double y) {
             result++;
         }
     }
-    CrashIf(result > 0 && result < textLen && coords[result] == coords[result - 1]);
+    ReportIf(result > 0 && result < textLen && coords[result] == coords[result - 1]);
 
     return result;
 }
@@ -160,7 +160,7 @@ static void FillResultRects(TextSelection* ts, int pageNo, int glyph, int length
     int len;
     Rect* coords;
     const WCHAR* text = ts->textCache->GetTextForPage(pageNo, &len, &coords);
-    CrashIf(len < glyph + length);
+    ReportIf(len < glyph + length);
     Rect mediabox = ts->engine->PageMediabox(pageNo).Round();
     Rect *c = &coords[glyph], *end = c + length;
     while (c < end) {
@@ -192,7 +192,7 @@ static void FillResultRects(TextSelection* ts, int pageNo, int glyph, int length
 
         int currLen = ts->result.len;
         int left = ts->result.cap - currLen;
-        CrashIf(left < 0);
+        ReportIf(left < 0);
         if (left == 0) {
             int newCap = ts->result.cap * 2;
             if (newCap < 64) {
@@ -200,8 +200,8 @@ static void FillResultRects(TextSelection* ts, int pageNo, int glyph, int length
             }
             int* newPages = (int*)realloc(ts->result.pages, sizeof(int) * newCap);
             Rect* newRects = (Rect*)realloc(ts->result.rects, sizeof(Rect) * newCap);
-            CrashIf(!newPages);
-            CrashIf(!newRects);
+            ReportIf(!newPages);
+            ReportIf(!newRects);
             ts->result.pages = newPages;
             ts->result.rects = newRects;
             ts->result.cap = newCap;
@@ -343,7 +343,7 @@ WCHAR* TextSelection::ExtractText(const char* lineSep) {
     }
 
     TempStr res = JoinTemp(lines, lineSep);
-    return ToWstr(res);
+    return ToWStr(res);
 }
 
 WCHAR* TextSelection::ExtractText(const char* lineSep, const int pageNo) {
@@ -361,7 +361,7 @@ WCHAR* TextSelection::ExtractText(const char* lineSep, const int pageNo) {
         }
     }
     TempStr res = JoinTemp(lines, lineSep);
-    return ToWstr(res);
+    return ToWStr(res);
 }
 
 void TextSelection::GetGlyphRange(int* fromPage, int* fromGlyph, int* toPage, int* toGlyph) const {

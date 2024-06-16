@@ -171,13 +171,13 @@ const char* MarkerNode::selectWord(MainWindow* win, const int pageNo, char* wd, 
     DisplayModel* dm = win->AsFixed();
     dm->textSearch->SetDirection(TextSearchDirection::Forward);
     dm->textSearch->wordSearch = true;
-    for (size_t i = 0; i < words.size(); ++i) {
-        char* mark_word = words.at(i);
+    for (int i = 0; i < words.Size(); ++i) {
+        char* mark_word = words.At(i);
         if (!str::Eq(wd, mark_word)) {
             continue;
         }
-        const WCHAR* wsep = strconv::Utf8ToWstr(wd);
-        //TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(wd), nullptr, conti);
+        const WCHAR* wsep = strconv::Utf8ToWStr(wd);
+        //TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWStr(wd), nullptr, conti);
         TextSel* sel = dm->textSearch->FindFirst(pageNo, wsep, nullptr, conti);
         if (sel == nullptr) {
             str::Free(wsep);
@@ -351,7 +351,7 @@ size_t Markers::getMarkersByWord(const char* word, Vec<MarkerNode*>& result) {
 }
 
 size_t Markers::getMarkersByWord(const WCHAR* word, Vec<MarkerNode*>& result) {
-    return getMarkersByWord(strconv::WstrToUtf8(word), result);
+    return getMarkersByWord(strconv::WStrToUtf8(word), result);
 }
 
 size_t Markers::getMarkersByRect(Rect& r, Vec<MarkerNode*>& result, bool specified_object_only)
@@ -479,7 +479,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
             continue;
         }
         for (int i = 0; i < m->selected_words.Size(); i++) {
-            auto s = m->selected_words.at(i);
+            auto s = m->selected_words.At(i);
             if (!selected_words.Contains(s)) {
                 selected_words.Append(s);
                 if (is_pin) {
@@ -497,8 +497,8 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
                 cmd.AppendFmt("[PinSelect(\"%s\"", tab_->filePath.Get());
             }
             for (int i = 0; i < selected_words.Size(); i++) {
-                auto s = selected_words.at(i);
-                auto c = assoc_cells.at(i);
+                auto s = selected_words.At(i);
+                auto c = assoc_cells.At(i);
                 cmd.AppendFmt(", (\"%s\" %s)", s, c);
             }
         } else {
@@ -510,7 +510,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
                 cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
             }
             for (int i = 0; i < selected_words.Size(); i++) {
-                auto s = selected_words.at(i);
+                auto s = selected_words.At(i);
                 cmd.AppendFmt(", \"%s\"", s);
             }
         }
@@ -966,7 +966,7 @@ void SaveBlocksToFile(MainWindow* win, const char* fname) {
             if (str::IsEmpty(b->text)) {
                 continue;
             }
-            char* w = strconv::WstrToUtf8(b->text, b->len, &alloc);
+            char* w = strconv::WStrToUtf8(b->text, b->len, &alloc);
             if (0 < n) {
                 std::fputs(",\n", outFile);
             }
@@ -1023,14 +1023,14 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
                     }
                 }
             }
-            char* w = strconv::WstrToUtf8(begin, end - begin, &alloc);
+            char* w = strconv::WStrToUtf8(begin, end - begin, &alloc);
             //char* w = ToUtf8(begin, end - begin);
             word_vec.Append(w);
             //str::Free(w);
             src = end;
         }
     }
-    word_vec.Sort();
+    Sort(word_vec);
     //
     StrVec words;
     char* prev = nullptr;
@@ -1107,8 +1107,8 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
         dm->textSearch->SetDirection(TextSearchDirection::Forward);
         bool conti = false;
         for (auto word : marker_node->words) {
-            const WCHAR* wsep = strconv::Utf8ToWstr(word);
-            // TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWstr(word), nullptr, conti);
+            const WCHAR* wsep = strconv::Utf8ToWStr(word);
+            // TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWStr(word), nullptr, conti);
             TextSel* sel = dm->textSearch->FindFirst(1, wsep, nullptr, conti);
             if (!sel) {
                 str::Free(wsep);
@@ -1271,7 +1271,7 @@ char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, co
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-    const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
+    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep);
     int wsep_len = str::Len(wsep);
     str::WStr result;
     const WCHAR* begin = nullptr;
@@ -1336,7 +1336,7 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, c
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-    const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
+    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep);
     str::WStr result;
     for (const WCHAR* src = pageText; *src; ) {
         if (*src == '\n') { ++src; continue; }
@@ -1364,7 +1364,7 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-    const WCHAR* wsep = strconv::Utf8ToWstr(lineSep);
+    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep);
     str::WStr result;
     int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
     float sqrr = pow(radius, 2);
@@ -1484,14 +1484,16 @@ void sendSelectText(MainWindow* win, bool conti) {
             char* utf8txt = ToUtf8(s);
             str::Free(s);
             if (!str::IsEmpty(utf8txt)) {
-                text.AppendAndFree(utf8txt);
+                text.Append(utf8txt);
+                str::Free(utf8txt);
                 break;
             }
         } else {
             pageNo = sel.pageNo;
             char* utf8txt = GetTextInRegion(dm, sel.pageNo, regionI, sep);
             if (!str::IsEmpty(utf8txt)) {
-                text.AppendAndFree(utf8txt);
+                text.Append(utf8txt);
+                str::Free(utf8txt);
                 rect.x = regionI.x;
                 rect.y = regionI.y;
                 rect.dx = regionI.dx;

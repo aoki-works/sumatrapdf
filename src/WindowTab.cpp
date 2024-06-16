@@ -35,7 +35,7 @@ void WindowTab::SetFilePath(const char* path) {
 }
 
 bool WindowTab::IsAboutTab() const {
-    CrashIf(type == WindowTab::Type::None);
+    ReportIf(type == WindowTab::Type::None);
     return type == WindowTab::Type::About;
 }
 
@@ -97,11 +97,11 @@ void WindowTab::MoveDocBy(int dx, int dy) const {
         return;
     }
     DisplayModel* dm = ctrl->AsFixed();
-    CrashIf(!dm);
+    ReportIf(!dm);
     if (!dm) {
         return;
     }
-    CrashIf(win->linkOnLastButtonDown);
+    ReportIf(win->linkOnLastButtonDown);
     if (win->linkOnLastButtonDown) {
         return;
     }
@@ -114,7 +114,7 @@ void WindowTab::MoveDocBy(int dx, int dy) const {
 }
 
 void WindowTab::ToggleZoom() const {
-    CrashIf(!ctrl);
+    ReportIf(!ctrl);
     if (!IsDocLoaded()) {
         return;
     }
@@ -143,7 +143,7 @@ bool SaveDataToFile(HWND hwndParent, char* fileNameA, ByteSlice data) {
         return false;
     }
 
-    // CrashIf(fileName && str::FindChar(fileName, '/'));
+    // ReportIf(fileName && str::FindChar(fileName, '/'));
 
     OPENFILENAME ofn{};
     ofn.lStructSize = sizeof(ofn);

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2023 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -578,12 +578,12 @@ void fz_end_layer(fz_context *ctx, fz_device *dev)
 	}
 }
 
-void fz_begin_structure(fz_context *ctx, fz_device *dev, fz_structure str, const char *raw, int uid)
+void fz_begin_structure(fz_context *ctx, fz_device *dev, fz_structure str, const char *raw, int idx)
 {
 	if (dev->begin_structure)
 	{
 		fz_try(ctx)
-			dev->begin_structure(ctx, dev, str, raw, uid);
+			dev->begin_structure(ctx, dev, str, raw, idx);
 		fz_catch(ctx)
 		{
 			fz_disable_device(ctx, dev);
@@ -708,7 +708,7 @@ fz_structure_to_string(fz_structure type)
 
 	/* List elements (PDF 1.7 - Table 10.23) */
 	case FZ_STRUCTURE_LIST:
-		return "List";
+		return "L";
 	case FZ_STRUCTURE_LISTITEM:
 		return "LI";
 	case FZ_STRUCTURE_LABEL:

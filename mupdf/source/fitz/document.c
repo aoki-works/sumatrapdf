@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2023 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -275,6 +275,8 @@ fz_open_accelerated_document(fz_context *ctx, const char *filename, const char *
 	fz_stream *file;
 	fz_stream *afile = NULL;
 	fz_document *doc = NULL;
+	fz_archive *dir = NULL;
+	char dirname[PATH_MAX];
 
 	fz_var(afile);
 
@@ -288,7 +290,7 @@ fz_open_accelerated_document(fz_context *ctx, const char *filename, const char *
 	if (fz_is_directory(ctx, filename))
 	{
 		/* Cannot accelerate directories, currently. */
-		fz_archive *dir = fz_open_directory(ctx, filename);
+		dir = fz_open_directory(ctx, filename);
 
 		fz_try(ctx)
 			doc = fz_open_accelerated_document_with_stream_and_dir(ctx, filename, NULL, NULL, dir);
@@ -306,10 +308,16 @@ fz_open_accelerated_document(fz_context *ctx, const char *filename, const char *
 	{
 		if (accel)
 			afile = fz_open_file(ctx, accel);
-		doc = handler->open(ctx, file, afile, NULL);
+		if (handler->wants_dir)
+		{
+			fz_dirname(dirname, filename, sizeof dirname);
+			dir = fz_open_directory(ctx, dirname);
+		}
+		doc = handler->open(ctx, file, afile, dir);
 	}
 	fz_always(ctx)
 	{
+		fz_drop_archive(ctx, dir);
 		fz_drop_stream(ctx, afile);
 		fz_drop_stream(ctx, file);
 	}
@@ -714,6 +722,24 @@ fz_bound_page_box(fz_context *ctx, fz_page *page, fz_box_type box)
 	if (page && page->bound_page)
 		return page->bound_page(ctx, page, box);
 	return fz_empty_rect;
+}
+
+void
+fz_run_document_structure(fz_context *ctx, fz_document *doc, fz_device *dev, fz_cookie *cookie)
+{
+	if (doc && doc->run_structure)
+	{
+		fz_try(ctx)
+		{
+			doc->run_structure(ctx, doc, dev, cookie);
+		}
+		fz_catch(ctx)
+		{
+			dev->close_device = NULL; /* aborted run, don't warn about unclosed device */
+			fz_rethrow_unless(ctx, FZ_ERROR_ABORT);
+			fz_ignore_error(ctx);
+		}
+	}
 }
 
 void

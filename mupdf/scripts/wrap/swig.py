@@ -69,12 +69,15 @@ def build_swig(
     assert language in ('python', 'csharp')
     # Find version of swig. (We use quotes around <swig> to make things work on
     # Windows.)
-    t = jlib.system( f'"{swig_command}" -version', out='return', verbose=1)
-    jlib.log('SWIG version info:\n========\n{t}\n========')
+    e, swig_location = jlib.system( f'which "{swig_command}"', raise_errors=0, out='return', verbose=0)
+    if e == 0:
+        jlib.log(f'{swig_location=}')
+    t = jlib.system( f'"{swig_command}" -version', out='return', verbose=0)
+    jlib.log1('SWIG version info:\n========\n{t}\n========')
     m = re.search( 'SWIG Version ([0-9]+)[.]([0-9]+)[.]([0-9]+)', t)
     assert m
     swig_major = int( m.group(1))
-    jlib.system( f'which "{swig_command}"', raise_errors=0)
+    jlib.log(f'{m.group()}')
 
     # Create a .i file for SWIG.
     #
@@ -748,7 +751,11 @@ def build_swig(
     # Ignore all C MuPDF functions; SWIG will still look at the C++ API in
     # namespace mudf.
     for fnname in generated.c_functions:
-        if fnname in ('pdf_annot_type', 'pdf_widget_type'):
+        if fnname in (
+                    'pdf_annot_type',
+                    'pdf_widget_type',
+                    'pdf_zugferd_profile',
+                    ):
             # These are also enums which we don't want to ignore. SWIGing the
             # functions is hopefully harmless.
             pass
@@ -888,6 +895,8 @@ def build_swig(
             %include carrays.i
             %include cdata.i
             %include std_vector.i
+            %include std_map.i
+
             {"%include argcargv.i" if language=="python" else ""}
 
             %array_class(unsigned char, uchar_array);
@@ -901,6 +910,7 @@ def build_swig(
                 %template(vectorf) vector<float>;
                 %template(vectord) vector<double>;
                 %template(vectors) vector<std::string>;
+                %template(map_string_int) map<std::string, int>;
                 %template(vectorq) vector<{rename.namespace_class("fz_quad")}>;
                 %template(vector_search_page2_hit) vector<fz_search_page2_hit>;
             }};
@@ -1730,6 +1740,7 @@ def build_swig(
                         -outdir {os.path.relpath(build_dirs.dir_so)}
                         -o {cpp}
                         -includeall
+                        {os.environ.get('XCXXFLAGS', '')}
                         -I{os.path.relpath(build_dirs.dir_mupdf)}/platform/python/include
                         -I{os.path.relpath(include1)}
                         -I{os.path.relpath(include2)}
@@ -1857,16 +1868,16 @@ def build_swig(
                 '\\2public override string ToString() { return to_string(); }\n\\1',
                 cs,
                 )
-        jlib.log('{len(cs)=}')
-        jlib.log('{len(cs2)=}')
+        jlib.log1('{len(cs)=}')
+        jlib.log1('{len(cs2)=}')
         assert cs2 != cs, f'Failed to add toString() methods.'
-        jlib.log('{len(generated.swig_csharp)=}')
+        jlib.log1('{len(generated.swig_csharp)=}')
         assert len(generated.swig_csharp)
         cs2 += generated.swig_csharp
-        jlib.log( 'Updating cs2 => {build_dirs.dir_so}/mupdf.cs')
+        jlib.log1( 'Updating cs2 => {build_dirs.dir_so}/mupdf.cs')
         jlib.fs_update(cs2, f'{build_dirs.dir_so}/mupdf.cs')
         #jlib.fs_copy(f'{outdir}/mupdf.cs', f'{build_dirs.dir_so}/mupdf.cs')
-        jlib.log('{rebuilt=}')
+        jlib.log1('{rebuilt=}')
 
     else:
         assert 0

@@ -519,8 +519,12 @@ def make_outparam_helper(
         # swig - swig maps int64_t to mupdf.SWIGTYPE_p_int64_t which can't be
         # treated or converted to an integer.
         #
+        # We also value-initialise in case the underlying mupdf function also
+        # reads the supplied value - i.e. treats it as an in-parm as well as an
+        # out-param; this is paricularly important for pointer out-params.
+        #
         pointee = state.get_name_canonical( arg.cursor.type.get_pointee())
-        generated.swig_cpp.write(f'        {declaration_text( pointee, arg.name)};\n')
+        generated.swig_cpp.write(f'        {declaration_text( pointee, arg.name)} = {{}};\n')
     generated.swig_cpp.write(f'    }};\n')
     generated.swig_cpp.write('\n')
 
@@ -538,19 +542,6 @@ def make_outparam_helper(
     generated.swig_cpp.write(f'    /* Out-params function for {cursor.spelling}(). */\n')
     generated.swig_cpp.write(f'    {declaration_text( cursor.result_type, name_args)}\n')
     generated.swig_cpp.write( '    {\n')
-    # Set all pointer fields to NULL.
-    for arg in parse.get_args( tu, cursor):
-        if not arg.out_param:
-            continue
-        if arg.cursor.type.get_pointee().kind == state.clang.cindex.TypeKind.POINTER:
-            generated.swig_cpp.write(f'        outparams->{arg.name} = NULL;\n')
-    # Make call. Note that *_outparams will have changed size_t to unsigned long or similar so
-    # that SWIG can handle it. Would like to cast the addresses of the struct members to
-    # things like (size_t*) but this cause problems with const so we use temporaries.
-    for arg in parse.get_args( tu, cursor):
-        if not arg.out_param:
-            continue
-        generated.swig_cpp.write(f'        {declaration_text(arg.cursor.type.get_pointee(), arg.name)};\n')
     return_void = (cursor.result_type.spelling == 'void')
     generated.swig_cpp.write(f'        ')
     if not return_void:
@@ -560,16 +551,11 @@ def make_outparam_helper(
     for arg in parse.get_args( tu, cursor):
         generated.swig_cpp.write(sep)
         if arg.out_param:
-            #generated.swig_cpp.write(f'&outparams->{arg.name}')
-            generated.swig_cpp.write(f'&{arg.name}')
+            generated.swig_cpp.write(f'&outparams->{arg.name}')
         else:
             generated.swig_cpp.write(f'{arg.name}')
         sep = ', '
     generated.swig_cpp.write(');\n')
-    for arg in parse.get_args( tu, cursor):
-        if not arg.out_param:
-            continue
-        generated.swig_cpp.write(f'        outparams->{arg.name} = {arg.name};\n')
     if not return_void:
         generated.swig_cpp.write('        return ret;\n')
     generated.swig_cpp.write('    }\n')
@@ -1087,6 +1073,14 @@ g_extra_declarations = textwrap.dedent(f'''
 
         /** Swig-friendly wrapper for pdf_rearrange_pages(). */
         void pdf_rearrange_pages2(fz_context* ctx, pdf_document* doc, const std::vector<int>& pages);
+
+        /** Swig-friendly wrapper for pdf_subset_fonts(). */
+        void pdf_subset_fonts2(fz_context *ctx, pdf_document *doc, const std::vector<int>& pages);
+
+        /** Swig-friendly and typesafe way to do fz_snprintf(fmt, value). `fmt`
+        must end with one of 'efg' otherwise we throw an exception. */
+        std::string fz_format_double(fz_context* ctx, const char* fmt, double value);
+
         ''')
 
 g_extra_definitions = textwrap.dedent(f'''
@@ -1280,6 +1274,28 @@ g_extra_definitions = textwrap.dedent(f'''
         void pdf_rearrange_pages2(fz_context* ctx, pdf_document* doc, const std::vector<int>& pages)
         {{
             return pdf_rearrange_pages(ctx, doc, pages.size(), &pages[0]);
+        }}
+
+        void pdf_subset_fonts2(fz_context *ctx, pdf_document *doc, const std::vector<int>& pages)
+        {{
+            return pdf_subset_fonts(ctx, doc, pages.size(), &pages[0]);
+        }}
+
+        static void s_format_check(fz_context* ctx, const char* fmt, const char* specifiers)
+        {{
+            int length = strlen(fmt);
+            if (!length || !strchr(specifiers, fmt[length-1]))
+            {{
+                fz_throw(ctx, FZ_ERROR_ARGUMENT, "Incorrect fmt '%s' should end with one of '%s'.", fmt, specifiers);
+            }}
+        }}
+
+        std::string fz_format_double(fz_context* ctx, const char* fmt, double value)
+        {{
+            char buffer[256];
+            s_format_check(ctx, fmt, "efg");
+            fz_snprintf(buffer, sizeof(buffer), fmt, value);
+            return buffer;
         }}
         ''')
 
@@ -1961,7 +1977,7 @@ def make_function_wrappers(
 
         functions.append( (fnname, cursor))
 
-    jlib.log( '{len(functions)=}')
+    jlib.log1( '{len(functions)=}')
 
     # Sort by function-name to make output easier to read.
     functions.sort()
@@ -2391,6 +2407,23 @@ def class_find_destructor_fns( tu, struct_name, base_name):
     return destructor_fns
 
 
+def num_instances(refcheck_if, delta, name):
+    '''
+    Retuns C++ code to embed in a wrapper class constructor/destructor function
+    to update the class static `s_num_instances` variable.
+    '''
+    ret = ''
+    ret += f'    {refcheck_if}\n'
+    if delta == +1:
+        ret += '    ++s_num_instances;\n'
+    elif delta == -1:
+        ret += '    --s_num_instances;\n'
+    else:
+        assert 0
+    ret += '    #endif\n'
+    return ret
+
+
 def class_constructor_default(
         tu,
         struct_cursor,
@@ -2436,6 +2469,9 @@ def class_constructor_default(
             out_cpp.write(f'        s_{classname}_refs_check.add( this, __FILE__, __LINE__, __FUNCTION__);\n')
             out_cpp.write( '    }\n')
             out_cpp.write( '    #endif\n')
+
+    out_cpp.write(num_instances(refcheck_if, +1, classname))
+
     out_cpp.write( f'}};\n')
 
 
@@ -2523,6 +2559,7 @@ def class_copy_constructor(
             out_cpp.write(f'        s_{classname}_refs_check.add( this, __FILE__, __LINE__, __FUNCTION__);\n')
             out_cpp.write( '    }\n')
             out_cpp.write( '    #endif\n')
+        out_cpp.write(num_instances(refcheck_if, +1, classname))
         out_cpp.write( '}\n')
         out_cpp.write( '\n')
 
@@ -2816,6 +2853,9 @@ def function_wrapper_class_aware_body(
             out_cpp.write( f'    }}\n')
             out_cpp.write( f'    #endif\n')
 
+    if class_constructor:
+        out_cpp.write(num_instances(refcheck_if, +1, class_name))
+
     if not return_void and not class_constructor:
         out_cpp.write( f'    return ret;\n')
 
@@ -3084,7 +3124,7 @@ def function_wrapper_class_aware(
                         # For now we just output a diagnostic, but eventually
                         # we might make C++ wrappers return a std::string here,
                         # free()-ing the char* before returning.
-                        jlib.log( 'Function name implies kept reference and returns char*:'
+                        jlib.log1( 'Function name implies kept reference and returns char*:'
                                 ' {fnname}(): {fn_cursor.result_type.spelling=}'
                                 ' -> {return_pointee.spelling=}.'
                                 )
@@ -3291,20 +3331,25 @@ def class_custom_method(
     out_cpp.write( f'FZ_FUNCTION {return_space}{classname}::{name_args_no_defaults}')
 
     body = textwrap.dedent(extramethod.body)
+
+    end = body.rfind('}')
+    assert end >= 0
+    out_cpp.write( body[:end])
+
     if is_constructor and parse.has_refs( tu, struct_cursor.type):
         # Insert ref checking code into end of custom constructor body.
-        end = body.rfind('}')
-        assert end >= 0
-        out_cpp.write( body[:end])
         out_cpp.write( f'    {refcheck_if}\n')
         out_cpp.write( f'    if (s_check_refs)\n')
         out_cpp.write( f'    {{\n')
         out_cpp.write( f'        s_{classname}_refs_check.add( this, __FILE__, __LINE__, __FUNCTION__);\n')
         out_cpp.write( f'    }}\n')
         out_cpp.write( f'    #endif\n')
-        out_cpp.write( body[end:])
-    else:
-        out_cpp.write( body)
+    if is_constructor:
+        out_cpp.write( num_instances(refcheck_if, +1, classname))
+    if is_destructor:
+        out_cpp.write( num_instances(refcheck_if, -1, classname))
+
+    out_cpp.write( body[end:])
 
     out_cpp.write( f'\n')
 
@@ -3378,6 +3423,9 @@ def class_raw_constructor(
             out_cpp.write( f'        s_{classname}_refs_check.add( this, __FILE__, __LINE__, __FUNCTION__);\n')
             out_cpp.write( f'    }}\n')
             out_cpp.write( f'    #endif\n')
+
+        out_cpp.write(num_instances(refcheck_if, +1, classname))
+
         out_cpp.write( '}\n')
         out_cpp.write( '\n')
 
@@ -3398,6 +3446,8 @@ def class_raw_constructor(
                     out_cpp.write( f'    memcpy(this->{c.spelling}, &internal.{c.spelling}, sizeof(this->{c.spelling}));\n')
                 else:
                     out_cpp.write( f'    this->{c.spelling} = internal.{c.spelling};\n')
+
+            out_cpp.write(num_instances(refcheck_if, +1, classname))
             out_cpp.write( '}\n')
             out_cpp.write( '\n')
 
@@ -3421,6 +3471,7 @@ def class_raw_constructor(
                     out_cpp.write( f'        s_{classname}_refs_check.add( this, __FILE__, __LINE__, __FUNCTION__);\n')
                     out_cpp.write( f'    }}\n')
                     out_cpp.write( f'    #endif\n')
+
                 out_cpp.write( '    return ret;\n')
                 out_cpp.write( '}\n')
                 out_cpp.write( '\n')
@@ -3571,7 +3622,7 @@ def class_destructor(
         fnname, cursor = destructor_fns[0]
         register_fn_use( cursor.spelling)
         out_h.write( f'    /** Destructor using {cursor.spelling}(). */\n')
-        out_h.write( f'    FZ_FUNCTION ~{classname}();\n');
+        out_h.write( f'    FZ_FUNCTION ~{classname}();\n')
 
         out_cpp.write( f'FZ_FUNCTION {classname}::~{classname}()\n')
         out_cpp.write(  '{\n')
@@ -3583,10 +3634,27 @@ def class_destructor(
             out_cpp.write( f'        s_{classname}_refs_check.remove( this, __FILE__, __LINE__, __FUNCTION__);\n')
             out_cpp.write(  '    }\n')
             out_cpp.write( f'    #endif\n')
+
+        out_cpp.write(num_instances(refcheck_if, -1, classname))
+
         out_cpp.write(  '}\n')
         out_cpp.write( '\n')
     else:
+        out_h.write(f'    {refcheck_if}\n')
+        out_h.write(f'    /** Destructor only decrements s_num_instances. */\n')
+        out_h.write(f'    FZ_FUNCTION ~{classname}();\n')
+        out_h.write( '    #else\n')
         out_h.write( '    /** We use default destructor. */\n')
+        out_h.write( '    #endif\n')
+
+        out_cpp.write( f'{refcheck_if}\n')
+        out_cpp.write( f'FZ_FUNCTION {classname}::~{classname}()\n')
+        out_cpp.write(  '{\n')
+        out_cpp.write(num_instances(refcheck_if, -1, classname))
+        out_cpp.write(  '}\n')
+        out_cpp.write( '#endif\n')
+        out_cpp.write( '\n')
+
 
 
 def pod_class_members(
@@ -4247,6 +4315,9 @@ def class_wrapper(
 
     # Look for function that can be used by copy constructor and operator=.
     #
+    if refs:
+        assert extras.copyable != 'default', f'Non-POD class for {struct_name=} has refs, so must not use copyable="default"'
+
     if not extras.pod and extras.copyable and extras.copyable != 'default':
         class_copy_constructor(
                 tu,
@@ -4308,7 +4379,7 @@ def class_wrapper(
             for extramethod in extras.methods_extra:
                 if not extramethod.overload:
                     if extramethod.name_args.startswith( f'{rename.method( struct_name, fnname)}('):
-                        jlib.log( 'Omitting default method because same name as extramethod: {extramethod.name_args}')
+                        jlib.log1( 'Omitting default method because same name as extramethod: {extramethod.name_args}')
                         break
             else:
                 #log( 'adding to extras.method_wrappers: {fnname}')
@@ -4477,6 +4548,17 @@ def class_wrapper(
         # swig-4.02 with "Error: Syntax error in input(3).".
         out_h.write( f'    /** Pointer to wrapped data. */\n')
         out_h.write( f'    ::{struct_name}* m_internal;\n')
+
+    # Declare static `num_instances` variable.
+    out_h.write(  '\n')
+    out_h.write(f'    /* Ideally this would be in `{refcheck_if}...#endif`, but Swig will\n')
+    out_h.write(f'    generate code regardless so we always need to have this available. */\n')
+    out_h.write(f'    FZ_DATA static int s_num_instances;\n')
+
+    out_cpp.write(f'/* Ideally this would be in `{refcheck_if}...#endif`, but Swig will\n')
+    out_cpp.write(f'generate code regardless so we always need to have this available. */\n')
+    out_cpp.write(f'int {classname}::s_num_instances = 0;\n')
+    out_cpp.write(f'\n')
 
     # Make operator<< (std::ostream&, ...) for POD classes.
     #
@@ -4956,7 +5038,7 @@ def cpp_source(
     try:
         with open( temp_h, 'w') as f:
             if state.state_.linux or state.state_.macos:
-                jlib.log('Prefixing Fitz headers with `typedef unsigned long size_t;`'
+                jlib.log1('Prefixing Fitz headers with `typedef unsigned long size_t;`'
                         ' because size_t not available to clang on Linux/MacOS.')
                 # On Linux, size_t is defined internally in gcc (e.g. not even
                 # in /usr/include/stdint.h) and so not visible to clang.
@@ -5023,9 +5105,9 @@ def cpp_source(
         def show_clang_diagnostic( diagnostic, depth=0):
             for diagnostic2 in diagnostic.children:
                 show_clang_diagnostic( diagnostic2, depth + 1)
-            jlib.log( '{" "*4*depth}{diagnostic}')
+            jlib.log1( '{" "*4*depth}{diagnostic}')
         if tu.diagnostics:
-            jlib.log( 'tu.diagnostics():')
+            jlib.log1( 'tu.diagnostics():')
             for diagnostic in tu.diagnostics:
                 show_clang_diagnostic(diagnostic, 1)
 
@@ -5069,6 +5151,7 @@ def cpp_source(
             #include "mupdf/functions.h"
             #include "mupdf/pdf.h"
 
+            #include <map>
             #include <string>
             #include <vector>
 
@@ -5258,8 +5341,6 @@ def cpp_source(
         generated.c_globals.append(name)
         windows_def += f'    {name} DATA\n'
     for fnname, cursor in state.state_.find_functions_starting_with( tu, ('fz_', 'pdf_', 'FT_'), method=False):
-        if fnname == 'fz_is_infinite_irect':
-            jlib.log( '{fnname=} {cursor.storage_class=}')
         if cursor.storage_class == state.clang.cindex.StorageClass.STATIC:
             # These fns do not work in windows.def, probably because they are
             # usually inline?
@@ -5273,7 +5354,7 @@ def cpp_source(
             # (We use os.path.abspath() to avoid problems with back and forward
             # slashes in cursor.extent.start.file.name on Windows.)
             #
-            jlib.log('Not adding to {windows_def_path} because defined in {os.path.relpath(out_hs.extra.filename)}: {cursor.spelling}')
+            jlib.log1('Not adding to {windows_def_path} because defined in {os.path.relpath(out_hs.extra.filename)}: {cursor.spelling}')
         else:
             windows_def += f'    {fnname}\n'
     # Add some internal fns that PyMuPDF requires.
@@ -5404,6 +5485,19 @@ def cpp_source(
             FZ_FUNCTION void reinit_singlethreaded();
 
             '''))
+
+    # Generate num_instances diagnostic fn.
+    out_hs.classes.write('\n')
+    out_hs.classes.write('/** Returns map from class name (for example FzDocument) to s_num_instances. */\n')
+    out_hs.classes.write('FZ_FUNCTION std::map<std::string, int> num_instances();\n')
+    out_cpps.classes.write('FZ_FUNCTION std::map<std::string, int> num_instances()\n')
+    out_cpps.classes.write('{\n')
+    out_cpps.classes.write('    std::map<std::string, int> ret;\n')
+    for classname, struct_cursor, struct_name in classes_:
+        out_cpps.classes.write(f'    ret["{classname}"] = {classname}::s_num_instances;\n')
+    out_cpps.classes.write('    \n')
+    out_cpps.classes.write('    return ret;\n')
+    out_cpps.classes.write('}\n')
 
     # Write close of namespace.
     out_hs.classes.write( out_h_classes_end.get())

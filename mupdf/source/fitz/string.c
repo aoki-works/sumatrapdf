@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -27,10 +27,6 @@
 #include <math.h>
 #include <float.h>
 #include <stdlib.h>
-
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
 
 #ifdef _WIN32
 #include <windows.h> /* for MultiByteToWideChar etc. */
@@ -756,6 +752,8 @@ int fz_is_page_range(fz_context *ctx, const char *s)
 
 const char *fz_parse_page_range(fz_context *ctx, const char *s, int *a, int *b, int n)
 {
+	const char *orig = s;
+
 	if (!s || !s[0])
 		return NULL;
 
@@ -788,6 +786,12 @@ const char *fz_parse_page_range(fz_context *ctx, const char *s, int *a, int *b, 
 
 	*a = fz_clampi(*a, 1, n);
 	*b = fz_clampi(*b, 1, n);
+
+	if (s == orig)
+	{
+		fz_warn(ctx, "skipping invalid page range");
+		return NULL;
+	}
 
 	return s;
 }

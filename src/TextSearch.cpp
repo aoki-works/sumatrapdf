@@ -41,9 +41,9 @@ void TextSearch::Clear() {
         const WCHAR* w = findWords.Pop();
         str::Free(w);
     }
-    str::ReplaceWithCopy(&findText, nullptr);
-    str::ReplaceWithCopy(&anchor, nullptr);
-    str::ReplaceWithCopy(&lastText, nullptr);
+    str::FreePtr(&findText);
+    str::FreePtr(&anchor);
+    str::FreePtr(&lastText);
     Reset();
 }
 
@@ -109,17 +109,18 @@ void TextSearch::SetText(const WCHAR* text) {
 
     // CPS Lab.
     if (this->findText) {
-        char* tmpFindText = strconv::WstrToUtf8(this->findText);
+        char* tmpFindText = strconv::WStrToUtf8(this->findText);
         StrVec wTmp;
         Split(wTmp, tmpFindText, " ", true);
-        for (size_t k = 0; k < wTmp.size(); k++) {
-            char* w = wTmp.at(k);
-            const WCHAR* wd = strconv::Utf8ToWstr(w, (size_t)-1);
+        for (int k = 0; k < wTmp.Size(); k++) {
+            char* w = wTmp.At(k);
+            const WCHAR* wd = strconv::Utf8ToWStr(w, (size_t)-1);
             findWords.Append(wd);
         }
         str::Free(tmpFindText);
         if (!findWords.IsEmpty()) {
-            str::ReplaceWithCopy(&anchor, nullptr);
+            str::Free(anchor);
+            anchor = nullptr;
         }
     }
 
@@ -154,7 +155,7 @@ void TextSearch::SetDirection(TextSearchDirection direction) {
 void TextSearch::SetLastResult(TextSelection* sel) {
     CopySelection(sel);
 
-    AutoFreeWstr selection(ExtractText(" "));
+    AutoFreeWStr selection(ExtractText(" "));
     str::NormalizeWSInPlace(selection);
     SetText(selection);
 
@@ -467,7 +468,7 @@ TextSel* TextSearch::FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tr
 }
 
 TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker, bool conti) {
-    CrashIf(!findText);
+    ReportIf(!findText);
     if (!findText) {
         return nullptr;
     }

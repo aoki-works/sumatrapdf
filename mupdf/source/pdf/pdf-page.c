@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2023 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -1011,8 +1011,32 @@ pdf_page_uses_overprint(fz_context *ctx, pdf_page *page)
 static void
 pdf_drop_page_imp(fz_context *ctx, pdf_page *page)
 {
+	pdf_annot *widget;
+	pdf_annot *annot;
+	pdf_link *link;
+
+	link = (pdf_link *) page->links;
+	while (link)
+	{
+		link->page = NULL;
+		link = (pdf_link *) link->super.next;
+	}
 	fz_drop_link(ctx, page->links);
+
+	annot = page->annots;
+	while (annot)
+	{
+		annot->page = NULL;
+		annot = annot->next;
+	}
 	pdf_drop_annots(ctx, page->annots);
+
+	widget = page->widgets;
+	while (widget)
+	{
+		widget->page = NULL;
+		widget = widget->next;
+	}
 	pdf_drop_widgets(ctx, page->widgets);
 	pdf_drop_obj(ctx, page->obj);
 }
@@ -1857,4 +1881,16 @@ void
 pdf_page_label_imp(fz_context *ctx, fz_document *doc, int chapter, int page, char *buf, size_t size)
 {
 	pdf_page_label(ctx, pdf_document_from_fz_document(ctx, doc), page, buf, size);
+}
+
+pdf_page *
+pdf_keep_page(fz_context *ctx, pdf_page *page)
+{
+	return (pdf_page *) fz_keep_page(ctx, &page->super);
+}
+
+void
+pdf_drop_page(fz_context *ctx, pdf_page *page)
+{
+	fz_drop_page(ctx, &page->super);
 }

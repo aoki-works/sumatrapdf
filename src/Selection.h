@@ -29,11 +29,10 @@ void PaintTransparentCircles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF 
                              int margin = 1);
 void PaintSelection(MainWindow* win, HDC hdc);
 void UpdateTextSelection(MainWindow* win, bool select = true);
-void ZoomToSelection(MainWindow* win, float factor, bool scrollToFit = true, bool relative = false);
 void CopySelectionToClipboard(MainWindow* win);
 void OnSelectAll(MainWindow* win, bool textOnly = false);
 bool NeedsSelectionEdgeAutoscroll(MainWindow* win, int x, int y);
 void OnSelectionEdgeAutoscroll(MainWindow* win, int x, int y);
 void OnSelectionStart(MainWindow* win, int x, int y, WPARAM key);
 void OnSelectionStop(MainWindow* win, int x, int y, bool aborted);
-char* GetSelectedText(WindowTab* tab, const char* lineSep, bool& isTextOnlySelectionOut);
+TempStr GetSelectedTextTemp(WindowTab* tab, const char* lineSep, bool& isTextOnlySelectionOut);

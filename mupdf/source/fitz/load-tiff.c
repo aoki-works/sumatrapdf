@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -1436,7 +1436,7 @@ tiff_decode_ifd(fz_context *ctx, struct tiff *tiff)
 	tiff->tilestride = (tiff->tilewidth * tiff->samplesperpixel * tiff->bitspersample + 7) / 8;
 
 #if FZ_ENABLE_ICC
-	if (tiff->profile)
+	if (tiff->profile && tiff->profilesize > 0)
 	{
 		fz_buffer *buff = NULL;
 		fz_colorspace *icc = NULL;

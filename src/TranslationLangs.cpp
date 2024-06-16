@@ -8,7 +8,7 @@
 
 namespace trans {
 
-constexpr int kLangsCount = 71;
+constexpr int kLangsCount = 73;
 
 const char *gLangCodes =   "en\0" \
   "af\0" \
@@ -33,6 +33,7 @@ const char *gLangCodes =   "en\0" \
   "dk\0" \
   "nl\0" \
   "et\0" \
+  "fo\0" \
   "fi\0" \
   "fr\0" \
   "fy-nl\0" \
@@ -65,6 +66,7 @@ const char *gLangCodes =   "en\0" \
   "pa\0" \
   "ro\0" \
   "ru\0" \
+  "sat\0" \
   "sr-rs\0" \
   "sp-rs\0" \
   "sn\0" \
@@ -105,6 +107,7 @@ const char *gLangNames =   "English\0" \
   "Danish (Dansk)\0" \
   "Dutch (Nederlands)\0" \
   "Estonian (Eesti)\0" \
+  "Faroese (F\303\270royskt)\0" \
   "Finnish (Suomi)\0" \
   "French (Fran\303\247ais)\0" \
   "Frisian (Frysk)\0" \
@@ -137,6 +140,7 @@ const char *gLangNames =   "English\0" \
   "Punjabi (\340\250\252\340\251\260\340\250\234\340\250\276\340\250\254\340\251\200)\0" \
   "Romanian (Rom\303\242n\304\203)\0" \
   "Russian (\320\240\321\203\321\201\321\201\320\272\320\270\320\271)\0" \
+  "Santali (\341\261\245\341\261\237\341\261\261\341\261\233\341\261\237\341\261\262\341\261\244)\0" \
   "Serbian (Cyrillic)\0" \
   "Serbian (Latin)\0" \
   "Shona (Shona)\0" \
@@ -189,6 +193,7 @@ const LANGID gLangIds[kLangsCount] = {
   _LANGID(LANG_DANISH),
   _LANGID(LANG_DUTCH),
   _LANGID(LANG_ESTONIAN),
+  _LANGID(LANG_FAEROESE),
   _LANGID(LANG_FINNISH),
   _LANGID(LANG_FRENCH),
   _LANGID(LANG_FRISIAN),
@@ -221,6 +226,7 @@ const LANGID gLangIds[kLangsCount] = {
   _LANGID(LANG_PUNJABI),
   _LANGID(LANG_ROMANIAN),
   _LANGID(LANG_RUSSIAN),
+  (LANGID)-1,
   MAKELANGID(LANG_SERBIAN, SUBLANG_SERBIAN_CYRILLIC),
   MAKELANGID(LANG_SERBIAN, SUBLANG_SERBIAN_LATIN),
   (LANGID)-1,
@@ -242,7 +248,7 @@ const LANGID gLangIds[kLangsCount] = {
 
 bool IsLangRtl(int idx)
 {
-  return (3 == idx) || (30 == idx) || (39 == idx) || (48 == idx);
+  return (3 == idx) || (31 == idx) || (40 == idx) || (49 == idx);
 }
 
 int gLangsCount = kLangsCount;

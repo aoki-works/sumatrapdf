@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -462,7 +462,8 @@ fz_document_handler html_document_handler =
 	htdoc_open_document,
 	htdoc_extensions,
 	htdoc_mimetypes,
-	htdoc_recognize_html_content
+	htdoc_recognize_html_content,
+	1
 };
 
 /* XHTML document handler */
@@ -497,7 +498,9 @@ fz_document_handler xhtml_document_handler =
 	NULL,
 	xhtdoc_open_document,
 	xhtdoc_extensions,
-	xhtdoc_mimetypes
+	xhtdoc_mimetypes,
+	NULL,
+	1
 };
 
 /* FB2 document handler */

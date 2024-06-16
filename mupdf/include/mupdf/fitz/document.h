@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2023 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -32,6 +32,7 @@
 #include "mupdf/fitz/link.h"
 #include "mupdf/fitz/outline.h"
 #include "mupdf/fitz/separation.h"
+#include "mupdf/fitz/archive.h"
 
 typedef struct fz_document_handler fz_document_handler;
 typedef struct fz_page fz_page;
@@ -227,6 +228,11 @@ typedef fz_colorspace *(fz_document_output_intent_fn)(fz_context *ctx, fz_docume
 	Write document accelerator data
 */
 typedef void (fz_document_output_accelerator_fn)(fz_context *ctx, fz_document *doc, fz_output *out);
+
+/**
+	Send document structure to device
+*/
+typedef void (fz_document_run_structure_fn)(fz_context *ctx, fz_document *doc, fz_device *dev, fz_cookie *cookie);
 
 /**
 	Type for a function to make
@@ -657,6 +663,23 @@ char *fz_format_link_uri(fz_context *ctx, fz_document *doc, fz_link_dest dest);
 fz_location fz_resolve_link(fz_context *ctx, fz_document *doc, const char *uri, float *xp, float *yp);
 
 /**
+	Run the document structure through a device.
+
+	doc: Document in question.
+
+	dev: Device obtained from fz_new_*_device.
+
+	cookie: Communication mechanism between caller and library.
+	Intended for multi-threaded applications, while
+	single-threaded applications set cookie to NULL. The
+	caller may abort an ongoing rendering of a page. Cookie also
+	communicates progress information back to the caller. The
+	fields inside cookie are continually updated while the page is
+	rendering.
+*/
+void fz_run_document_structure(fz_context *ctx, fz_document *doc, fz_device *dev, fz_cookie *cookie);
+
+/**
 	Function to get the location for the last page in the document.
 	Using this can be far more efficient in some cases than calling
 	fz_count_pages and using the page number.
@@ -1014,6 +1037,7 @@ struct fz_document
 	fz_document_set_metadata_fn *set_metadata;
 	fz_document_output_intent_fn *get_output_intent;
 	fz_document_output_accelerator_fn *output_accelerator;
+	fz_document_run_structure_fn *run_structure;
 	int did_layout;
 	int is_reflowable;
 
@@ -1034,6 +1058,7 @@ struct fz_document_handler
 	const char **extensions;
 	const char **mimetypes;
 	fz_document_recognize_content_fn *recognize_content;
+	int wants_dir;
 };
 
 #endif

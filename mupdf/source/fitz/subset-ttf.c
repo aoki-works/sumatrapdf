@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -233,6 +233,9 @@ tabcmp(const void *a_, const void *b_)
 static void
 sort_tables(fz_context *ctx, ttf_t *ttf)
 {
+	/* Avoid scanbuild/coverity false warning with this unnecessary test */
+	if (ttf->table == NULL || ttf->len == 0)
+		return;
 	qsort(ttf->table, ttf->len, sizeof(tagged_table_t), tabcmp);
 }
 
@@ -384,6 +387,9 @@ typedef int (void_cmp_t)(const void *, const void *);
 static void
 ptr_list_sort(fz_context *ctx, ptr_list_t *pl, cmp_t *cmp)
 {
+	/* Avoid scanbuild/coverity false warning with this unnecessary test */
+	if (pl->ptr == NULL || pl->len == 0)
+		return;
 	qsort(pl->ptr, pl->len, sizeof(*pl->ptr), (void_cmp_t *)cmp);
 }
 
@@ -499,11 +505,25 @@ subset_name_table(fz_context *ctx, ttf_t *ttf, fz_stream *stm)
 		new_len = 0;
 		for (i = 0; i < pl.len; i++)
 		{
-			uint32_t name_len = get16(pl.ptr[i] + 8);
-			uint8_t *name = d+off+get16(pl.ptr[i] + 10);
-			uint32_t offset = find_string_in_block(name, name_len, new_name_data, new_len);
+			uint32_t name_len, offset, name_off;
+			uint8_t *name;
+
+			if (t->len < (size_t) (pl.ptr[i] - t->data) + 8 + 2)
+				fz_throw(ctx, FZ_ERROR_FORMAT, "Truncated name length in name table");
+			name_len = get16(pl.ptr[i] + 8);
+
+			if (t->len < (size_t) (pl.ptr[i] - t->data) + 10 + 2)
+				fz_throw(ctx, FZ_ERROR_FORMAT, "Truncated name offset in name table");
+			name_off = off + get16(pl.ptr[i] + 10);
+			name = d + name_off;
+
+			if (t->len < name_off + name_len)
+				fz_throw(ctx, FZ_ERROR_FORMAT, "Truncated name in name table");
+			offset = find_string_in_block(name, name_len, new_name_data, new_len);
 			if (offset == UNFOUND)
 			{
+				if (name_data_size < new_len + name_len)
+					fz_throw(ctx, FZ_ERROR_FORMAT, "Bad name table in TTF");
 				memcpy(new_name_data + new_len, name, name_len);
 				offset = (uint32_t)new_len;
 				new_len += name_len;
@@ -563,37 +583,55 @@ load_enc_tab4(fz_context *ctx, uint8_t *d, size_t data_size, uint32_t offset)
 		fz_throw(ctx, FZ_ERROR_FORMAT, "Malformed cmap4 table");
 	seg_count >>= 1;
 
-	enc = fz_malloc_struct(ctx, encoding_t);
-	enc->max = 256;
+	enc = fz_calloc(ctx, 1, sizeof(encoding_t) + sizeof(uint16_t) * (65536 - 256));
+	enc->max = 65536;
 
-	/* Run through the segments, counting how many are used. */
-	for (i = 0; i < seg_count; i++)
+	fz_try(ctx)
 	{
-		uint16_t seg_end = get16(d + offset + 14 + 2 * i);
-		uint16_t seg_start = get16(d + offset + 14 + 2 * seg_count + 2 + 2 * i);
-		uint16_t delta = get16(d + offset + 14 + 4 * seg_count + 2 + 2 * i);
-		uint32_t offset_ptr = offset + 14 + 6 * seg_count + 2 + 2 * i;
-		uint16_t offset = get16(d + offset_ptr);
-		uint16_t target;
-		uint32_t s;
-
-		for (s = seg_start; s <= seg_end && s < enc->max; s++)
+		/* Run through the segments, counting how many are used. */
+		for (i = 0; i < seg_count; i++)
 		{
-			if (offset == 0)
-			{
-				target = delta + s;
-			}
-			else
-			{
-				/* Yes. This is very screwy. The offset is from the offset_ptr in use. */
-				target = get16(d + offset_ptr + offset + 2 * (s - seg_start));
-				if (target != 0)
-					target += delta;
-			}
+			uint16_t seg_end, seg_start, delta, target, inner_offset;
+			uint32_t offset_ptr, s;
 
-			if (target != 0)
-				enc->gid[s] = target;
+			if (data_size < offset + 14 + 6 * seg_count + 2 + 2 * i + 2)
+				fz_throw(ctx, FZ_ERROR_FORMAT, "cmap4 too small");
+
+			seg_end = get16(d + offset + 14 + 2 * i);
+			seg_start = get16(d + offset + 14 + 2 * seg_count + 2 + 2 * i);
+			delta = get16(d + offset + 14 + 4 * seg_count + 2 + 2 * i);
+			offset_ptr = offset + 14 + 6 * seg_count + 2 + 2 * i;
+			inner_offset = get16(d + offset_ptr);
+
+			if (seg_start >= enc->max || seg_end >= enc->max || seg_end < seg_start)
+				fz_throw(ctx, FZ_ERROR_FORMAT, "Malformed cmap4 table.");
+
+			for (s = seg_start; s <= seg_end; s++)
+			{
+				if (inner_offset == 0)
+				{
+					target = delta + s;
+				}
+				else
+				{
+					if (data_size < offset_ptr + inner_offset + 2 * (s - seg_start) + 2)
+						fz_throw(ctx, FZ_ERROR_FORMAT, "cmap4 too small");
+
+					/* Yes. This is very screwy. The inner_offset is from the offset_ptr in use. */
+					target = get16(d + offset_ptr + inner_offset + 2 * (s - seg_start));
+					if (target != 0)
+						target += delta;
+				}
+
+				if (target != 0)
+					enc->gid[s] = target;
+			}
 		}
+	}
+	fz_catch(ctx)
+	{
+		fz_free(ctx, enc);
+		fz_rethrow(ctx);
 	}
 
 	return enc;
@@ -837,7 +875,13 @@ make_cmap(fz_context *ctx, ttf_t *ttf)
 		offset = 14 + segs * 2 * 3 + 2 + seg * 2;
 		put16(d + offset - segs * 2, 0); /* Delta - always 0 for now. */
 		put16(d + offset, entries - offset); /* offset */
-		put16(d + entries, ttf->is_otf ? enc->gid[i] : ttf->gid_renum[enc->gid[i]]); /* Insert an entry */
+
+		/* Insert an entry */
+		if (!ttf->is_otf && ttf->gid_renum && i < ttf->orig_num_glyphs && enc->gid[i] < ttf->orig_num_glyphs)
+			put16(d + entries, (ttf->is_otf || ttf->gid_renum == NULL) ? enc->gid[i] : ttf->gid_renum[enc->gid[i]]);
+		else
+			put16(d + entries, enc->gid[i]);
+
 		entries += 2;
 		for (i++; i < n; i++)
 		{
@@ -848,7 +892,10 @@ make_cmap(fz_context *ctx, ttf_t *ttf)
 				while (seg_end < i)
 				{
 					seg_end++;
-					put16(d + entries, ttf->is_otf ? enc->gid[seg_end] : ttf->gid_renum[enc->gid[seg_end]]);
+					if (!ttf->is_otf && ttf->gid_renum && seg_end < ttf->orig_num_glyphs && enc->gid[seg_end] < ttf->orig_num_glyphs)
+						put16(d + entries, ttf->gid_renum[enc->gid[seg_end]]);
+					else
+						put16(d + entries, enc->gid[seg_end]);
 					entries += 2;
 				}
 			}
@@ -958,13 +1005,18 @@ read_hhea(fz_context *ctx, ttf_t *ttf, fz_stream *stm)
 	}
 
 	ttf->orig_num_long_hor_metrics = get16(t->data+34);
+	if (ttf->orig_num_long_hor_metrics > ttf->orig_num_glyphs)
+	{
+		fz_drop_buffer(ctx, t);
+		fz_throw(ctx, FZ_ERROR_FORMAT, "Overlong hhea table");
+	}
 
 	add_table(ctx, ttf, TAG("hhea"), t);
 
 	/* Previously gids 0 to orig_num_long_hor_metrics-1 were described with
 	 * hor metrics, and the ones afterwards were fixed widths. Find where
 	 * that dividing line is in our new reduced set. */
-	if (ttf->encoding && !ttf->is_otf)
+	if (ttf->encoding && !ttf->is_otf && ttf->orig_num_long_hor_metrics > 0)
 	{
 		ttf->new_num_long_hor_metrics = 0;
 		for (i = ttf->orig_num_long_hor_metrics-1; i > 0; i--)
@@ -1020,14 +1072,14 @@ glyph_used(fz_context *ctx, ttf_t *ttf, fz_buffer *glyf, uint16_t i)
 	const uint8_t *data;
 	uint16_t flags;
 
-	if (ttf->gid_renum[i] != 0)
-		return;
-
-	if (i > ttf->orig_num_glyphs)
+	if (i >= ttf->orig_num_glyphs)
 	{
-		fz_warn(ctx, "TTF subsetting; gid > num_gids!");
+		fz_warn(ctx, "TTF subsetting; gid >= num_gids!");
 		return;
 	}
+
+	if (ttf->gid_renum[i] != 0)
+		return;
 
 	ttf->gid_renum[i] = 1;
 
@@ -1098,6 +1150,7 @@ static void
 renumber_composite(fz_context *ctx, ttf_t *ttf, uint8_t *data, uint32_t len)
 {
 	uint16_t flags;
+	uint16_t x;
 
 	data += 4 * 2 + 2;
 	if (len < 4*2 + 2)
@@ -1111,7 +1164,10 @@ renumber_composite(fz_context *ctx, ttf_t *ttf, uint8_t *data, uint32_t len)
 			fz_throw(ctx, FZ_ERROR_FORMAT, "Corrupt glyf data");
 
 		flags = get16(data);
-		put16(data+2, ttf->gid_renum[get16(data+2)]);
+		x = get16(data+2);
+		if (x >= ttf->orig_num_glyphs)
+			fz_throw(ctx, FZ_ERROR_FORMAT, "Corrupt glyf data");
+		put16(data+2, ttf->gid_renum[x]);
 
 		/* Skip the X and Y offsets */
 		if (flags & ARGS_1_AND_2_ARE_WORDS)
@@ -1177,12 +1233,19 @@ read_glyf(fz_context *ctx, ttf_t *ttf, fz_stream *stm, int *gids, int num_gids)
 				glyph_used(ctx, ttf, t, enc->gid[i]);
 
 		/* Now convert from a usage table to a renumbering table. */
-		ttf->gid_renum[0] = 0;
-		j = 1;
-		for (i = 1; i < ttf->orig_num_glyphs; i++)
-			if (ttf->gid_renum[i])
-				ttf->gid_renum[i] = j++;
-		ttf->new_num_glyphs = j;
+		if (ttf->orig_num_glyphs > 0)
+		{
+			ttf->gid_renum[0] = 0;
+			j = 1;
+			for (i = 1; i < ttf->orig_num_glyphs; i++)
+				if (ttf->gid_renum[i])
+					ttf->gid_renum[i] = j++;
+			ttf->new_num_glyphs = j;
+		}
+		else
+		{
+			ttf->new_num_glyphs = 0;
+		}
 	}
 	else
 	{
@@ -1195,17 +1258,21 @@ read_glyf(fz_context *ctx, ttf_t *ttf, fz_stream *stm, int *gids, int num_gids)
 	/* Now subset the glyf table. */
 	new_start = 0;
 	old_start = get_loca(ctx, ttf, 0);
+	if (old_start >= t->len)
+		fz_throw(ctx, FZ_ERROR_FORMAT, "Bad loca value");
 	for (i = 0; i < ttf->orig_num_glyphs; i++)
 	{
 		old_end = get_loca(ctx, ttf, i+1);
-		if (i == 0 || ttf->gid_renum[i] != 0)
+		if (old_end > t->len || old_end < old_start)
+			fz_throw(ctx, FZ_ERROR_FORMAT, "Bad loca value");
+		if ((old_end != old_start) && (i == 0 || ttf->gid_renum[i] != 0))
 		{
 			len = old_end - old_start;
 			memmove(t->data + new_start, t->data + old_start, len);
 			if (enc)
 			{
 				if ((int16_t)get16(t->data + new_start) < 0)
-					renumber_composite(ctx, ttf, t->data, (uint32_t)t->len);
+					renumber_composite(ctx, ttf, t->data + new_start, len);
 				put_loca(ctx, ttf, ttf->gid_renum[i], new_start);
 			}
 			else
@@ -1435,7 +1502,13 @@ subset_post(fz_context *ctx, ttf_t *ttf, fz_stream *stm, int *gids, int num_gids
 		return;
 	}
 	d += 32; len -= 32;
-	len = subset_post2(ctx, ttf, d, len, gids, num_gids);
+	fz_try(ctx)
+		len = subset_post2(ctx, ttf, d, len, gids, num_gids);
+	fz_catch(ctx)
+	{
+		fz_drop_buffer(ctx, t);
+		fz_rethrow(ctx);
+	}
 
 	t->len = len;
 

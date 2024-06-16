@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2024 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -79,6 +79,14 @@ typedef void (fz_output_close_fn)(fz_context *ctx, void *state);
 /**
 	A function type for use when implementing
 	fz_outputs. The supplied function of this type is called
+	when the output stream is reset, and resets the state
+	to that when it was first initialised.
+*/
+typedef void (fz_output_reset_fn)(fz_context *ctx, void *state);
+
+/**
+	A function type for use when implementing
+	fz_outputs. The supplied function of this type is called
 	when the output stream is dropped, to release the stream
 	specific state information.
 */
@@ -107,8 +115,10 @@ struct fz_output
 	fz_output_tell_fn *tell;
 	fz_output_close_fn *close;
 	fz_output_drop_fn *drop;
+	fz_output_reset_fn *reset;
 	fz_stream_from_output_fn *as_stream;
 	fz_truncate_fn *truncate;
+	int closed;
 	char *bp, *wp, *ep;
 	/* If buffered is non-zero, then we have that many
 	 * bits (1-7) waiting to be written in bits. */
@@ -223,6 +233,14 @@ void fz_flush_output(fz_context *ctx, fz_output *out);
 void fz_close_output(fz_context *, fz_output *);
 
 /**
+	Reset a closed output stream. Returns state to
+	(broadly) that which it was in when opened. Not
+	all outputs can be reset, so this may throw an
+	exception.
+*/
+void fz_reset_output(fz_context *, fz_output *);
+
+/**
 	Free an output stream. Don't forget to close it first!
 */
 void fz_drop_output(fz_context *, fz_output *);
@@ -311,8 +329,20 @@ void fz_write_bits_sync(fz_context *ctx, fz_output *out);
 /**
 	Our customised 'printf'-like string formatter.
 	Takes %c, %d, %s, %u, %x, %X as usual.
-	Modifiers are not supported except for zero-padding ints (e.g.
-	%02d, %03u, %04x, etc).
+	The only modifiers supported are:
+	1) zero-padding ints (e.g. %02d, %03u, %04x, etc).
+	2) ' to indicate that ' should be inserted into
+		integers as thousands separators.
+	3) , to indicate that , should be inserted into
+		integers as thousands separators.
+	4) _ to indicate that , should be inserted into
+		integers as thousands separators.
+	Posix chooses the thousand separator in a locale
+	specific way - we do not. We always apply it every
+	3 characters for the positive part of integers, so
+	other styles, such as Indian (123,456,78) are not
+	supported.
+
 	%g output in "as short as possible hopefully lossless
 	non-exponent" form, see fz_ftoa for specifics.
 	%f and %e output as usual.

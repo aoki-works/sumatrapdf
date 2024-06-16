@@ -64,11 +64,13 @@ END
 // for combined executable / installer, it's an lzsa archive that contains
 // libmupdf.dll, PdfPreview.dll and PdfFilter.dll
 #ifdef INSTALL_PAYLOAD_ZIP
-1                       RCDATA               QM(INSTALL_PAYLOAD_ZIP)
+IDR_DLL_PAK             RCDATA               QM(INSTALL_PAYLOAD_ZIP)
 #endif
 
-2                       RCDATA "..\\translations\\translations-good.txt"
-//2                       RCDATA "..\\translations\\translations.txt"
+IDR_TRANSLATIONS        RCDATA "..\\translations\\translations-good.txt"
+//IDR_TRANSLATIONS      RCDATA "..\\translations\\translations.txt"
+
+IDR_MANUAL_PAK          RCDATA               "..\\docs\\manual.dat"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -141,7 +143,7 @@ END
 IDD_DIALOG_CHANGE_LANGUAGE DIALOGEX 0, 0, 200, 259
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
 CAPTION "Change Language"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
+FONT 10, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LISTBOX         IDC_CHANGE_LANG_LANG_LIST,6,6,188,227,LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
     DEFPUSHBUTTON   "OK",IDOK,88,239,50,14
