@@ -1157,6 +1157,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
     const char* sep = "\r\n";
     // ---------------------------------------------
     //StrVec markedWords;
+    bool have_page_numbers = false;
     dm->textSearch->wordSearch = true;
     char* first_word = nullptr;
     for (auto marker_node : tab->markers->markerTable) {
@@ -1171,11 +1172,11 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
         DeleteOldSelectionInfo(win, true);
         RepaintAsync(win, 0);
         // - Select all words in PDF file -----------------------
-
         dm->textSearch->SetDirection(TextSearchDirection::Forward);
         bool conti = false;
         auto wp = static_cast<std::map<std::wstring, std::vector<int> >*>(marker_node->userArea());
         if (wp != nullptr) {
+            have_page_numbers = true;
             for (auto word : marker_node->words) {
                 const WCHAR* wsep = strconv::Utf8ToWStr(word);
                 auto pages = word_block->add(wsep);
@@ -1203,7 +1204,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
                         sel = dm->textSearch->FindNext(nullptr, conti, true /* only in page */);
                     } while (sel);
 loop_break:
-                    printf("break");
+                    ;
                 }
                 str::Free(wsep);
             }
@@ -1278,7 +1279,7 @@ loop_break:
         }
     }
     // ---------------------------------------------
-    if (save_as != nullptr) {
+    if (save_as != nullptr and have_page_numbers == false) {
         // { "Net": { "netname" : [page_no, ...],... 
         WCHAR* tmpFileW = ToWStrTemp(save_as);
         FILE* outFile = nullptr;
