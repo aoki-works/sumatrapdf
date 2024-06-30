@@ -39,6 +39,7 @@
 #include "SumatraDialogs.h"
 #include "Translations.h"
 #include "CPSLabAnnot.h"
+#include "AppSettings.h"
 
 #include "utils/Log.h"
 
@@ -1293,6 +1294,29 @@ static const char* HandleCmdCommand(HWND hwnd, const char* cmd, bool* ack) {
     return next;
 }
 
+/*
+Quit tool
+
+[Quit]
+*/
+static const char* HandleQuitCmd(const char* cmd, bool* ack) {
+    if (!str::StartsWith(cmd, "[Quit]")) {
+        return nullptr;
+    }
+    logf("Quit\n");
+    const char* next = cmd + str::Leni("[Quit]");
+    CreateAndShowMainWindow(nullptr);
+    *ack = true;
+    // ======================
+    SaveSettings();
+    Vec<MainWindow*> toClose = gWindows;
+    for (MainWindow* win : toClose) {
+        CloseWindow(win, true, false);
+    }
+    return next;
+}
+
+
 // returns true if did handle a message
 static bool HandleExecuteCmds(HWND hwnd, const char* cmd) {
     gMostRecentlyOpenedDoc = nullptr;
@@ -1333,6 +1357,9 @@ static bool HandleExecuteCmds(HWND hwnd, const char* cmd) {
         }
         if (!nextCmd) {
             nextCmd = HandleNewWindowCmd(cmd, &didHandle);
+        }
+        if (!nextCmd) {
+            nextCmd = HandleQuitCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
             // forwards compatibility: ignore unknown commands (maybe from newer version)
