@@ -61,6 +61,7 @@ class MarkerNode
   private:
     WindowTab*  tab_;
     AutoFreeStr filePath_;
+    void* user_area_;
 
   public:
     AutoFreeStr keyword;        // [Cell|Net|Pin| etc..]
@@ -86,6 +87,10 @@ class MarkerNode
     size_t getMarkWordsByPageNo(const int pageNo, StrVec& result);
     int getPage(const char* word, const int pageNo=-1);
     bool tExist(const int pageNo, const char* word);
+
+  public:
+    void* userArea();
+    void setUserArea(void*);
 };
 
 struct PageInCell

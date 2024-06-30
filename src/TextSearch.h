@@ -14,7 +14,7 @@ class TextSearch : public TextSelection {
     void SetDirection(TextSearchDirection direction);
     void SetLastResult(TextSelection* sel);
     TextSel* FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tracker = nullptr, bool conti=false);
-    TextSel* FindNext(ProgressUpdateUI* tracker = nullptr, bool conti=false);
+    TextSel* FindNext(ProgressUpdateUI* tracker = nullptr, bool conti=false, bool only_in_page=false);
     bool wordSearch = false;  // CPS Lab.
 
     int GetCurrentPageNo() const;

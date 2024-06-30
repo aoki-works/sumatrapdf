@@ -1112,6 +1112,7 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
 
 /*
  CPS Lab.
+[MarkWord("<pdffilepath>", "<SetupFile>")]
 [MarkWord("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
 [MarkWord("<pdffilepath>", "<Text>", "<Text>", ...)]
 */
@@ -1161,7 +1162,7 @@ static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
         tab->markers->deleteAnnotations();
     }
     else if (args.Size() == 1) {
-        first_word = cpslab::MarkWords(win, args.At(0));
+        first_word = cpslab::MarkWords(win, args.At(0));  // mark words by setup-file.
     }
     else {
         first_word = cpslab::MarkWords(win, args);

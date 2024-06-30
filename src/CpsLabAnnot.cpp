@@ -1,6 +1,9 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
+#include <iomanip>
+#include <sstream>
+#include <map>
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
@@ -47,10 +50,12 @@ struct MarkFileParser : json::ValueVisitor {
      */
     WindowTab* tab;
     Vec<MarkerNode*> markerTable;
+
     MarkerNode* getMark(const char* keyword);
     bool mark_color(const char* path, const char* value) ;
     bool select_color(const char* path, const char* value) ;
     bool words(const char* path, const char* value);
+    bool pages(const char* path, const char* value);
     //
     bool Visit(const char* path, const char* value, json::Type type) override;
     void Parse(const char* path);
@@ -78,6 +83,9 @@ bool MarkFileParser::mark_color(const char* path, const char* value) {
     AutoFreeStr keyword;
     const char* prop = str::Parse(path, "/%s/mark_color", &keyword);
     if (prop == nullptr) {
+        prop = str::Parse(path, "/mark_color/%s", &keyword);
+    }
+    if (prop == nullptr) {
         return false;
     }
     MarkerNode* mark = getMark(keyword.Get());
@@ -88,6 +96,9 @@ bool MarkFileParser::mark_color(const char* path, const char* value) {
 bool MarkFileParser::select_color(const char* path, const char* value) {
     AutoFreeStr keyword;
     const char* prop = str::Parse(path, "/%s/select_color", &keyword);
+    if (prop == nullptr) {
+        prop = str::Parse(path, "/select_color/%s", &keyword);
+    }
     if (prop == nullptr) {
         return false;
     }
@@ -108,11 +119,43 @@ bool MarkFileParser::words(const char* path, const char* value) {
     return true;
 }
 
+bool MarkFileParser::pages(const char* path, const char* value) {
+    AutoFreeStr keyword;
+    AutoFreeStr word;
+    int idx;
+    const char* prop = str::Parse(path, "/%s/%s[%d]", &keyword, &word, &idx);
+    if (prop == nullptr) {
+        return false;
+    }
+    MarkerNode* mark = getMark(keyword.Get());
+    WCHAR* wsep = strconv::Utf8ToWStr(word.Get());
+    std::wstring name = wsep;
+    str::Free(wsep);
+    int page = std::atoi(value);
+    auto word_pages = static_cast<std::map<std::wstring, std::vector<int> >*>(mark->userArea());
+    if (word_pages == nullptr) {
+        word_pages = new std::map<std::wstring, std::vector<int> >;
+        mark->setUserArea((void*)word_pages);
+    }
+    if (word_pages->find(name) == word_pages->end()) {
+        mark->words.Append(word.Get());
+    }
+    (*word_pages)[name].push_back(page);
+    return true;
+}
+
 bool MarkFileParser::Visit(const char* path, const char* value, json::Type type) {
-    if (json::Type::String != type) return true;
-    if (this->mark_color(path, value))   return true;
-    if (this->select_color(path, value)) return true;
-    if (this->words(path, value))         return true;
+    if (json::Type::String == type) {
+        if (this->mark_color(path, value))
+            return true;
+        if (this->select_color(path, value))
+            return true;
+        if (this->words(path, value))
+            return true;
+    } else if (json::Type::Number == type) {
+        if (this->pages(path, value))
+            return true;
+    }
     return true;
 }
 
@@ -123,12 +166,18 @@ class WordBlock {
     using node_t = std::pair<std::wstring, std::vector<int>* >;
     std::string          keyword_;
     std::vector<node_t>* words_;
+    PdfColor             mark_color_;        // marker color
+    PdfColor             select_color_;      // selector color
 
   public:
-    WordBlock() : keyword_(), words_(nullptr) { }
-    WordBlock(const char* kwd) : keyword_(kwd), words_(nullptr)
+    WordBlock() : keyword_(), words_(nullptr), mark_color_(0xff00ffff), select_color_(0xff00ffff){
+    }
+    WordBlock(MarkerNode* kwd) : keyword_(), words_(nullptr), mark_color_(0xff00ffff), select_color_(0xff00ffff)
     {
+        keyword_ = kwd->keyword.Get();
         words_ = new std::vector<node_t>;
+        mark_color_ = kwd->mark_color;
+        select_color_ = kwd->select_color;
     }
     ~WordBlock() {
         if (words_ != nullptr) {
@@ -145,13 +194,23 @@ class WordBlock {
         words_->push_back(node_t(wd, pages));
         return pages;
     }
+    std::string mark_color(void) {
+        std::ostringstream hexs;
+        hexs << "0x" << std::setfill('0') << std::setw(6) << std::hex << (0xffffff & mark_color_) << std::dec;
+        return hexs.str();
+    }
+    std::string select_color(void) {
+        std::ostringstream hexs;
+        hexs << "0x" << std::setfill('0') << std::setw(6) << std::hex << (0xffffff & select_color_) << std::dec;
+        return hexs.str();
+    }
 };
 
 // =============================================================
 //
 // =============================================================
 MarkerNode::MarkerNode(WindowTab* tab)
-    : tab_(tab), filePath_(), keyword(), mark_color(0xff00ffff), select_color(0xff00ffff),
+    : tab_(tab), filePath_(), user_area_(nullptr), keyword(), mark_color(0xff00ffff), select_color(0xff00ffff),
       words(), annotations(), mark_words(), rects(), pages(),
       selected_words(), assoc_cells()
 {
@@ -163,6 +222,13 @@ MarkerNode::~MarkerNode() {
     for (auto a : annotations) {
         DeleteAnnotation(a);
     }
+}
+
+void* MarkerNode::userArea() {
+    return user_area_;
+}
+void MarkerNode::setUserArea(void* v) {
+    user_area_ = v;
 }
 
 const char* MarkerNode::selectWord(MainWindow* win, const int pageNo, char* wd, bool conti) {
@@ -305,10 +371,11 @@ void Markers::unsetSelection(const char* keyword)
     }
 }
 
-void Markers::parse(const char* fname) {
+void Markers::parse(const char* json_file)   // read marker setup file...
+{
     MarkFileParser  mfp;
     mfp.tab = tab_;
-    mfp.Parse(fname);
+    mfp.Parse(json_file);
     for(auto m : mfp.markerTable) {
         markerTable.Append(m);
     }
@@ -1095,7 +1162,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
     for (auto marker_node : tab->markers->markerTable) {
         str::Str annot_key_content("@CPSLabMark:");
         const char* keyword = marker_node->keyword.Get();
-        auto word_block = new WordBlock(keyword);
+        auto word_block = new WordBlock(marker_node);
         word_blocks.push_back(word_block);
         // -------------------------------------
         annot_key_content.Append(keyword);
@@ -1104,33 +1171,71 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
         DeleteOldSelectionInfo(win, true);
         RepaintAsync(win, 0);
         // - Select all words in PDF file -----------------------
+
         dm->textSearch->SetDirection(TextSearchDirection::Forward);
         bool conti = false;
-        for (auto word : marker_node->words) {
-            const WCHAR* wsep = strconv::Utf8ToWStr(word);
-            // TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWStr(word), nullptr, conti);
-            TextSel* sel = dm->textSearch->FindFirst(1, wsep, nullptr, conti);
-            if (!sel) {
-                str::Free(wsep);
-                continue;
-            }
-            // if (!markedWords.Contains(word)) { markedWords.Append(word); }
-            auto pages = word_block->add(wsep);
-            if (first_word == nullptr) {
-                first_word = word;
-            }
-            do {
-                for (int ixi = 0; ixi < sel->len; ixi++) {
-                    pages->push_back(sel->pages[ixi]);
-                    marker_node->pages.Append(sel->pages[ixi]);
-                    marker_node->mark_words.Append(word);
+        auto wp = static_cast<std::map<std::wstring, std::vector<int> >*>(marker_node->userArea());
+        if (wp != nullptr) {
+            for (auto word : marker_node->words) {
+                const WCHAR* wsep = strconv::Utf8ToWStr(word);
+                auto pages = word_block->add(wsep);
+                auto word_pages = (*wp)[std::wstring(wsep)];
+                for (auto pg = word_pages.begin(); pg != word_pages.end(); ++pg) {
+                    TextSel* sel = dm->textSearch->FindFirst((*pg), wsep, nullptr, conti);
+                    if (!sel) {
+                        continue;
+                    }
+                    if (first_word == nullptr) {
+                        first_word = word;
+                    }
+                    do {
+                        for (int ixi = 0; ixi < sel->len; ixi++) {
+                            if (sel->pages[ixi] != (*pg)) {
+                                goto loop_break;
+                            }
+                            pages->push_back(sel->pages[ixi]);
+                            marker_node->pages.Append(sel->pages[ixi]);
+                            marker_node->mark_words.Append(word);
+                        }
+                        dm->textSelection->CopySelection(dm->textSearch, conti);
+                        UpdateTextSelection(win, false);
+                        conti = true;
+                        sel = dm->textSearch->FindNext(nullptr, conti, true /* only in page */);
+                    } while (sel);
+loop_break:
+                    printf("break");
                 }
-                dm->textSelection->CopySelection(dm->textSearch, conti);
-                UpdateTextSelection(win, false);
-                conti = true;
-                sel = dm->textSearch->FindNext(nullptr, conti);
-            } while (sel);
-            str::Free(wsep);
+                str::Free(wsep);
+            }
+            marker_node->setUserArea(nullptr);
+            delete wp;
+        } else {
+            for (auto word : marker_node->words) {
+                const WCHAR* wsep = strconv::Utf8ToWStr(word);
+                // TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWStr(word), nullptr, conti);
+                TextSel* sel = dm->textSearch->FindFirst(1, wsep, nullptr, conti);
+                if (!sel) {
+                    str::Free(wsep);
+                    continue;
+                }
+                // if (!markedWords.Contains(word)) { markedWords.Append(word); }
+                auto pages = word_block->add(wsep);
+                if (first_word == nullptr) {
+                    first_word = word;
+                }
+                do {
+                    for (int ixi = 0; ixi < sel->len; ixi++) {
+                        pages->push_back(sel->pages[ixi]);
+                        marker_node->pages.Append(sel->pages[ixi]);
+                        marker_node->mark_words.Append(word);
+                    }
+                    dm->textSelection->CopySelection(dm->textSearch, conti);
+                    UpdateTextSelection(win, false);
+                    conti = true;
+                    sel = dm->textSearch->FindNext(nullptr, conti);
+                } while (sel);
+                str::Free(wsep);
+            }
         }
         // -- Create 'Annotation' for each page. -------------
         Vec<SelectionOnPage>* selections = tab->selectionOnPage;
@@ -1174,26 +1279,44 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
     }
     // ---------------------------------------------
     if (save_as != nullptr) {
+        // { "Net": { "netname" : [page_no, ...],... 
         WCHAR* tmpFileW = ToWStrTemp(save_as);
         FILE* outFile = nullptr;
         errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
         if (err == 0) {
-            int kcount = 0;
             std::fputs("{\n", outFile);
+            // --------------------------------------------------
+            int wcount = 0;
+            std::fprintf(outFile, "   \"mark_color\" : {\n");
             for (auto bk : word_blocks) {
-                if (kcount != 0) {
-                    std::fprintf(outFile, ",\n");
-                }
+                if (wcount != 0) { std::fprintf(outFile, ",\n"); }
+                std::fprintf(outFile, "       \"%s\" : \"%s\"", bk->keyword(), bk->mark_color().c_str());
+                wcount += 1;
+            }
+            std::fprintf(outFile, "\n   },\n");
+            // --------------------------------------------------
+            wcount = 0;
+            std::fprintf(outFile, "   \"select_color\" : {\n");
+            for (auto bk : word_blocks) {
+                if (wcount != 0) { std::fprintf(outFile, ",\n"); }
+                std::fprintf(outFile, "       \"%s\" : \"%s\"", bk->keyword(), bk->select_color().c_str());
+                wcount += 1;
+            }
+            std::fprintf(outFile, "\n   }");
+            // ----------------------------------------------------
+            for (auto bk : word_blocks) {
+                std::fprintf(outFile, ",\n");
                 auto keyword = bk->keyword();
-                std::fprintf(outFile, "  \"%s\" : {\n", keyword);       // Net
-                int wcount = 0;
+                std::fprintf(outFile, "  \"%s\" : {\n", keyword);       // Net, etc
+                wcount = 0;
                 for (auto w : *bk->words()) {
                     if (wcount != 0) {
                         std::fprintf(outFile, ",\n");
                     }
-                    std::fprintf(outFile, "    \"%ls\" : [", w.first.c_str());
+                    std::fprintf(outFile, "    \"%ls\" : [", w.first.c_str());  // net-name, pin-name, etc
                     auto pages = w.second;
                     if (2 <= pages->size()) {
+                        // sort page-number and erase duplicated page-numbers.
                         std::sort(pages->begin(), pages->end());
                         pages->erase(std::unique(pages->begin(), pages->end()), pages->end());
                     }
@@ -1201,13 +1324,12 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
                         if (i != 0) {
                             std::fprintf(outFile, ", ");
                         }
-                        std::fprintf(outFile, "%d", pages->at(i));
+                        std::fprintf(outFile, "%d", pages->at(i)); //page-number
                     }
                     std::fprintf(outFile, "]");
                     wcount += 1;
                 }
                 std::fprintf(outFile, "\n  }");
-                kcount += 1;
             }
             std::fputs("n}\n", outFile);
         }
@@ -1233,15 +1355,15 @@ const char* MarkWords(MainWindow* win) {
 const char* MarkWords(MainWindow* win, const char* json_file) {
     WindowTab* tab = win->CurrentTab();
     tab->markers->deleteAnnotations();
-    tab->markers->parse(json_file);
+    tab->markers->parse(json_file); //  read setup-file.
     if (json_file != nullptr) {
         char drive[_MAX_DRIVE];
         char dir[_MAX_DIR];
         char fname[_MAX_FNAME];
         char ext[_MAX_EXT];
         _splitpath(json_file, drive, dir, fname, ext);
-        std::string path = std::string(drive) + std::string(dir) + "reply_" + std::string(fname) + std::string(ext);
-        return base_MarkWords(win, path.c_str());
+        std::string save_as = std::string(drive) + std::string(dir) + "reply_" + std::string(fname) + std::string(ext);
+        return base_MarkWords(win, save_as.c_str());
         //return base_MarkWords(win);
     } else {
         return base_MarkWords(win);

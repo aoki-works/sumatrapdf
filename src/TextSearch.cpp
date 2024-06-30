@@ -467,7 +467,7 @@ TextSel* TextSearch::FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tr
     return nullptr;
 }
 
-TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker, bool conti) {
+TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker, bool conti, bool only_in_page) {
     ReportIf(!findText);
     if (!findText) {
         return nullptr;
@@ -490,6 +490,9 @@ TextSel* TextSearch::FindNext(ProgressUpdateUI* tracker, bool conti) {
         return &result;
     }
 
+    if (only_in_page) { // CPS.Lab
+        return nullptr;
+    }
     auto next = forward ? 1 : -1;
     if (FindStartingAtPage(findPage + next, tracker, conti)) {
         return &result;
