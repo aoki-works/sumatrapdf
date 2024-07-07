@@ -541,8 +541,10 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     bool didDragMouse = !win->dragStartPending || IsDragDistance(x, win->dragStart.x, y, win->dragStart.y);
     if (MouseAction::Dragging == ma) {
         StopMouseDrag(win, x, y, !didDragMouse);
-        if (!didDragMouse) {
-            cpslab::sendClickPoint(win, x, y);
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            if (!didDragMouse) {
+                cpslab::sendClickPoint(win, x, y);
+            }
         }
     } else {
         OnSelectionStop(win, x, y, !didDragMouse);

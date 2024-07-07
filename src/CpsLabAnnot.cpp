@@ -35,7 +35,8 @@ WCHAR* USERAPP_DDE_TOPIC = nullptr;
 WCHAR* USERAPP_DDE_DEBUG_TOPIC = nullptr;
 WCHAR* PDFSYNC_DDE_SERVICE = nullptr;
 WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
-CpsMode MODE = CpsMode::Document;
+//CpsMode MODE = CpsMode::Document;
+CpsMode MODE = CpsMode::MarkerXref;
 const char* EXPORT_TEXT_BLOCKS = nullptr;
 
 // =============================================================
@@ -1259,6 +1260,7 @@ loop_break:
                 }
             }
             Vec<RectF> rects;   // rectangle for selected words.
+            marker_node->rects.Reset();
             for (auto pageno : pageNos) {
                 // -- create annotation ----------------------------
                 rects.Reset();
@@ -1267,6 +1269,7 @@ loop_break:
                         continue;
                     }
                     rects.Append(sel.rect);
+                    marker_node->rects.Append(sel.rect.Round());
                 }
                 Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pageno, PointF{});
                 SetQuadPointsAsRect(annot, rects);
