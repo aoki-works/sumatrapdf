@@ -690,10 +690,22 @@ Search DDE command
 [Search("<pdffile>","<search-term>")]
 */
 static const char* HandleSearchCmd(const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile;
+    AutoFreeStr pdfFile, srcFile;
     AutoFreeStr term;
+    BOOL newWindow = 0, setFocus = 0;
     const char* next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &pdfFile, &term);
-    // TODO: should un-quote text to allow searching text with '"' in them
+    if (!next) {
+        next = str::Parse(cmd, "[Search(\"%s\",\"%s\",%u,%u)]", &pdfFile, &term, &newWindow, &setFocus);
+    }
+    // allow to omit the pdffile path, so that editors don't have to know about
+    // multi-file projects (requires that the PDF has already been opened)
+    if (!next) {
+        pdfFile.Reset();
+        next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &srcFile, &term);
+        if (!next) {
+            next = str::Parse(cmd, "[Search(\"%s\",\"%s\",%u,%u)]", &srcFile, &term, &newWindow, &setFocus);
+        }
+    }
     if (!next) {
         return nullptr;
     }
@@ -703,8 +715,26 @@ static const char* HandleSearchCmd(const char* cmd, bool* ack) {
     // check if the PDF is already opened
     // TODO: prioritize window with HWND so that if we have the same file
     // opened in multiple tabs / windows, we operate on the one that got the message
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
+    MainWindow* win = nullptr;
+    if (pdfFile) {
+        // check if the PDF is already opened
+        win = FindMainWindowByFile(pdfFile, !newWindow);
+        // if not then open it
+        if (newWindow || !win) {
+            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
+            win = LoadDocument(&args);
+        } else if (!win->IsDocLoaded()) {
+            ReloadDocument(win, false);
+        }
+    } else {
+        // check if any opened PDF has sync information for the source file
+        win = FindMainWindowBySyncFile(srcFile, true);
+        if (win && newWindow) {
+            LoadArgs args(win->CurrentTab()->filePath, nullptr);
+            win = LoadDocument(&args);
+        }
+    }
+    if (!win || !win->CurrentTab() || win->CurrentTab()->GetEngineType() != kindEngineMupdf) {
         return next;
     }
     if (!win->IsDocLoaded()) {
@@ -713,11 +743,14 @@ static const char* HandleSearchCmd(const char* cmd, bool* ack) {
             return next;
         }
     }
+
     bool wasModified = true;
     bool showProgress = true;
     HwndSetText(win->hwndFindEdit, term);
     FindTextOnThread(win, TextSearchDirection::Forward, term, wasModified, showProgress);
-    win->Focus();
+    if (setFocus) {
+        win->Focus();
+    }
     *ack = true;
     return next;
 }
@@ -872,15 +905,43 @@ e.g.:
 [GoToNamedDest("c:\file.pdf", "chapter.1")]
 */
 static const char* HandleGotoCmd(const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile, destName;
+    AutoFreeStr pdfFile, destName, srcFile;
+    BOOL newWindow = 0, setFocus = 0;
     const char* next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &pdfFile, &destName);
+    if (!next) {
+        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &destName, &newWindow, &setFocus);
+    }
+    if (!next) {
+        pdfFile.Reset();
+        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &srcFile, &destName);
+        if (!next) {
+        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &destName, &newWindow, &setFocus);
+        }
+    }
+    // allow to omit the pdffile path, so that editors don't have to know about
+    // multi-file projects (requires that the PDF has already been opened)
     if (!next) {
         return nullptr;
     }
 
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
+    MainWindow* win = nullptr;
+    if (pdfFile) {
+        // check if the PDF is already opened
+        win = FindMainWindowByFile(pdfFile, true);
+        // if not then open it
+        if (newWindow || !win) {
+            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
+            win = LoadDocument(&args);
+        } else if (!win->IsDocLoaded()) {
+            ReloadDocument(win, false);
+        }
+    } else {
+        // check if any opened PDF has sync information for the source file
+        win = FindMainWindowBySyncFile(srcFile, true);
+        if (win && newWindow) {
+            LoadArgs args(win->CurrentTab()->filePath, nullptr);
+            win = LoadDocument(&args);
+        }
     }
     if (!win->IsDocLoaded()) {
         ReloadDocument(win, false);
@@ -890,7 +951,9 @@ static const char* HandleGotoCmd(const char* cmd, bool* ack) {
     }
 
     win->linkHandler->GotoNamedDest(destName);
-    win->Focus();
+    if (setFocus) {
+        win->Focus();
+    }
     *ack = true;
     return next;
 }
@@ -903,19 +966,43 @@ DDE command: jump to a page in an already opened document.
 eg: [GoToPage("c:\file.pdf",37)]
 */
 static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile;
+    AutoFreeStr pdfFile, srcFile;
+    BOOL newWindow = 0, setFocus = 0;
     uint page = 0;
     const char* next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &pdfFile, &page);
+    if (!next) {
+        next = str::Parse(cmd, "[GotoPage(\"%S\",%u,%u,%u)]", &pdfFile, &page, &newWindow, &setFocus);
+    }
+    // allow to omit the pdffile path, so that editors don't have to know about
+    // multi-file projects (requires that the PDF has already been opened)
+    if (!next) {
+        pdfFile.Reset();
+        next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &srcFile, &page);
+        if (!next) {
+            next = str::Parse(cmd, "[GotoPage(\"%S\",%u,%u,%u)]", &srcFile, &page, &newWindow, &setFocus);
+        }
+    }
     if (!next) {
         return nullptr;
     }
 
-    // check if the PDF is already opened
-    // TODO: prioritize window with HWND so that if we have the same file
-    // opened in multiple tabs / windows, we operate on the one that got the message
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
+    MainWindow* win = nullptr;
+    if (pdfFile) {
+        // check if the PDF is already opened
+        win = FindMainWindowByFile(pdfFile, true);
+        if (newWindow || !win) {
+            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
+            win = LoadDocument(&args);
+        } else if (!win->IsDocLoaded()) {
+            ReloadDocument(win, false);
+        }
+    } else {
+        // check if any opened PDF has sync information for the source file
+        win = FindMainWindowBySyncFile(srcFile, true);
+        if (win && newWindow) {
+            LoadArgs args(win->CurrentTab()->filePath, nullptr);
+            win = LoadDocument(&args);
+        }
     }
     if (!win->IsDocLoaded()) {
         ReloadDocument(win, false);
@@ -930,7 +1017,9 @@ static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
 
     win->ctrl->GoToPage(page, true);
     *ack = true;
-    win->Focus();
+    if (setFocus) {
+        win->Focus();
+    }
     return next;
 }
 
