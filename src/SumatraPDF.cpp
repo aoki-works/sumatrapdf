@@ -711,7 +711,7 @@ void ControllerCallbackHandler::RenderThumbnail(DisplayModel* dm, Size size, con
     }
     pageRect = engine->Transform(pageRect, 1, 1.0f, 0, true);
 
-    gRenderCache->QueueRenderingRequest(dm, 1, 0, zoom, pageRect, *saveThumbnail);
+    gRenderCache->Render(dm, 1, 0, zoom, pageRect, *saveThumbnail);
 }
 
 struct CreateThumbnailData {
@@ -4907,6 +4907,15 @@ void ClearHistory(MainWindow* win) {
     RunAsync(fn, "ClearHistoryAsync");
 }
 
+static void TogglePredictiveRender(MainWindow* win) {
+    gPredictiveRender = !gPredictiveRender;
+    NotificationCreateArgs args;
+    args.hwndParent = win->hwndCanvas;
+    args.msg = gPredictiveRender ? "Enabled predictive render" : "Disabled predictie render";
+    args.timeoutMs = 3000;
+    ShowNotification(args);
+}
+
 static void DownloadDebugSymbols() {
     TempStr msg = (TempStr) "Symbols were already downloaded";
 
@@ -4990,7 +4999,7 @@ static lzma::SimpleArchive gManualArchive{};
 static SimpleBrowserWindow* gManualBrowserWindow = nullptr;
 static bool gUseOurWindowForManual = false;
 
-static void OnDestroyManualBrowserWindow(WmDestroyEvent&) {
+static void OnDestroyManualBrowserWindow(Wnd::DestroyEvent*) {
     gManualBrowserWindow = nullptr;
 }
 
@@ -5053,7 +5062,8 @@ OpenFileInBrowser:
             // TODO: dataDir
             gManualBrowserWindow = SimpleBrowserWindowCreate(args);
             if (gManualBrowserWindow != nullptr) {
-                gManualBrowserWindow->onDestroy = OnDestroyManualBrowserWindow;
+                auto fn = MkFunc1Void<Wnd::DestroyEvent*>(OnDestroyManualBrowserWindow);
+                gManualBrowserWindow->onDestroy = fn;
                 return;
             }
         }
@@ -5712,6 +5722,10 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
 
         case CmdDebugDownloadSymbols:
             DownloadDebugSymbols();
+            break;
+
+        case CmdDebugTogglePredictiveRender:
+            TogglePredictiveRender(win);
             break;
 
         case CmdToggleLinks:

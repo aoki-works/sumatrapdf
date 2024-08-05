@@ -55,6 +55,11 @@
 
 #include "utils/Log.h"
 
+// if set instead of trying to render pages we don't have, we simply do nothing
+// this reduces the flickering when going quickly through pages but creates
+// impression of lag
+bool gNoFlickerRender = true;
+
 Kind kNotifAnnotation = "notifAnnotation";
 
 // Timer for mouse wheel smooth scrolling
@@ -825,10 +830,8 @@ static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect& pageRect, bool 
 #else
 static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect&, bool) {
     AutoDeletePen pen(CreatePen(PS_NULL, 0, 0));
-    auto bgCol = ThemeMainWindowBackgroundColor();
-    if (gGlobalPrefs->fixedPageUI.invertColors) {
-        ThemeDocumentColors(bgCol);
-    }
+    COLORREF bgCol;
+    ThemeDocumentColors(bgCol);
     AutoDeleteBrush brush(CreateSolidBrush(bgCol));
     ScopedSelectPen restorePen(hdc, pen);
     ScopedSelectObject restoreBrush(hdc, brush);
@@ -929,19 +932,26 @@ NO_INLINE static void PaintCurrentEditAnnotationMark(WindowTab* tab, HDC hdc, Di
     gs.DrawRectangle(&pen, rect.x, rect.y, rect.dx, rect.dy);
 }
 
-static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
+static bool DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
     ReportIf(!win->AsFixed());
     if (!win->AsFixed()) {
-        return;
+        return false;
     }
     DisplayModel* dm = win->AsFixed();
-    logf("DrawDocument RenderCache:\n");
+    // logf("DrawDocument RenderCache:\n");
 
     bool isImage = dm->GetEngine()->IsImageCollection();
     // draw comic books and single images on a black background
     // (without frame and shadow)
     bool paintOnBlackWithoutShadow = win->presentation || isImage;
+    COLORREF colDocBg;
+    COLORREF colDocTxt = ThemeDocumentColors(colDocBg);
+    if (isImage) {
+        colDocBg = 0x0;
+        colDocTxt = 0xffffff;
+    }
 
+    bool shouldPaint = false;
     auto gcols = gGlobalPrefs->fixedPageUI.gradientColors;
     auto nGCols = gcols->size();
     if (paintOnBlackWithoutShadow) {
@@ -1033,25 +1043,31 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
 
         bool renderOutOfDateCue = false;
         int renderDelay = gRenderCache->Paint(hdc, bounds, dm, pageNo, pageInfo, &renderOutOfDateCue);
-
+        if (renderDelay == 0) {
+            shouldPaint = true;
+        }
         if (renderDelay != 0) {
             HFONT fontRightTxt = CreateSimpleFont(hdc, "MS Shell Dlg", 14);
             HGDIOBJ hPrevFont = SelectObject(hdc, fontRightTxt);
-            auto txtCol = ThemeWindowTextColor();
-            if (gGlobalPrefs->fixedPageUI.invertColors) {
-                COLORREF dummy;
-                txtCol = ThemeDocumentColors(dummy);
-            }
-            SetTextColor(hdc, txtCol);
-            if (renderDelay != kRenderDelayFailed) {
+            if (renderDelay != RENDER_DELAY_FAILED) {
                 if (renderDelay < REPAINT_MESSAGE_DELAY_IN_MS) {
                     ScheduleRepaint(win, REPAINT_MESSAGE_DELAY_IN_MS / 4);
                 } else {
+                    SetTextColor(hdc, colDocTxt);
                     DrawCenteredText(hdc, bounds, _TRA("Please wait - rendering..."), isRtl);
                 }
                 rendering = true;
             } else {
+#if 0
+                AutoDeletePen pen(CreatePen(PS_SOLID, 2, RGB(0xff, 0, 0)));
+                ScopedSelectPen restorePen(hdc, pen);
+                auto x = bounds.x;
+                auto y = bounds.y;
+                Rectangle(hdc, x, y, x + bounds.dx, y + bounds.dy);
+#endif
+                auto prevCol = SetTextColor(hdc, colDocTxt);
                 DrawCenteredText(hdc, bounds, _TRA("Couldn't render the page"), isRtl);
+                SetTextColor(hdc, prevCol);
             }
             SelectObject(hdc, hPrevFont);
             continue;
@@ -1091,6 +1107,7 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
     if (!rendering) {
         DebugShowLinks(dm, hdc);
     }
+    return shouldPaint;
 }
 
 static void OnPaintDocument(MainWindow* win) {
@@ -1106,8 +1123,10 @@ static void OnPaintDocument(MainWindow* win) {
             FillRect(hdc, &ps.rcPaint, GetStockBrush(WHITE_BRUSH));
             break;
         default:
-            DrawDocument(win, win->buffer->GetDC(), &ps.rcPaint);
-            win->buffer->Flush(hdc);
+            bool shouldFlush = DrawDocument(win, win->buffer->GetDC(), &ps.rcPaint);
+            if (!gNoFlickerRender || shouldFlush) {
+                win->buffer->Flush(hdc);
+            }
     }
 
     EndPaint(win->hwndCanvas, &ps);
@@ -1806,7 +1825,7 @@ static void RepaintTask(RepaintTaskData* d) {
 }
 
 void ScheduleRepaint(MainWindow* win, int delayInMs) {
-    logf("ScheduleRepaint RenderCache:\n");
+    // logf("ScheduleRepaint RenderCache:\n");
     auto data = new RepaintTaskData;
     data->win = win;
     data->delayInMs = delayInMs;

@@ -2752,12 +2752,15 @@ HICON HwndGetIcon(HWND hwnd) {
 
 // schedule WM_PAINT at window's leasure
 void HwndScheduleRepaint(HWND hwnd) {
+    if (!hwnd || !::IsWindow(hwnd)) {
+        return;
+    }
     InvalidateRect(hwnd, nullptr, FALSE);
 }
 
 // do WM_PAINT immediately
 void HwndRepaintNow(HWND hwnd) {
-    if (!hwnd) {
+    if (!hwnd || !::IsWindow(hwnd)) {
         return;
     }
     InvalidateRect(hwnd, nullptr, FALSE);
@@ -2878,6 +2881,10 @@ bool DeleteObjectSafe(HGDIOBJ* h) {
     return ToBool(res);
 }
 
+bool DeleteBrushSafe(HBRUSH* br) {
+    return DeleteObjectSafe((HGDIOBJ*)br);
+}
+
 bool DestroyIconSafe(HICON* h) {
     if (!h || !*h) {
         return false;
@@ -2953,13 +2960,16 @@ Size HdcMeasureText(HDC hdc, const char* s, HFONT font) {
 
 void DrawCenteredText(HDC hdc, const Rect r, const char* txt, bool isRTL) {
     TempWStr ws = ToWStrTemp(txt);
-    SetBkMode(hdc, TRANSPARENT);
+    int prevMode = SetBkMode(hdc, TRANSPARENT);
     RECT tmpRect = ToRECT(r);
     uint format = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
     if (isRTL) {
         format |= DT_RTLREADING;
     }
     DrawTextW(hdc, ws, -1, &tmpRect, format);
+    if (prevMode != 0) {
+        SetBkMode(hdc, prevMode);
+    }
 }
 
 /* Return size of a text <txt> in a given <hwnd>, taking into account its font */

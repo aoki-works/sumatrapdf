@@ -302,7 +302,7 @@ Size MainWindow::GetViewPortSize() const {
 }
 
 void MainWindow::RedrawAll(bool update) const {
-    logf("MainWindow::RedrawAll, update: %d  RenderCache:\n", (int)update);
+    // logf("MainWindow::RedrawAll, update: %d  RenderCache:\n", (int)update);
     InvalidateRect(this->hwndCanvas, nullptr, false);
     if (update) {
         UpdateWindow(this->hwndCanvas);
@@ -310,7 +310,7 @@ void MainWindow::RedrawAll(bool update) const {
 }
 
 void MainWindow::RedrawAllIncludingNonClient() const {
-    logf("MainWindow::RedrawAllIncludingNonClient RenderCache:\n");
+    // logf("MainWindow::RedrawAllIncludingNonClient RenderCache:\n");
     InvalidateRect(this->hwndCanvas, nullptr, false);
     RedrawWindow(this->hwndCanvas, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
 }
@@ -657,12 +657,10 @@ void UpdateControlsColors(MainWindow* win) {
 
     {
         auto tocTreeView = win->tocTreeView;
-        tocTreeView->SetBackgroundColor(bgCol);
-        tocTreeView->SetTextColor(txtCol);
+        tocTreeView->SetColors(txtCol, bgCol);
 
-        win->tocLabelWithClose->SetBgCol(bgCol);
-        win->tocLabelWithClose->SetTextCol(txtCol);
-        win->sidebarSplitter->SetBackgroundColor(splitterCol);
+        win->tocLabelWithClose->SetColors(txtCol, bgCol);
+        win->sidebarSplitter->SetColors(kColorNoChange, splitterCol);
         SetWindowExStyle(tocTreeView->hwnd, WS_EX_STATICEDGE, !flatTreeWnd);
         uint flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED;
         SetWindowPos(tocTreeView->hwnd, nullptr, 0, 0, 0, 0, flags);
@@ -670,13 +668,9 @@ void UpdateControlsColors(MainWindow* win) {
 
     auto favTreeView = win->favTreeView;
     if (favTreeView) {
-        favTreeView->SetBackgroundColor(bgCol);
-        favTreeView->SetTextColor(txtCol);
-
-        win->favLabelWithClose->SetBgCol(bgCol);
-        win->favLabelWithClose->SetTextCol(txtCol);
-
-        win->favSplitter->SetBackgroundColor(splitterCol);
+        favTreeView->SetColors(txtCol, bgCol);
+        win->favLabelWithClose->SetColors(txtCol, bgCol);
+        win->favSplitter->SetColors(kColorNoChange, splitterCol);
 
         SetWindowExStyle(favTreeView->hwnd, WS_EX_STATICEDGE, !flatTreeWnd);
         uint flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED;

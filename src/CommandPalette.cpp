@@ -18,6 +18,7 @@
 #include "GlobalPrefs.h"
 #include "DisplayModel.h"
 #include "MainWindow.h"
+#include "Theme.h"
 #include "WindowTab.h"
 #include "SumatraConfig.h"
 #include "Commands.h"
@@ -42,6 +43,7 @@ static i32 gBlacklistCommandsFromPalette[] = {
     CmdCommandPalette,
     CmdNextTabSmart,
     CmdPrevTabSmart,
+    CmdSetTheme,
 
     // managing frequently list in home tab
     CmdOpenSelectedDocument,
@@ -88,6 +90,7 @@ static i32 gDocumentNotOpenWhitelist[] = {
     CmdDebugShowNotif,
     CmdDebugStartStressTest,
     CmdDebugTestApp,
+    CmdDebugTogglePredictiveRender,
     CmdFavoriteToggle,
     CmdToggleFullscreen,
     CmdToggleMenuBar,
@@ -793,7 +796,7 @@ static void ListDoubleClick(CommandPaletteWnd* w) {
     w->ExecuteCurrentSelection();
 }
 
-void OnDestroy(WmDestroyEvent&) {
+void OnDestroy(Wnd::DestroyEvent*) {
     ScheduleDelete();
 }
 
@@ -836,6 +839,10 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
         return false;
     }
 
+    auto colBg = ThemeWindowControlBackgroundColor();
+    auto colTxt = ThemeWindowTextColor();
+    SetColors(colTxt, colBg);
+
     auto vbox = new VBox();
     vbox->alignMain = MainAxisAlign::MainStart;
     vbox->alignCross = CrossAxisAlign::Stretch;
@@ -844,11 +851,12 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
         Edit::CreateArgs args;
         args.parent = hwnd;
         args.isMultiLine = false;
-        args.withBorder = true;
+        args.withBorder = false;
         args.cueText = "enter search term";
         args.text = prefix;
         args.font = font;
         auto c = new Edit();
+        c->SetColors(colTxt, colBg);
         c->maxDx = 150;
         HWND ok = c->Create(args);
         ReportIf(!ok);
@@ -864,19 +872,22 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
         auto pad = Insets{0, 4, 0, 4};
         {
             auto c = CreateStatic(hwnd, font, "# File History");
-            c->onClicked = MkFunc0(SwitchToFileHistory, this);
+            c->SetColors(colTxt, colBg);
+            c->onClick = MkFunc0(SwitchToFileHistory, this);
             auto p = new Padding(c, pad);
             hbox->AddChild(p);
         }
         {
             auto c = CreateStatic(hwnd, font, "> Commands");
-            c->onClicked = MkFunc0(SwitchToCommands, this);
+            c->SetColors(colTxt, colBg);
+            c->onClick = MkFunc0(SwitchToCommands, this);
             auto p = new Padding(c, pad);
             hbox->AddChild(p);
         }
         {
             auto c = CreateStatic(hwnd, font, "@ Tabs");
-            c->onClicked = MkFunc0(SwitchToTabs, this);
+            c->SetColors(colTxt, colBg);
+            c->onClick = MkFunc0(SwitchToTabs, this);
             auto p = new Padding(c, pad);
             hbox->AddChild(p);
         }
@@ -892,6 +903,7 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
         c->idealSizeLines = 32;
         c->SetInsetsPt(4, 0);
         c->Create(args);
+        c->SetColors(colTxt, colBg);
         c->onSelectionChanged = MkFunc0(SelectionChange, this);
         auto m = new ListBoxModelCP();
         FilterStringsForQuery(prefix, m->strings);
@@ -901,6 +913,7 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
     }
     {
         auto c = CreateStatic(hwnd, this->font, smartTabMode ? kInfoSmartTab : kInfoRegular);
+        c->SetColors(colTxt, colBg);
         staticInfo = c;
         vbox->AddChild(c);
     }
@@ -935,7 +948,8 @@ void RunCommandPallette(MainWindow* win, const char* prefix, int smartTabAdvance
     ReportIf(gCommandPaletteWnd);
 
     auto wnd = new CommandPaletteWnd();
-    wnd->onDestroy = OnDestroy;
+    auto fn = MkFunc1Void<Wnd::DestroyEvent*>(OnDestroy);
+    wnd->onDestroy = fn;
     wnd->font = GetAppBiggerFont();
     wnd->win = win;
     bool ok = wnd->Create(win, prefix, smartTabAdvance);
