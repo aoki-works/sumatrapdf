@@ -518,10 +518,3 @@ float limitValue(float val, float min, float max) {
     }
     return val;
 }
-
-Func0 MkFunc0Void(funcVoidPtr fn) {
-    auto res = Func0{};
-    res.fn = (void*)fn;
-    res.userData = kVoidFuncNoArg;
-    return res;
-}

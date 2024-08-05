@@ -258,7 +258,7 @@ static bool DownloadAndUnzipSymbols(const char* symDir) {
         log("DownloadAndUnzipSymbols: couldn't download symbols\n");
         return false;
     }
-    if (!IsHttpRspOk(&rsp)) {
+    if (!HttpRspOk(&rsp)) {
         log("DownloadAndUnzipSymbols: HttpRspOk() returned false\n");
     }
 
@@ -328,9 +328,9 @@ void _uploadDebugReport(const char* condStr, bool isCrash, bool captureCallstack
     // so only allow once submission in a given session
     static bool didSubmitDebugReport = false;
 
-    loga("_uploadDebugReport");
+    log("_uploadDebugReport");
     if (condStr) {
-        loga(condStr);
+        log(condStr);
     }
 
     // don't send report if this is me debugging
@@ -364,8 +364,8 @@ void _uploadDebugReport(const char* condStr, bool isCrash, bool captureCallstack
         return;
     }
 
-    logfa("_uploadDebugReport: isCrash: %d, captureCallstack: %d, gSymbolPath: '%s'\n", (int)isCrash,
-          (int)captureCallstack, gSymbolPath);
+    logf("_uploadDebugReport: isCrash: %d, captureCallstack: %d, gSymbolPath: '%s'\n", (int)isCrash,
+         (int)captureCallstack, gSymbolPath);
 
     if (captureCallstack) {
         // we proceed even if we fail to download symbols
@@ -374,7 +374,7 @@ void _uploadDebugReport(const char* condStr, bool isCrash, bool captureCallstack
 
     auto s = BuildCrashInfoText(condStr, isCrash, captureCallstack);
     if (str::IsEmpty(s)) {
-        loga("_uploadDebugReport(): skipping because !BuildCrashInfoText()\n");
+        log("_uploadDebugReport(): skipping because !BuildCrashInfoText()\n");
         return;
     }
 
@@ -382,8 +382,8 @@ void _uploadDebugReport(const char* condStr, bool isCrash, bool captureCallstack
     UploadCrashReport(d);
     SaveCrashInfo(d);
     // gCrashHandlerAllocator->Free((const void*)d.data());
-    loga(s);
-    loga("_uploadDebugReport() finished\n");
+    log(s);
+    log("_uploadDebugReport() finished\n");
 }
 #endif
 
@@ -590,34 +590,6 @@ static void GetSystemInfo(str::Str& s) {
         s.AppendFmt("Lang: %s %s\n", lang, country);
     }
     GetGraphicsDriverInfo(s);
-    {
-        auto cpu = CpuID();
-        s.Append("CPU: ");
-        if (cpu & kCpuMMX) {
-            s.Append("MMX ");
-        }
-        if (cpu & kCpuSSE) {
-            s.Append("SSE ");
-        }
-        if (cpu & kCpuSSE2) {
-            s.Append("SSE2 ");
-        }
-        if (cpu & kCpuSSE3) {
-            s.Append("SSE3 ");
-        }
-        if (cpu & kCpuSSE41) {
-            s.Append("SSE41 ");
-        }
-        if (cpu & kCpuSSE42) {
-            s.Append("SSE42 ");
-        }
-        if (cpu & kCpuAVX) {
-            s.Append("AVX ");
-        }
-        if (cpu & kCpuAVX2) {
-            s.Append("AVX2 ");
-        }
-    }
 
     // Note: maybe more information, like:
     // * processor capabilities (mmx, sse, sse2 etc.)

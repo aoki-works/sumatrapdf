@@ -27,11 +27,7 @@ static bool VisitTreeItemRec(TreeModel* tm, TreeItem ti, const TreeItemVisitor& 
     if (ti == TreeModel::kNullItem) {
         return true;
     }
-    TreeItemVisitorData d;
-    d.model = tm;
-    d.item = ti;
-    visitor.Call(&d);
-    bool cont = !d.stopTraversal;
+    bool cont = visitor(tm, ti);
     if (!cont) {
         return false;
     }

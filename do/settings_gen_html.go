@@ -249,14 +249,14 @@ func rstrip(s string) string {
 	return strings.TrimRight(s, " \n\r\t")
 }
 
-func genStruct(struc *Field, indent string) string {
+func genStruct(struc *Field, indent string, isPreRelease bool) string {
 	var lines []string
 	first := true
 	insideExpert := false
 
 	fields := struc.Default.([]*Field)
 	for _, field := range fields {
-		if field.Internal || field.isComment() {
+		if field.Internal || field.isComment() || (!isPreRelease && field.PreRelease) {
 			continue
 		}
 		startIdx := len(lines)
@@ -276,12 +276,12 @@ func genStruct(struc *Field, indent string) string {
 			indent2 := indent + indentStr[:len(indentStr)/2]
 			start := fmt.Sprintf("%s%s [\n%s[", indent, field.Name, indent2)
 			end := fmt.Sprintf("%s]\n%s]", indent2, indent)
-			inside := genStruct(field, indent+indentStr)
+			inside := genStruct(field, indent+indentStr, isPreRelease)
 			lines = append(lines, start, inside, end)
 		} else if field.Type.Name == "Struct" {
 			start := fmt.Sprintf("%s%s [", indent, field.Name)
 			end := fmt.Sprintf("%s]", indent)
-			inside := genStruct(field, indent+indentStr)
+			inside := genStruct(field, indent+indentStr, isPreRelease)
 			lines = append(lines, start, inside, end)
 		} else {
 			s = field.initDefault()

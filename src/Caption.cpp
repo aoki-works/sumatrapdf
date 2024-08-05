@@ -13,7 +13,6 @@
 #include "AppColors.h"
 #include "GlobalPrefs.h"
 #include "ProgressUpdateUI.h"
-#include "Annotation.h"
 #include "SumatraPDF.h"
 #include "MainWindow.h"
 #include "Caption.h"
@@ -173,7 +172,7 @@ void CaptionInfo::UpdateColors(bool activeWindow) {
 // TODO: not sure if needed, those are bitmaps
 void SetCaptionButtonsRtl(CaptionInfo* caption, bool isRTL) {
     for (int i = CB_BTN_FIRST; i < CB_BTN_COUNT; i++) {
-        HwndSetRtl(caption->btn[i].hwnd, isRTL);
+        SetRtl(caption->btn[i].hwnd, isRTL);
     }
 }
 

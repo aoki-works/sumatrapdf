@@ -39,7 +39,6 @@ SelectionHandlers [
   [
     URL = https://duckduckgo.com/?ia=web&q=${selection}
     Name = &DuckDuckGo
-    Key = Ctrl + t
   ]
 ]
 ```
@@ -47,5 +46,3 @@ SelectionHandlers [
 `URL` is the website that will be launched. `${selection}` will be replaced with (URL-encoded) current selection.
 
 `Name` is what shows in the menu. You can use `&` characters to add Windows hot-key for keyboard-only invocation.
-
-**Ver3.6+**: `Key` is a keyboard shorcut in the same format as in [Shortcuts](Customizing-keyboard-shortcuts.md) advanced setting.

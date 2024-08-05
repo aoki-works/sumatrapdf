@@ -3,11 +3,12 @@ License: GPLv3 */
 
 #include "utils/BaseUtil.h"
 
-void SetTheme(const char* name);
-void SetCurrentThemeFromSettings();
 void SelectNextTheme();
-void CreateThemeCommands();
-int GetCurrentThemeCmdId(int* firstId, int* lastId);
+void SetThemeByIndex(int);
+
+void SetCurrentThemeFromSettings();
+
+int GetCurrentThemeIndex();
 
 COLORREF ThemeDocumentColors(COLORREF&);
 COLORREF ThemeMainWindowBackgroundColor();
@@ -23,7 +24,3 @@ COLORREF ThemeNotificationsHighlightColor();
 COLORREF ThemeNotificationsHighlightTextColor();
 COLORREF ThemeNotificationsProgressColor();
 bool ThemeColorizeControls();
-
-extern int gFirstSetThemeCmdId;
-extern int gLastSetThemeCmdId;
-extern int gCurrSetThemeCmdId;

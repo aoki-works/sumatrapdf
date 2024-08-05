@@ -1,8 +1,6 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
-struct AnnotCreateArgs;
-
 #define CANVAS_CLASS_NAME L"SUMATRA_PDF_CANVAS"
 #define FRAME_CLASS_NAME L"SUMATRA_PDF_FRAME"
 
@@ -104,8 +102,6 @@ extern DocController* gMostRecentlyOpenedDoc;
 void InitializePolicies(bool restrict);
 void RestrictPolicies(Perm revokePermission);
 bool HasPermission(Perm permission);
-bool CanAccessDisk();
-bool AnnotationsAreDisabled();
 bool IsUIRightToLeft();
 bool SumatraLaunchBrowser(const char* url);
 bool OpenFileExternally(const char* path);
@@ -181,7 +177,7 @@ struct PasswordUI;
 
 MainWindow* LoadDocument(LoadArgs* args);
 MainWindow* LoadDocumentFinish(LoadArgs* args);
-void StartLoadDocument(LoadArgs* args);
+void LoadDocumentAsync(LoadArgs* args);
 MainWindow* CreateAndShowMainWindow(SessionData* data = nullptr);
 DocController* CreateControllerForEngineOrFile(EngineBase* engine, const char* path, PasswordUI* pwdUI,
                                                MainWindow* win);
@@ -207,5 +203,4 @@ void SumatraOpenPathInExplorer(const char* path);
 void SmartZoom(MainWindow* win, float factor, Point* pt, bool smartZoom);
 TempStr GetNotImportantDataDirTemp();
 TempStr GetCrashInfoDirTemp();
-Annotation* MakeAnnotationsFromSelection(WindowTab* tab, AnnotCreateArgs* args);
-TempStr GetVerDirNameTemp(const char* prefix);
+void DeleteStaleFilesAsync();

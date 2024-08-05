@@ -302,7 +302,6 @@ Size MainWindow::GetViewPortSize() const {
 }
 
 void MainWindow::RedrawAll(bool update) const {
-    logf("MainWindow::RedrawAll, update: %d  RenderCache:\n", (int)update);
     InvalidateRect(this->hwndCanvas, nullptr, false);
     if (update) {
         UpdateWindow(this->hwndCanvas);
@@ -310,7 +309,6 @@ void MainWindow::RedrawAll(bool update) const {
 }
 
 void MainWindow::RedrawAllIncludingNonClient() const {
-    logf("MainWindow::RedrawAllIncludingNonClient RenderCache:\n");
     InvalidateRect(this->hwndCanvas, nullptr, false);
     RedrawWindow(this->hwndCanvas, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE);
 }
@@ -401,6 +399,7 @@ void LinkHandler::GotoLink(IPageDestination* dest) {
         return;
     }
 
+    HWND hwndFrame = win->hwndFrame;
     Kind kind = dest->GetKind();
 
     if (kindDestinationScrollTo == kind) {
@@ -488,7 +487,7 @@ void LinkHandler::LaunchURL(const char* uri) {
 // (unless they're of an allowed perceived type) and never launch any external
 // file in plugin mode (where documents are supposed to be self-contained)
 void LinkHandler::LaunchFile(const char* pathOrig, IPageDestination* remoteLink) {
-    if (gPluginMode || !CanAccessDisk()) {
+    if (gPluginMode || !HasPermission(Perm::DiskAccess)) {
         return;
     }
 
@@ -704,10 +703,7 @@ bool IsRightDragging(MainWindow* win) {
     return win->dragRightClick;
 }
 
-// sometimes we stash MainWindow pointer, do something on a thread and
-// then go back on main thread to finish things. At that point MainWindow
-// could have been destroyed so we need to check if it's still valid
-bool IsMainWindowValid(MainWindow* win) {
+bool MainWindowStillValid(MainWindow* win) {
     return gWindows.Contains(win);
 }
 
@@ -722,7 +718,7 @@ MainWindow* FindMainWindowByHwnd(HWND hwnd) {
 
 // Find MainWindow using WindowTab. Diffrent than WindowTab->win in that
 // it validates that WindowTab is still valid
-MainWindow* FindMainWindowByTab(WindowTab* tabToFind) {
+MainWindow* FindMainWindowByWindowTab(WindowTab* tabToFind) {
     for (MainWindow* win : gWindows) {
         for (WindowTab* tab : win->Tabs()) {
             if (tab == tabToFind) {
@@ -742,16 +738,4 @@ MainWindow* FindMainWindowByController(DocController* ctrl) {
         }
     }
     return nullptr;
-}
-
-// temporarily highlight this tab
-void HighlightTab(MainWindow* win, WindowTab* tab) {
-    if (!win) {
-        return;
-    }
-    int idx = -1;
-    if (tab) {
-        idx = win->GetTabIdx(tab);
-    }
-    win->tabsCtrl->SetHighlighted(idx);
 }

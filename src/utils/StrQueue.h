@@ -14,7 +14,7 @@ struct StrQueue {
     bool IsSentinel(char*);
     void MarkFinished();
     bool IsFinished();
-    bool Access(const Func1<StrQueue*>& fn);
+    bool Access(const std::function<void(StrQueue*)>& fn);
 
     StrVec strings;
 

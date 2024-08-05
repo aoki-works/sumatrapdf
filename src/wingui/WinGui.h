@@ -23,7 +23,7 @@ struct ContextMenuEvent {
     Point mouseScreen{};
 };
 
-using ContextMenuHandler = Func1<ContextMenuEvent*>;
+using ContextMenuHandler = std::function<void(ContextMenuEvent*)>;
 
 struct CreateControlArgs {
     HWND parent = nullptr;
@@ -50,7 +50,7 @@ struct CreateCustomArgs {
     bool visible = true;
     HFONT font = nullptr;
     HICON icon = nullptr;
-    COLORREF bgColor = kColorUnset;
+    COLORREF bgColor = ColorUnset;
 };
 
 struct WmEvent {
@@ -64,6 +64,12 @@ struct WmEvent {
     bool didHandle = true; // common case so set as default
 };
 
+struct WmCloseEvent {
+    WmEvent* e = nullptr;
+};
+
+typedef void (*WmCloseHandler)(WmCloseEvent&);
+
 struct WmDestroyEvent {
     WmEvent* e = nullptr;
 };
@@ -71,12 +77,6 @@ struct WmDestroyEvent {
 typedef void (*WmDestroyHandler)(WmDestroyEvent&);
 
 struct Wnd : public ILayout {
-    struct CloseEvent {
-        WmEvent* e = nullptr;
-    };
-
-    using CloseHandler = Func1<CloseEvent*>;
-
     Wnd();
     Wnd(HWND hwnd);
     virtual ~Wnd();
@@ -142,6 +142,9 @@ struct Wnd : public ILayout {
 
     void SetIsEnabled(bool isEnabled) const;
     bool IsEnabled() const;
+    void SetFocus() const;
+    bool IsFocused() const;
+    void SetRtl(bool) const;
     void SetBackgroundColor(COLORREF);
 
     void SuspendRedraw() const;
@@ -165,14 +168,14 @@ struct Wnd : public ILayout {
     HFONT font = nullptr; // we don't own it
     UINT_PTR subclassId = 0;
 
-    COLORREF backgroundColor = kColorUnset;
+    COLORREF backgroundColor = ColorUnset;
     HBRUSH backgroundColorBrush = nullptr;
 
     ILayout* layout = nullptr;
 
     ContextMenuHandler onContextMenu;
 
-    CloseHandler onClose;
+    WmCloseHandler onClose = nullptr;
     WmDestroyHandler onDestroy = nullptr;
 };
 
@@ -180,18 +183,20 @@ bool PreTranslateMessage(MSG& msg);
 
 //--- Static
 
-struct Static : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        HFONT font = nullptr;
-        const char* text = nullptr;
-    };
+using ClickedHandler = std::function<void()>;
 
+struct StaticCreateArgs {
+    HWND parent = nullptr;
+    HFONT font = nullptr;
+    const char* text = nullptr;
+};
+
+struct Static : Wnd {
     Static();
 
-    Func0 onClicked;
+    ClickedHandler onClicked = nullptr;
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const StaticCreateArgs&);
 
     Size GetIdealSize() override;
 
@@ -201,20 +206,19 @@ struct Static : Wnd {
 
 //--- Button
 
+struct ButtonCreateArgs {
+    HWND parent = nullptr;
+    HFONT font = nullptr;
+    const char* text = nullptr;
+};
+
 struct Button : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        HFONT font = nullptr;
-        const char* text = nullptr;
-    };
-
-    Func0 onClicked{};
-
+    ClickedHandler onClicked = nullptr;
     bool isDefault = false;
 
     Button();
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const ButtonCreateArgs&);
 
     Size GetIdealSize() override;
 
@@ -222,20 +226,20 @@ struct Button : Wnd {
     bool OnCommand(WPARAM wparam, LPARAM lparam) override;
 };
 
-Button* CreateButton(HWND parent, const char* s, const Func0& onClicked);
+Button* CreateButton(HWND parent, const char* s, const ClickedHandler& onClicked);
 Button* CreateDefaultButton(HWND parent, const char* s);
 
 //--- Tooltip
 
+struct TooltipCreateArgs {
+    HWND parent = nullptr;
+    HFONT font = nullptr;
+};
+
 // a tooltip manages multiple areas within HWND
 struct Tooltip : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        HFONT font = nullptr;
-    };
-
     Tooltip();
-    HWND Create(const CreateArgs&);
+    HWND Create(const TooltipCreateArgs&);
     Size GetIdealSize() override;
 
     int Add(const char* s, const Rect& rc, bool multiline);
@@ -258,20 +262,19 @@ struct Tooltip : Wnd {
 };
 
 //--- Edit
-using TextChangedHandler = Func0;
+using TextChangedHandler = std::function<void()>;
+
+struct EditCreateArgs {
+    HWND parent = nullptr;
+    bool isMultiLine = false;
+    bool withBorder = false;
+    const char* cueText = nullptr;
+    int idealSizeLines = 1;
+    HFONT font = nullptr;
+};
 
 struct Edit : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        bool isMultiLine = false;
-        bool withBorder = false;
-        const char* cueText = nullptr;
-        const char* text = nullptr;
-        int idealSizeLines = 1;
-        HFONT font = nullptr;
-    };
-
-    TextChangedHandler onTextChanged;
+    TextChangedHandler onTextChanged = nullptr;
 
     // set before Create()
     int idealSizeLines = 1;
@@ -280,7 +283,7 @@ struct Edit : Wnd {
     Edit();
     ~Edit() override;
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const EditCreateArgs&);
     LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override;
     LRESULT OnMessageReflect(UINT msg, WPARAM wparam, LPARAM lparam) override;
     bool OnCommand(WPARAM wparam, LPARAM lparam) override;
@@ -294,20 +297,19 @@ struct Edit : Wnd {
 };
 
 //--- ListBox
+using ListBoxSelectionChangedHandler = std::function<void()>;
+using ListBoxDoubleClickHandler = std::function<void()>;
+
+struct ListBoxCreateArgs {
+    HWND parent = nullptr;
+    int idealSizeLines = 0;
+    HFONT font = nullptr;
+};
 
 struct ListBox : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        int idealSizeLines = 0;
-        HFONT font = nullptr;
-    };
-
-    using SelectionChangedHandler = Func0;
-    using DoubleClickHandler = Func0;
-
     ListBoxModel* model = nullptr;
-    SelectionChangedHandler onSelectionChanged;
-    DoubleClickHandler onDoubleClick;
+    ListBoxSelectionChangedHandler onSelectionChanged = nullptr;
+    ListBoxDoubleClickHandler onDoubleClick = nullptr;
 
     Size idealSize = {};
     int idealSizeLines = 0;
@@ -315,7 +317,7 @@ struct ListBox : Wnd {
     ListBox();
     virtual ~ListBox();
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const ListBoxCreateArgs&);
 
     LRESULT OnMessageReflect(UINT msg, WPARAM wparam, LPARAM lparam) override;
     bool OnCommand(WPARAM wparam, LPARAM lparam) override;
@@ -332,33 +334,33 @@ struct ListBox : Wnd {
 
 //--- CheckboxCtrl
 
+enum class CheckState {
+    Unchecked = BST_UNCHECKED,
+    Checked = BST_CHECKED,
+    Indeterminate = BST_INDETERMINATE,
+};
+
+using CheckboxStateChangedHandler = std::function<void()>;
+
+struct CheckboxCreateArgs {
+    HWND parent = nullptr;
+    const char* text = nullptr;
+    CheckState initialState = CheckState::Unchecked;
+};
+
 struct Checkbox : Wnd {
-    enum class State {
-        Unchecked = BST_UNCHECKED,
-        Checked = BST_CHECKED,
-        Indeterminate = BST_INDETERMINATE,
-    };
-
-    struct CreateArgs {
-        HWND parent = nullptr;
-        const char* text = nullptr;
-        State initialState = State::Unchecked;
-    };
-
-    using StateChangedHandler = Func0;
-
-    StateChangedHandler onStateChanged;
+    CheckboxStateChangedHandler onCheckStateChanged = nullptr;
 
     Checkbox();
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const CheckboxCreateArgs&);
 
     bool OnCommand(WPARAM wparam, LPARAM lparam) override;
 
     Size GetIdealSize() override;
 
-    void SetState(State);
-    State GetState() const;
+    void SetCheckState(CheckState);
+    CheckState GetCheckState() const;
 
     void SetIsChecked(bool isChecked);
     bool IsChecked() const;
@@ -366,18 +368,18 @@ struct Checkbox : Wnd {
 
 //--- Progress
 
-struct Progress : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        int initialMax = 0;
-    };
+struct ProgressCreateArgs {
+    HWND parent = nullptr;
+    int initialMax = 0;
+};
 
+struct Progress : Wnd {
     Progress();
 
     int idealDx = 0;
     int idealDy = 0;
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const ProgressCreateArgs&);
 
     void SetMax(int);
     void SetCurrent(int);
@@ -389,22 +391,22 @@ struct Progress : Wnd {
 
 //--- DropDown
 
+using DropDownSelectionChangedHandler = std::function<void()>;
+
+struct DropDownCreateArgs {
+    HWND parent = nullptr;
+    HFONT font = nullptr;
+    // TODO: model or items
+};
+
 struct DropDown : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        HFONT font = nullptr;
-        // TODO: model or items
-    };
-
-    using SelectionChangedHandler = Func0;
-
     // TODO: use DropDownModel
     StrVec items;
-    SelectionChangedHandler onSelectionChanged;
+    DropDownSelectionChangedHandler onSelectionChanged = nullptr;
 
     DropDown();
     ~DropDown() override = default;
-    HWND Create(const DropDown::CreateArgs&);
+    HWND Create(const DropDownCreateArgs&);
 
     Size GetIdealSize() override;
     bool OnCommand(WPARAM wparam, LPARAM lparam) override;
@@ -420,32 +422,32 @@ struct DropDown : Wnd {
 
 struct Trackbar;
 
+struct TrackbarPosChangingEvent {
+    Trackbar* trackbar = nullptr;
+    int pos = -1;
+    NMTRBTHUMBPOSCHANGING* info = nullptr;
+};
+
+using TrackbarPoschangingHandler = std::function<void(TrackbarPosChangingEvent*)>;
+
+struct TrackbarCreateArgs {
+    HWND parent = nullptr;
+    bool isHorizontal = true;
+    int rangeMin = 1;
+    int rangeMax = 5;
+    HFONT font = nullptr;
+};
+
 struct Trackbar : Wnd {
-    struct PositionChangingEvent {
-        Trackbar* trackbar = nullptr;
-        int pos = -1;
-        NMTRBTHUMBPOSCHANGING* info = nullptr;
-    };
-
-    using PositionChangingHandler = Func1<PositionChangingEvent*>;
-
-    struct CreateArgs {
-        HWND parent = nullptr;
-        bool isHorizontal = true;
-        int rangeMin = 1;
-        int rangeMax = 5;
-        HFONT font = nullptr;
-    };
-
     Size idealSize{};
 
     // for WM_NOTIFY with TRBN_THUMBPOSCHANGING
-    PositionChangingHandler onPositionChanging;
+    TrackbarPoschangingHandler onPosChanging = nullptr;
 
     Trackbar();
     ~Trackbar() override = default;
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const TrackbarCreateArgs&);
 
     LRESULT OnMessageReflect(UINT msg, WPARAM wparam, LPARAM lparam) override;
 
@@ -467,29 +469,29 @@ enum class SplitterType {
 
 struct Splitter;
 
-struct Splitter : public Wnd {
-    // called when user drags the splitter ('finishedDragging' is false) and when drag is finished ('finishedDragging'
-    // is true). the owner can constrain splitter by using current cursor position and setting resizeAllowed to false if
-    // it's not allowed to go there
-    struct MoveEvent {
-        Splitter* w = nullptr;
-        bool finishedDragging = false;
-        // user can set to false to forbid resizing here
-        bool resizeAllowed = true;
-    };
+// called when user drags the splitter ('finishedDragging' is false) and when drag is finished ('finishedDragging' is
+// true). the owner can constrain splitter by using current cursor
+// position and setting resizeAllowed to false if it's not allowed to go there
+struct SplitterMoveEvent {
+    Splitter* w = nullptr;
+    bool finishedDragging = false;
+    // user can set to false to forbid resizing here
+    bool resizeAllowed = true;
+};
 
-    using MoveHandler = Func1<MoveEvent*>;
+using SplitterMoveHandler = std::function<void(SplitterMoveEvent*)>;
 
-    struct CreateArgs {
-        HWND parent = nullptr;
-        SplitterType type = SplitterType::Horiz;
-        bool isLive = true;
-        COLORREF backgroundColor = kColorUnset;
-    };
-
+struct SplitterCreateArgs {
+    HWND parent = nullptr;
     SplitterType type = SplitterType::Horiz;
     bool isLive = true;
-    MoveHandler onMove;
+    COLORREF backgroundColor = ColorUnset;
+};
+
+struct Splitter : public Wnd {
+    SplitterType type = SplitterType::Horiz;
+    bool isLive = true;
+    SplitterMoveHandler onSplitterMove = nullptr;
 
     HBITMAP bmp = nullptr;
     HBRUSH brush = nullptr;
@@ -503,7 +505,7 @@ struct Splitter : public Wnd {
     Splitter();
     ~Splitter() override;
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const SplitterCreateArgs&);
     LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override;
 };
 
@@ -511,69 +513,67 @@ struct Splitter : public Wnd {
 
 struct TreeView;
 
+struct TreeViewCreateArgs {
+    HWND parent = nullptr;
+    HFONT font = nullptr;
+    DWORD exStyle = 0; // additional flags, will be OR with the rest
+    bool fullRowSelect = false;
+};
+
+struct TreeItemGetTooltipEvent {
+    TreeView* treeView = nullptr;
+    TreeItem treeItem = 0;
+    NMTVGETINFOTIPW* info = nullptr;
+};
+
+using TreeItemGetTooltipHandler = std::function<void(TreeItemGetTooltipEvent*)>;
+
+struct TreeItemCustomDrawEvent {
+    TreeView* treeView = nullptr;
+    TreeItem treeItem = 0;
+    NMTVCUSTOMDRAW* nm = nullptr;
+};
+
+using TreeItemCustomDrawHandler = std::function<LRESULT(TreeItemCustomDrawEvent*)>;
+
+struct TreeSelectionChangedEvent {
+    TreeView* treeView = nullptr;
+    TreeItem prevSelectedItem = 0;
+    TreeItem selectedItem = 0;
+    NMTREEVIEW* nmtv = nullptr;
+    bool byKeyboard = false;
+    bool byMouse = false;
+};
+
+using TreeSelectionChangedHandler = std::function<void(TreeSelectionChangedEvent*)>;
+
+struct TreeClickEvent {
+    TreeView* treeView = nullptr;
+    TreeItem treeItem = 0;
+    bool isDblClick = false;
+
+    // mouse x,y position relative to the window
+    Point mouseWindow{};
+    // global (screen) mouse x,y position
+    Point mouseScreen{};
+};
+
+using TreeClickHandler = std::function<LRESULT(TreeClickEvent*)>;
+
+struct TreeKeyDownEvent {
+    TreeView* treeView = nullptr;
+    NMTVKEYDOWN* nmkd = nullptr;
+    int keyCode = 0;
+    u32 flags = 0;
+};
+
+using TreeKeyDownHandler = std::function<void(TreeKeyDownEvent*)>;
+
 struct TreeView : Wnd {
-    struct CreateArgs {
-        HWND parent = nullptr;
-        HFONT font = nullptr;
-        DWORD exStyle = 0; // additional flags, will be OR with the rest
-        bool fullRowSelect = false;
-    };
-
-    struct GetTooltipEvent {
-        TreeView* treeView = nullptr;
-        TreeItem treeItem = 0;
-        NMTVGETINFOTIPW* info = nullptr;
-    };
-
-    struct SelectionChangedEvent {
-        TreeView* treeView = nullptr;
-        TreeItem prevSelectedItem = 0;
-        TreeItem selectedItem = 0;
-        NMTREEVIEW* nmtv = nullptr;
-        bool byKeyboard = false;
-        bool byMouse = false;
-    };
-
-    struct CustomDrawEvent {
-        TreeView* treeView = nullptr;
-        TreeItem treeItem = 0;
-        NMTVCUSTOMDRAW* nm = nullptr;
-
-        LRESULT result = 0;
-    };
-
-    struct ClickEvent {
-        TreeView* treeView = nullptr;
-        TreeItem treeItem = 0;
-        bool isDblClick = false;
-
-        // mouse x,y position relative to the window
-        Point mouseWindow{};
-        // global (screen) mouse x,y position
-        Point mouseScreen{};
-
-        LRESULT result = 0;
-    };
-
-    struct KeyDownEvent {
-        TreeView* treeView = nullptr;
-        NMTVKEYDOWN* nmkd = nullptr;
-        int keyCode = 0;
-        u32 flags = 0;
-
-        LRESULT result = 0;
-    };
-
-    using KeyDownHandler = Func1<KeyDownEvent*>;
-    using ClickHandler = Func1<ClickEvent*>;
-    using CustomDrawHandler = Func1<CustomDrawEvent*>;
-    using GetTooltipHandler = Func1<TreeView::GetTooltipEvent*>;
-    using SelectionChangedHandler = Func1<SelectionChangedEvent*>;
-
     TreeView();
     ~TreeView() override;
 
-    HWND Create(const CreateArgs&);
+    HWND Create(const TreeViewCreateArgs&);
 
     LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override;
     LRESULT OnNotifyReflect(WPARAM, LPARAM) override;
@@ -598,8 +598,8 @@ struct TreeView : Wnd {
     TreeItem GetTreeItemByHandle(HTREEITEM item);
     bool UpdateItem(TreeItem ti);
     void SetTreeModel(TreeModel* tm);
-    void SetState(TreeItem item, bool enable);
-    bool GetState(TreeItem item);
+    void SetCheckState(TreeItem item, bool enable);
+    bool GetCheckState(TreeItem item);
     TreeItemState GetItemState(TreeItem ti);
 
     bool fullRowSelect = false;
@@ -608,19 +608,19 @@ struct TreeView : Wnd {
     TreeModel* treeModel = nullptr; // not owned by us
 
     // for WM_NOTIFY with TVN_GETINFOTIP
-    GetTooltipHandler onGetTooltip;
+    TreeItemGetTooltipHandler onGetTooltip = nullptr;
 
     // for WM_NOTIFY wiht NM_CUSTOMDRAW
-    CustomDrawHandler onCustomDraw;
+    TreeItemCustomDrawHandler onTreeItemCustomDraw = nullptr;
 
     // for WM_NOTIFY with TVN_SELCHANGED
-    SelectionChangedHandler onSelectionChanged;
+    TreeSelectionChangedHandler onTreeSelectionChanged = nullptr;
 
     // for WM_NOTIFY with NM_CLICK or NM_DBCLICK
-    ClickHandler onClick;
+    TreeClickHandler onTreeClick = nullptr;
 
     // for WM_NOITFY with TVN_KEYDOWN
-    KeyDownHandler onKeyDown;
+    TreeKeyDownHandler onTreeKeyDown = nullptr;
 
     // private
     TVITEMW item{};
@@ -640,6 +640,58 @@ struct TabInfo;
 
 #define kTabDefaultBgCol (COLORREF) - 1
 
+struct TabMouseState {
+    int tabIdx = -1;
+    bool overClose = false;
+    TabInfo* tabInfo = nullptr;
+};
+
+struct TabClosedEvent {
+    TabsCtrl* tabs = nullptr;
+    int tabIdx = 0;
+};
+
+using TabClosedHandler = std::function<void(TabClosedEvent*)>;
+
+struct TabsSelectionChangingEvent {
+    TabsCtrl* tabs = nullptr;
+    int tabIdx;
+};
+
+// return true to prevent changing tabs
+using TabsSelectionChangingHandler = std::function<bool(TabsSelectionChangingEvent*)>;
+
+struct TabsSelectionChangedEvent {
+    TabsCtrl* tabs = nullptr;
+    int tabIdx;
+};
+
+using TabsSelectionChangedHandler = std::function<void(TabsSelectionChangedEvent*)>;
+
+struct TabMigrationEvent {
+    TabsCtrl* tabs = nullptr;
+    int tabIdx;
+    Point releasePoint;
+};
+
+using TabMigrationHandler = std::function<void(TabMigrationEvent*)>;
+
+struct TabDraggedEvent {
+    TabsCtrl* tabs = nullptr;
+    int tab1 = -1;
+    int tab2 = -1;
+};
+
+using TabDraggedHandler = std::function<void(TabDraggedEvent*)>;
+
+struct TabsCreateArgs {
+    HWND parent = nullptr;
+    HFONT font = nullptr;
+    bool withToolTips = false;
+    int ctrlID = 0;
+    int tabDefaultDx = 300;
+};
+
 struct TabInfo {
     char* text = nullptr;
     char* tooltip = nullptr;
@@ -658,55 +710,6 @@ struct TabInfo {
 };
 
 struct TabsCtrl : Wnd {
-    struct MouseState {
-        int tabIdx = -1;
-        bool overClose = false;
-        TabInfo* tabInfo = nullptr;
-    };
-
-    struct SelectionChangingEvent {
-        TabsCtrl* tabs = nullptr;
-        int tabIdx = -1;
-        // set to true to prevent changing tabs
-        bool preventChanging = false;
-    };
-
-    struct SelectionChangedEvent {
-        TabsCtrl* tabs = nullptr;
-        int tabIdx;
-    };
-
-    struct ClosedEvent {
-        TabsCtrl* tabs = nullptr;
-        int tabIdx = -1;
-    };
-
-    struct MigrationEvent {
-        TabsCtrl* tabs = nullptr;
-        int tabIdx;
-        Point releasePoint;
-    };
-
-    struct DraggedEvent {
-        TabsCtrl* tabs = nullptr;
-        int tab1 = -1;
-        int tab2 = -1;
-    };
-
-    using SelectionChangingHandler = Func1<SelectionChangingEvent*>;
-    using SelectionChangedHandler = Func1<SelectionChangedEvent*>;
-    using ClosedHandler = Func1<ClosedEvent*>;
-    using MigrationHandler = Func1<MigrationEvent*>;
-    using DraggedHandler = Func1<DraggedEvent*>;
-
-    struct CreateArgs {
-        HWND parent = nullptr;
-        HFONT font = nullptr;
-        bool withToolTips = false;
-        int ctrlID = 0;
-        int tabDefaultDx = 300;
-    };
-
     int ctrlID = 0;
     bool withToolTips = false;
     bool inTitleBar = false;
@@ -724,14 +727,11 @@ struct TabsCtrl : Wnd {
     // where we grabbed the tab with a leftclick, in tab coordinates
     Point grabLocation;
 
-    // if >= 0 will paint this tab as selected vs. the real selected
-    int tabForceShowSelected = -1;
-
-    ClosedHandler onTabClosed;
-    SelectionChangingHandler onSelectionChanging;
-    SelectionChangedHandler onSelectionChanged;
-    MigrationHandler onTabMigration;
-    DraggedHandler onTabDragged;
+    TabClosedHandler onTabClosed = nullptr;
+    TabsSelectionChangingHandler onSelectionChanging = nullptr;
+    TabsSelectionChangedHandler onSelectionChanged = nullptr;
+    TabMigrationHandler onTabMigration = nullptr;
+    TabDraggedHandler onTabDragged = nullptr;
 
     COLORREF currBgCol = 0;
     COLORREF tabBackgroundBg = 0;
@@ -756,7 +756,7 @@ struct TabsCtrl : Wnd {
     TabsCtrl();
     ~TabsCtrl() override;
 
-    HWND Create(TabsCtrl::CreateArgs&);
+    HWND Create(TabsCreateArgs&);
 
     LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override;
     LRESULT OnNotifyReflect(WPARAM, LPARAM) override;
@@ -781,15 +781,12 @@ struct TabsCtrl : Wnd {
 
     int GetSelected();
     int SetSelected(int idx);
-    bool IsValidIdx(int idx);
-
-    void SetHighlighted(int idx);
 
     HWND GetToolTipsHwnd();
 
-    void LayoutTabs();
+    void Layout();
     void ScheduleRepaint();
-    TabsCtrl::MouseState TabStateFromMousePosition(const Point& p);
+    TabMouseState TabStateFromMousePosition(const Point& p);
     void Paint(HDC hdc, RECT& rc);
     HBITMAP RenderForDragging(int idx);
 };
@@ -800,11 +797,11 @@ T GetTabsUserData(TabsCtrl* tabs, int idx) {
     return (T)tabInfo->userData;
 }
 
-template <typename T>
-void DeleteWnd(T** wnd) {
-    delete *wnd;
-    *wnd = nullptr;
-}
+void DeleteWnd(Static**);
+void DeleteWnd(Button**);
+void DeleteWnd(Edit**);
+void DeleteWnd(Checkbox**);
+void DeleteWnd(Progress**);
 
 int RunMessageLoop(HACCEL accelTable, HWND hwndDialog);
 

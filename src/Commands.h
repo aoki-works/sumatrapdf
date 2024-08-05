@@ -8,6 +8,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
 */
 #define COMMANDS(V)                                                                \
     V(CmdOpenFile, "Open File...")                                                 \
+    V(CmdOpenFolder, "Open Folder...")                                             \
     V(CmdClose, "Close Document")                                                  \
     V(CmdCloseCurrentDocument, "Close Current Document")                           \
     V(CmdCloseOtherTabs, "Close Other Tabs")                                       \
@@ -102,19 +103,19 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdZoomFitWidthAndContinuous, "Zoom: Fit Width And Continuous")              \
     V(CmdZoomFitPageAndSinglePage, "Zoom: Fit Page and Single Page")               \
     V(CmdContributeTranslation, "Contribute Translation")                          \
-    V(CmdOpenWithKnownExternalViewerFirst, "don't use")                            \
+    V(CmdOpenWithFirst, "don't use")                                               \
     V(CmdOpenWithExplorer, "Open Directory In Explorer")                           \
     V(CmdOpenWithDirectoryOpus, "Open Directory In Directory Opus")                \
     V(CmdOpenWithTotalCommander, "Open Directory In Total Commander")              \
     V(CmdOpenWithDoubleCommander, "Open Directory In Double Commander")            \
-    V(CmdOpenWithAcrobat, "Open in Adobe Acrobat")                                 \
-    V(CmdOpenWithFoxIt, "Open in Foxit Reader")                                    \
-    V(CmdOpenWithFoxItPhantom, "Open in Foxit PhantomPDF")                         \
-    V(CmdOpenWithPdfXchange, "Open in PDF-XChange")                                \
-    V(CmdOpenWithXpsViewer, "Open in Microsoft Xps Viewer")                        \
-    V(CmdOpenWithHtmlHelp, "Open in Microsoft HTML Help")                          \
+    V(CmdOpenWithAcrobat, "Open With Adobe Acrobat")                               \
+    V(CmdOpenWithFoxIt, "Open With FoxIt")                                         \
+    V(CmdOpenWithFoxItPhantom, "Open With FoxIt Phantom")                          \
+    V(CmdOpenWithPdfXchange, "Open With PdfXchange")                               \
+    V(CmdOpenWithXpsViewer, "Open With Xps Viewer")                                \
+    V(CmdOpenWithHtmlHelp, "Open With HTML Help")                                  \
     V(CmdOpenWithPdfDjvuBookmarker, "Open With Pdf&Djvu Bookmarker")               \
-    V(CmdOpenWithKnownExternalViewerLast, "don't use")                             \
+    V(CmdOpenWithLast, "don't use")                                                \
     V(CmdOpenSelectedDocument, "Open Selected Document")                           \
     V(CmdPinSelectedDocument, "Pin Selected Document")                             \
     V(CmdForgetSelectedDocument, "Remove Selected Document From History")          \
@@ -166,23 +167,19 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdOpenNextFileInFolder, "Open Next File In Folder")                         \
     V(CmdOpenPrevFileInFolder, "Open Previous File In Folder")                     \
     V(CmdCommandPalette, "Command Palette")                                        \
-    V(CmdShowLog, "Show Logs")                                                     \
+    V(CmdCommandPaletteNoFiles, "Command Palette No Files")                        \
+    V(CmdCommandPaletteOnlyTabs, "Command Palette Only Tabs")                      \
+    V(CmdShowLog, "Show Log")                                                      \
     V(CmdClearHistory, "Clear History")                                            \
     V(CmdReopenLastClosedFile, "Reopen Last Closed")                               \
     V(CmdNextTab, "Next Tab")                                                      \
     V(CmdPrevTab, "Previous Tab")                                                  \
-    V(CmdNextTabSmart, "Smart Next Tab")                                           \
-    V(CmdPrevTabSmart, "Smart Next Tab")                                           \
     V(CmdSelectNextTheme, "Select next theme")                                     \
     V(CmdSelectNets, " Select nets")                                               \
     V(CmdSelectCells, "Select parts")                                              \
     V(CmdSelectPins, "Select pins")                                                \
     V(CmdToggleFrequentlyRead, "Toggle Frequently Read")                           \
     V(CmdInvokeInverseSearch, "Invoke Inverse Search")                             \
-    V(CmdExec, "Execute a program")                                                \
-    V(CmdViewWithExternalViewer, "View With Custom External Viewer")               \
-    V(CmdSelectionHandler, "Launch a browser or run command with selection")       \
-    V(CmdSetTheme, "Set theme")                                                    \
     V(CmdDebugCorruptMemory, "Debug: Corrupt Memory")                              \
     V(CmdDebugCrashMe, "Debug: Crash Me")                                          \
     V(CmdDebugDownloadSymbols, "Debug: Download Symbols")                          \
@@ -190,6 +187,8 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdDebugShowNotif, "Debug: Show Notification")                               \
     V(CmdDebugStartStressTest, "Debug: Start Stress Test")                         \
     V(CmdNone, "Do nothing")
+
+//V(CmdSelectAnnotation, "Select Annotation")                           \
 
 // order of CreateAnnot* must be the same as enum AnnotationType
 /*
@@ -214,6 +213,16 @@ enum {
 
     COMMANDS(DEF_CMD)
 
+        CmdLastCommand,
+
+    /* range for "external viewers" setting */
+    CmdOpenWithExternalFirst,
+    CmdOpenWithExternalLast = CmdOpenWithExternalFirst + 32,
+
+    /* range for "SelectionHandlers" setting */
+    CmdSelectionHandlerFirst,
+    CmdSelectionHandlerLast = CmdSelectionHandlerFirst + 32,
+
     /* range for file history */
     CmdFileHistoryFirst,
     CmdFileHistoryLast = CmdFileHistoryFirst + 32,
@@ -222,8 +231,11 @@ enum {
     CmdFavoriteFirst,
     CmdFavoriteLast = CmdFavoriteFirst + 256,
 
-    CmdLast = CmdFavoriteLast,
-    CmdFirstCustom = CmdLast + 100,
+    /* range for themes. We don't have themes yet. */
+    CmdThemeFirst,
+    CmdThemeLast = CmdThemeFirst + 20,
+
+    CmdLast = CmdThemeLast,
 
     // aliases, at the end to not mess ordering
     CmdViewLayoutFirst = CmdSinglePageView,
@@ -238,97 +250,7 @@ enum {
 
 #undef DEF_CMD
 
-struct CommandArg {
-    enum class Type : u16 {
-        None,
-        Bool,
-        Int,
-        Float,
-        String,
-        Color,
-    };
-
-    // arguments are a linked list for simplicity
-    struct CommandArg* next = nullptr;
-
-    Type type = Type::None;
-
-    // TODO: we have a fixed number of argument names
-    // we could use seqstrings and use u16 for arg name id
-    const char* name = nullptr;
-
-    // TODO: could be a union
-    const char* strVal = nullptr;
-    bool boolVal = false;
-    int intVal = 0;
-    float floatVal = 0.0;
-    ParsedColor colorVal;
-
-    CommandArg() = default;
-    ~CommandArg();
-};
-
-void FreeCommandArgs(CommandArg* first);
-
-struct CustomCommand {
-    // all commands are stored as linked list
-    struct CustomCommand* next = nullptr;
-
-    // the command id like CmdOpenFile
-    int origId = 0;
-
-    // for debugging, the full definition of the command
-    // as given by the user
-    const char* definition = nullptr;
-
-    // optional name, if given this shows up in command palette
-    const char* name = nullptr;
-
-    // optional keyboard shortcut
-    const char* key = nullptr;
-
-    // a unique command id generated by us, starting with CmdFirstCustom
-    // it identifies a command with their fixed set of arguments
-    int id = 0;
-
-    // optional
-    const char* idStr = nullptr;
-
-    CommandArg* firstArg = nullptr;
-    CustomCommand() = default;
-    ~CustomCommand();
-};
-
-extern CustomCommand* gFirstCustomCommand;
-extern SeqStrings gCommandDescriptions;
-
 int GetCommandIdByName(const char*);
 int GetCommandIdByDesc(const char*);
 
-CustomCommand* CreateCustomCommand(const char* definition, int origCmdId, CommandArg* args);
-CustomCommand* FindCustomCommand(int cmdId);
-void FreeCustomCommands();
-CommandArg* NewStringArg(const char* name, const char* val);
-CommandArg* NewFloatArg(const char* name, float val);
-void InsertArg(CommandArg** firstPtr, CommandArg* arg);
-
-CustomCommand* CreateCommandFromDefinition(const char* definition);
-CommandArg* GetCommandArg(CustomCommand*, const char* argName);
-int GetCommandIntArg(CustomCommand* cmd, const char* name, int defValue);
-bool GetCommandBoolArg(CustomCommand* cmd, const char* name, bool defValue);
-const char* GetCommandStringArg(CustomCommand* cmd, const char* name, const char* defValue);
-void GetCommandsWithOrigId(Vec<CustomCommand*>& commands, int origId);
-
-constexpr const char* kCmdArgColor = "color";
-constexpr const char* kCmdArgOpenEdit = "openedit";
-constexpr const char* kCmdArgCopyToClipboard = "copytoclipboard";
-constexpr const char* kCmdArgSetContent = "setcontent";
-constexpr const char* kCmdArgExe = "exe";
-constexpr const char* kCmdArgURL = "url";
-constexpr const char* kCmdArgLevel = "level";
-constexpr const char* kCmdArgFilter = "filter";
-constexpr const char* kCmdArgN = "n";
-constexpr const char* kCmdArgMode = "mode";
-constexpr const char* kCmdArgTheme = "theme";
-constexpr const char* kCmdArgCommandLine = "cmdline";
-constexpr const char* kCmdArgToolbarText = "toolbartext";
+extern SeqStrings gCommandDescriptions;

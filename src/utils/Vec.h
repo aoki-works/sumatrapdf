@@ -366,6 +366,15 @@ class Vec {
         }
     }
 
+    T& FindEl(const std::function<bool(T&)>& check) {
+        for (size_t i = 0; i < len; i++) {
+            if (check(els[i])) {
+                return els[i];
+            }
+        }
+        return els[len]; // nullptr-sentinel
+    }
+
     bool IsEmpty() const {
         return len == 0;
     }

@@ -17,7 +17,6 @@
 #include "GlobalPrefs.h"
 #include "SumatraConfig.h"
 #include "FileHistory.h"
-#include "Annotation.h"
 #include "SumatraPDF.h"
 #include "MainWindow.h"
 #include "resource.h"
@@ -95,7 +94,7 @@ static void OnMouseLeftButtonUpAbout(MainWindow* win, int x, int y, WPARAM) {
         LoadArgs args(path, win);
         // ctrl forces always opening
         args.activateExisting = !IsCtrlPressed();
-        StartLoadDocument(&args);
+        LoadDocumentAsync(&args);
     }
     // SetFocus(win->hwndFrame);
 }

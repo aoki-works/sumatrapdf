@@ -9,8 +9,6 @@
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
-#include <bitset>
-#include <intrin.h>
 #include <mlang.h>
 
 #include "utils/Log.h"
@@ -364,7 +362,6 @@ void LogLastError(DWORD err) {
     if (msg == nullptr) {
         msg = (TempStr) "";
     }
-    str::TrimWSInPlace(msg, str::TrimOpt::Both);
     logf("LogLastError: 0x%x (%d) '%s'\n", (int)err, (int)err, msg);
 }
 
@@ -459,19 +456,9 @@ bool WriteRegStr(HKEY hkey, const char* keyName, const char* valName, const char
 }
 
 bool LoggedWriteRegStr(HKEY hkey, const char* keyName, const char* valName, const char* value) {
-    WCHAR* keyNameW = ToWStrTemp(keyName);
-    WCHAR* valNameW = ToWStrTemp(valName);
-    WCHAR* valueW = ToWStrTemp(value);
-
-    DWORD cbData = (DWORD)(str::Len(valueW) + 1) * sizeof(WCHAR);
-    LSTATUS res = SHSetValueW(hkey, keyNameW, valNameW, REG_SZ, (const void*)valueW, cbData);
-    if (res != ERROR_SUCCESS) {
-        logf("WriteRegStr(%s, %s, %s, %s) failed with '%d'\n", RegKeyNameWTemp(hkey), keyName, valName, value, res);
-        LogLastError();
-        return false;
-    }
-    logf("WriteRegStr(%s, %s, %s, %s) failed with '%d' ok!\n", RegKeyNameWTemp(hkey), keyName, valName, value);
-    return true;
+    auto res = WriteRegStr(hkey, keyName, valName, value);
+    logf("WriteRegStr(%s, %s, %s, %s) => '%d'\n", RegKeyNameWTemp(hkey), keyName, valName, value, res);
+    return res;
 }
 
 bool ReadRegDWORD(HKEY hkey, const char* keyName, const char* valName, DWORD& value) {
@@ -489,18 +476,10 @@ bool WriteRegDWORD(HKEY hkey, const char* keyName, const char* valName, DWORD va
     return ERROR_SUCCESS == res;
 }
 
-bool LoggedWriteRegDWORD(HKEY hkey, const char* keyName, const char* valName, DWORD value) {
-    WCHAR* keyNameW = ToWStrTemp(keyName);
-    WCHAR* valNameW = ToWStrTemp(valName);
-    LSTATUS res = SHSetValueW(hkey, keyNameW, valNameW, REG_DWORD, (const void*)&value, sizeof(DWORD));
-    if (res != ERROR_SUCCESS) {
-        logf("WriteRegDWORD(%s, %s, %s, %d) failed with '%d'\n", RegKeyNameWTemp(hkey), keyName, valName, (int)value,
-             res);
-        LogLastError();
-        return false;
-    }
-    logf("WriteRegDWORD(%s, %s, %s, %d) => ok'\n", RegKeyNameWTemp(hkey), keyName, valName, (int)value);
-    return true;
+bool LoggedWriteRegDWORD(HKEY hkey, const char* key, const char* valName, DWORD value) {
+    auto res = WriteRegDWORD(hkey, key, valName, value);
+    logf("WriteRegDWORD(%s, %s, %s, %d) => '%d'\n", RegKeyNameWTemp(hkey), key, valName, (int)value, res);
+    return res;
 }
 
 bool LoggedWriteRegNone(HKEY hkey, const char* key, const char* valName) {
@@ -986,17 +965,15 @@ void OpenPathInExplorer(const char* path) {
     CreateProcessHelper(process, args);
 }
 
-HANDLE LaunchProcessWithCmdLine(const char* exe, const char* cmdLine) {
+HANDLE LaunchProces(const char* exe, const char* cmdLine) {
     PROCESS_INFORMATION pi = {nullptr};
     STARTUPINFOW si{};
     si.cb = sizeof(si);
 
-    // first cmd-line argument should be the exe name
-    TempStr cmd = str::FormatTemp("\"%s\" %s", exe, cmdLine);
-    WCHAR* cmdLineW = ToWStrTemp(cmd);
-
     WCHAR* exeW = ToWStrTemp(exe);
-    // note: cmdLineW is modified by CreateProcessW so must be writeable
+    // CreateProcess() might modify cmd line argument, so make a copy
+    // in case caller provides a read-only string
+    WCHAR* cmdLineW = ToWStrTemp(cmdLine);
     BOOL ok = CreateProcessW(exeW, cmdLineW, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
     if (!ok) {
         return nullptr;
@@ -1006,8 +983,8 @@ HANDLE LaunchProcessWithCmdLine(const char* exe, const char* cmdLine) {
     return pi.hProcess;
 }
 
-// cmdLine must contain quoted exe path as first argument
-HANDLE LaunchProcessInDir(const char* cmdLine, const char* currDir, DWORD flags) {
+// TODO: not sure why I decided to not use lpAplicationName arg to CreateProcessW()
+HANDLE LaunchProcess(const char* cmdLine, const char* currDir, DWORD flags) {
     PROCESS_INFORMATION pi = {nullptr};
     STARTUPINFOW si{};
     si.cb = sizeof(si);
@@ -1029,7 +1006,7 @@ bool CreateProcessHelper(const char* exe, const char* args) {
         args = "";
     }
     TempStr cmd = str::FormatTemp("\"%s\" %s", exe, args);
-    AutoCloseHandle process = LaunchProcessInDir(cmd);
+    AutoCloseHandle process = LaunchProcess(cmd);
     return process != nullptr;
 }
 
@@ -1273,11 +1250,6 @@ void DrawLine(HDC hdc, const Rect& rect) {
     LineTo(hdc, rect.x + rect.dx, rect.y + rect.dy);
 }
 
-// returns previously focused window
-HWND HwndSetFocus(HWND hwnd) {
-    return SetFocus(hwnd);
-}
-
 bool HwndIsFocused(HWND hwnd) {
     return GetFocus() == hwnd;
 }
@@ -1450,12 +1422,12 @@ bool IsWindowStyleExSet(HWND hwnd, DWORD flags) {
     return (style != flags) != 0;
 }
 
-bool HwndIsRtl(HWND hwnd) {
+bool IsRtl(HWND hwnd) {
     DWORD style = GetWindowLong(hwnd, GWL_EXSTYLE);
     return bit::IsMaskSet<DWORD>(style, WS_EX_LAYOUTRTL);
 }
 
-void HwndSetRtl(HWND hwnd, bool isRtl) {
+void SetRtl(HWND hwnd, bool isRtl) {
     SetWindowExStyle(hwnd, WS_EX_LAYOUTRTL | WS_EX_NOINHERITLAYOUT, isRtl);
 }
 
@@ -2012,7 +1984,7 @@ TempWStr HwndGetTextWTemp(HWND hwnd) {
 // return text of window or edit control, nullptr in case of an error
 TempStr HwndGetTextTemp(HWND hwnd) {
     size_t cch = HwndGetTextLen(hwnd);
-    WCHAR* txt = AllocArrayTemp<WCHAR>(cch + 2); // +2 jic
+    WCHAR* txt = AllocArrayTemp<WCHAR>(cch + 2); // +2 for extra room
     if (nullptr == txt) {
         return nullptr;
     }
@@ -2333,8 +2305,8 @@ bool IsValidHandle(HANDLE h) {
 // This is just to satisfy /analyze. CloseHandle(nullptr) works perfectly fine
 // but /analyze complains anyway
 bool SafeCloseHandle(HANDLE* h) {
-    if (IsValidHandle(*h)) {
-        return false;
+    if (!*h) {
+        return true;
     }
     BOOL ok = CloseHandle(*h);
     *h = nullptr;
@@ -2353,11 +2325,6 @@ bool SafeCloseHandle(HANDLE* h) {
 // It'll always run the process, might fail to run non-elevated if fails to find explorer.exe
 // Also, if explorer.exe is running elevated, it'll probably run elevated as well.
 void RunNonElevated(const char* exePath) {
-    if (!file::Exists(exePath)) {
-        logf("RunNonElevated: file '%s' doesn't exist\n", exePath);
-        return;
-    }
-    logf("RunNonElevated: '%s'\n", exePath);
     TempStr cmd = nullptr;
     char* explorerPath = nullptr;
     WCHAR buf[MAX_PATH] = {0};
@@ -2372,7 +2339,7 @@ void RunNonElevated(const char* exePath) {
     }
     cmd = str::FormatTemp("\"%s\" \"%s\"", explorerPath, exePath);
 Run:
-    HANDLE h = LaunchProcessInDir(cmd ? cmd : exePath);
+    HANDLE h = LaunchProcess(cmd ? cmd : exePath);
     SafeCloseHandle(&h);
 }
 
@@ -2421,6 +2388,16 @@ void MessageBoxWarningSimple(HWND hwnd, const WCHAR* msg, const WCHAR* title) {
 
 void MessageBoxNYI(HWND hwnd) {
     MessageBoxWarningSimple(hwnd, L"Not Yet Implemented!", L"NYI");
+}
+
+void HwndScheduleRepaint(HWND hwnd) {
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+// do WM_PAINT immediately
+void RepaintNow(HWND hwnd) {
+    InvalidateRect(hwnd, nullptr, FALSE);
+    UpdateWindow(hwnd);
 }
 
 void VariantInitBstr(VARIANT& urlVar, const WCHAR* s) {
@@ -2750,19 +2727,10 @@ HICON HwndGetIcon(HWND hwnd) {
     return res;
 }
 
-// schedule WM_PAINT at window's leasure
-void HwndScheduleRepaint(HWND hwnd) {
-    InvalidateRect(hwnd, nullptr, FALSE);
-}
-
-// do WM_PAINT immediately
-void HwndRepaintNow(HWND hwnd) {
-    if (!hwnd) {
-        return;
+void HwndInvalidate(HWND hwnd) {
+    if (hwnd) {
+        InvalidateRect(hwnd, nullptr, FALSE);
     }
-    InvalidateRect(hwnd, nullptr, FALSE);
-    // send WM_PAINT right away (normally would wait for empty msg queue)
-    UpdateWindow(hwnd);
 }
 
 void HwndSetFont(HWND hwnd, HFONT font) {
@@ -3065,82 +3033,4 @@ int MsgBox(HWND hwnd, const char* text, const char* caption, UINT flags) {
     TempWStr textW = ToWStrTemp(text);
     TempWStr captionW = ToWStrTemp(caption);
     return MessageBoxW(hwnd, textW, captionW, flags);
-}
-
-// https://learn.microsoft.com/en-us/cpp/intrinsics/cpuid-cpuidex?view=msvc-170
-u32 CpuID() {
-#if IS_ARM_64
-    return 0;
-#else
-    std::bitset<32> f_1_ECX_;
-    std::bitset<32> f_1_EDX_;
-    std::bitset<32> f_7_EBX_;
-    std::bitset<32> f_7_ECX_;
-
-    u32 res = 0;
-    int cpuInfo[4]{};
-    __cpuid(cpuInfo, 0);
-    int nIds = cpuInfo[0];
-    if (nIds >= 1) {
-        __cpuid(cpuInfo, 1);
-        f_1_ECX_ = cpuInfo[2];
-        f_1_EDX_ = cpuInfo[3];
-    }
-    if (nIds >= 7) {
-        __cpuid(cpuInfo, 7);
-        f_7_EBX_ = cpuInfo[1];
-        f_7_ECX_ = cpuInfo[2];
-    }
-
-    if (f_1_EDX_[23]) {
-        res = res | kCpuMMX;
-    }
-    if (f_1_EDX_[25]) {
-        res = res | kCpuSSE;
-    }
-    if (f_1_EDX_[26]) {
-        res = res | kCpuSSE2;
-    }
-    if (f_1_ECX_[0]) {
-        res = res | kCpuSSE3;
-    }
-    if (f_1_ECX_[9]) {
-        res = res | kCpuSSE3;
-    }
-    if (f_1_ECX_[19]) {
-        res = res | kCpuSSE41;
-    }
-    if (f_1_ECX_[20]) {
-        res = res | kCpuSSE42;
-    }
-    if (f_1_ECX_[28]) {
-        res = res | kCpuAVX;
-    }
-    if (f_7_EBX_[5]) {
-        res = res | kCpuAVX2;
-    }
-    return res;
-#endif
-}
-
-LARGE_INTEGER TimeNow() {
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return now;
-}
-
-double TimeDiffSecs(const LARGE_INTEGER& start, const LARGE_INTEGER& end) {
-    LARGE_INTEGER freq;
-    QueryPerformanceFrequency(&freq);
-    auto diff = end.QuadPart - start.QuadPart;
-    double res = (double)(diff) / (double)(freq.QuadPart);
-    return res;
-}
-
-double TimeDiffMs(const LARGE_INTEGER& start, const LARGE_INTEGER& end) {
-    LARGE_INTEGER freq;
-    QueryPerformanceFrequency(&freq);
-    auto diff = end.QuadPart - start.QuadPart;
-    double res = (double)(diff) / (double)(freq.QuadPart);
-    return res * 1000;
 }

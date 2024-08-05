@@ -110,6 +110,7 @@ TocItem::~TocItem() {
         next = tmp;
     }
     str::Free(title);
+    str::Free(engineFilePath);
 }
 
 void TocItem::AddSibling(TocItem* sibling) {
@@ -259,13 +260,10 @@ HTREEITEM TocTree::GetHandle(TreeItem ti) {
 }
 
 // TODO: speed up by removing recursion
-bool VisitTocTree(TocItem* ti, const VisitTocTreeCb& f) {
+bool VisitTocTree(TocItem* ti, const std::function<bool(TocItem*)>& f) {
     bool cont;
-    VisitTocTreeData d;
     while (ti) {
-        d.ti = ti;
-        f.Call(&d);
-        cont = !d.stopTraversal;
+        cont = f(ti);
         if (cont && ti->child) {
             cont = VisitTocTree(ti->child, f);
         }
@@ -277,14 +275,11 @@ bool VisitTocTree(TocItem* ti, const VisitTocTreeCb& f) {
     return true;
 }
 
-static bool VisitTocTreeWithParentRecursive(TocItem* ti, TocItem* parent, const VisitTocTreeCb& f) {
+static bool VisitTocTreeWithParentRecursive(TocItem* ti, TocItem* parent,
+                                            const std::function<bool(TocItem* ti, TocItem* parent)>& f) {
     bool cont;
-    VisitTocTreeData d;
     while (ti) {
-        d.ti = ti;
-        d.parent = parent;
-        f.Call(&d);
-        cont = !d.stopTraversal;
+        cont = f(ti, parent);
         if (cont && ti->child) {
             cont = VisitTocTreeWithParentRecursive(ti->child, ti, f);
         }
@@ -296,17 +291,17 @@ static bool VisitTocTreeWithParentRecursive(TocItem* ti, TocItem* parent, const 
     return true;
 }
 
-bool VisitTocTreeWithParent(TocItem* ti, const VisitTocTreeCb& f) {
+bool VisitTocTreeWithParent(TocItem* ti, const std::function<bool(TocItem* ti, TocItem* parent)>& f) {
     return VisitTocTreeWithParentRecursive(ti, nullptr, f);
 }
 
-static void SetTocItemParent(VisitTocTreeData* d) {
-    d->ti->parent = d->parent;
+static bool setTocItemParent(TocItem* ti, TocItem* parent) {
+    ti->parent = parent;
+    return true;
 }
 
 void SetTocTreeParents(TocItem* treeRoot) {
-    auto fn = MkFunc1Void(SetTocItemParent);
-    VisitTocTreeWithParent(treeRoot, fn);
+    VisitTocTreeWithParent(treeRoot, setTocItemParent);
 }
 
 RenderPageArgs::RenderPageArgs(int pageNo, float zoom, int rotation, RectF* pageRect, RenderTarget target,

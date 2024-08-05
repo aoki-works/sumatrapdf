@@ -37,124 +37,7 @@ static bool IsSpecialDir(const char* s) {
     return str::Eq(s, ".") || str::Eq(s, "..");
 }
 
-static void AdvanceDirIter(DirIter::iterator* it, int n) {
-    if (it->didFinish) {
-        return;
-    }
-    if (it->data.stopTraversal) {
-        // could have been set by user accessing prev traversal
-        it->didFinish = true;
-        return;
-    }
-
-    u32 flg = it->di->flags;
-    bool includeFiles = flg & kVisitDirIncudeFiles;
-    bool includeDirs = flg & kVisitDirIncludeDirs;
-    bool recur = flg & kVisitDirRecurse;
-
-    bool ok;
-    // TODO: pick up dir from dirsToVisit
-    if (!it->pattern) {
-        // first call
-        auto dirW = ToWStrTemp(it->di->dir);
-        it->pattern = path::Join(dirW, L"*");
-        it->h = FindFirstFileW(it->pattern, &it->fd);
-        if (!IsValidHandle(it->h)) {
-            it->didFinish = true;
-            return;
-        }
-    } else {
-        ok = FindNextFileW(it->h, &it->fd);
-        if (!ok) {
-            SafeCloseHandle(&it->h);
-            it->didFinish = true;
-            return;
-        }
-    }
-    bool isFile;
-    bool isDir;
-    bool cont = true;
-    char* name;
-    char* path;
-    while (true) {
-        isFile = IsRegularFile(it->fd.dwFileAttributes);
-        isDir = IsDirectory(it->fd.dwFileAttributes);
-        name = ToUtf8Temp(it->fd.cFileName);
-        path = path::JoinTemp(it->di->dir, name);
-        if (isFile && includeFiles) {
-            it->data.filePath = path;
-            return;
-        }
-        if (isDir && !IsSpecialDir(name)) {
-            if (includeDirs) {
-                it->data.filePath = path;
-                return;
-            }
-            if (recur) {
-                it->dirsToVisit.Append(path);
-            }
-        }
-        ok = FindNextFileW(it->h, &it->fd);
-        if (!ok) {
-            SafeCloseHandle(&it->h);
-            it->didFinish = true;
-            return;
-        }
-    };
-}
-
-DirIter::iterator::iterator(const DirIter* di, bool didFinish) {
-    this->di = di;
-    this->didFinish = didFinish;
-    this->data.fd = &this->fd;
-    AdvanceDirIter(this, 1);
-}
-
-DirIter::iterator::~iterator() {
-    str::Free(pattern);
-}
-
-DirIter::iterator DirIter::begin() const {
-    return DirIter::iterator(this, false);
-}
-
-DirIter::iterator DirIter::end() const {
-    return DirIter::iterator(this, true);
-}
-
-VisitDirData* DirIter::iterator::operator*() {
-    if (didFinish) {
-        return nullptr;
-    }
-    return &data;
-}
-
-// postfix increment
-DirIter::iterator DirIter::iterator::operator++(int) {
-    auto res = *this;
-    AdvanceDirIter(this, 1);
-    return res;
-}
-
-DirIter::iterator& DirIter::iterator::operator++() {
-    AdvanceDirIter(this, 1);
-    return *this;
-}
-
-DirIter::iterator& DirIter::iterator::operator+(int n) {
-    AdvanceDirIter(this, n);
-    return *this;
-}
-
-bool operator==(const DirIter::iterator& a, const DirIter::iterator& b) {
-    return (a.di == b.di) && (a.didFinish == b.didFinish);
-};
-
-bool operator!=(const DirIter::iterator& a, const DirIter::iterator& b) {
-    return (a.di != b.di) || (a.didFinish != b.didFinish);
-};
-
-// if cb sets stopTraversal to true, we stop
+// if cb returns false, we stop further traversal
 bool VisitDir(const char* dir, u32 flg, const VisitDirCb& cb) {
     ReportIf(flg == 0);
     bool includeFiles = flg & kVisitDirIncudeFiles;
@@ -175,23 +58,17 @@ bool VisitDir(const char* dir, u32 flg, const VisitDirCb& cb) {
     bool cont = true;
     char* name;
     char* path;
-    VisitDirData d;
-    d.fd = &fd;
     do {
         isFile = IsRegularFile(fd.dwFileAttributes);
         isDir = IsDirectory(fd.dwFileAttributes);
         name = ToUtf8Temp(fd.cFileName);
         path = path::JoinTemp(dir, name);
         if (isFile && includeFiles) {
-            d.filePath = path;
-            cb.Call(&d);
-            cont = !d.stopTraversal;
+            cont = cb(&fd, path);
         }
         if (isDir && !IsSpecialDir(name)) {
             if (includeDirs) {
-                d.filePath = path;
-                cb.Call(&d);
-                cont = !d.stopTraversal;
+                cont = cb(&fd, path);
             }
             if (cont && recur) {
                 cont = VisitDir(path, flg, cb);
@@ -222,7 +99,9 @@ bool CollectPathsFromDirectory(const char* pattern, StrVec& paths) {
         return false;
     }
 
+    bool append;
     do {
+        append = false;
         char* name = ToUtf8Temp(fdata.cFileName);
         DWORD attrs = fdata.dwFileAttributes;
         if (IsRegularFile(attrs)) {
@@ -234,32 +113,14 @@ bool CollectPathsFromDirectory(const char* pattern, StrVec& paths) {
     return paths.Size() > 0;
 }
 
-struct CollectFilesData {
-    StrVec* files = nullptr;
-    VisitDirCb fileMatches;
-};
-
-static void CollectFilesCb(CollectFilesData* d, VisitDirData* vd) {
-    bool matches = true;
-    if (d->fileMatches.IsValid()) {
-        vd->fileMatches = false;
-        d->fileMatches.Call(vd);
-        matches = vd->fileMatches;
-    }
-    if (!matches) {
-        return;
-    }
-    d->files->Append(vd->filePath);
-}
-
 bool CollectFilesFromDirectory(const char* dir, StrVec& files, const VisitDirCb& fileMatches) {
     u32 flg = kVisitDirIncudeFiles;
-    auto data = new CollectFilesData;
-    data->files = &files;
-    data->fileMatches = fileMatches;
-    auto fn = MkFunc1(CollectFilesCb, data);
-    bool ok = VisitDir(dir, flg, fn);
-    delete data;
+    bool ok = VisitDir(dir, flg, [&files, &fileMatches](WIN32_FIND_DATAW* fd, const char* path) -> bool {
+        if (fileMatches(fd, path)) {
+            files.Append(path);
+        }
+        return true;
+    });
     return ok;
 }
 
@@ -276,19 +137,25 @@ struct DirTraverseThreadData {
     bool recurse = false;
 };
 
-static void DirTraverseThreadCb(DirTraverseThreadData* td, VisitDirData* d) {
-    td->queue->Append(d->filePath);
-}
+static DWORD WINAPI DirTraverseThread(LPVOID data) {
+    DirTraverseThreadData* td = (DirTraverseThreadData*)data;
+    ReportIf(!td);
 
-static void DirTraverseThread(DirTraverseThreadData* td) {
-    auto fn = MkFunc1(DirTraverseThreadCb, td);
-    DirTraverse(td->dir, td->recurse, fn);
+    DirTraverse(td->dir, td->recurse, [td](WIN32_FIND_DATAW*, const char* path) -> bool {
+        td->queue->Append(path);
+        return true;
+    });
     td->queue->MarkFinished();
-    delete td;
+    return 0;
 }
 
 void StartDirTraverseAsync(StrQueue* queue, const char* dir, bool recurse) {
     auto td = new DirTraverseThreadData{queue, dir, recurse};
-    auto fn = MkFunc0(DirTraverseThread, td);
-    RunAsync(fn, "DirTraverseThread");
+    DWORD threadId = 0;
+    HANDLE hThread = CreateThread(nullptr, 0, DirTraverseThread, (void*)td, 0, &threadId);
+    if (!hThread) {
+        return;
+    }
+    SetThreadName("DirTraverseThread", threadId);
+    CloseHandle(hThread);
 }

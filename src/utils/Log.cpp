@@ -27,7 +27,7 @@ bool gLogToDebugger = false;
 bool gReducedLogging = false;
 // when main thread exists other threads might still
 // try to log. when true, this stops logging
-bool gDestroyedLogging = false;
+bool gStopLogging = false;
 
 // if true, doesn't log if the same text has already been logged
 // reduces logging but also can be confusing i.e. log lines are not showing up
@@ -126,7 +126,7 @@ void log(const char* s, bool always) {
             OutputDebugStringA(s);
         }
     }
-    if (gDestroyedLogging) {
+    if (gStopLogging) {
         return;
     }
     if (gReducedLogging) {
@@ -179,15 +179,9 @@ void log(const char* s, bool always) {
     logToPipe(s, n);
     gLogMutex.Unlock();
 }
-void loga(const char* s) {
-    if (gDestroyedLogging) {
-        return;
-    }
-    log(s, true);
-}
 
 void logf(const char* fmt, ...) {
-    if (gReducedLogging || gDestroyedLogging) {
+    if (gReducedLogging || gStopLogging) {
         return;
     }
 
@@ -199,15 +193,14 @@ void logf(const char* fmt, ...) {
 }
 
 void logfa(const char* fmt, ...) {
-    if (gDestroyedLogging) {
+    if (gStopLogging) {
         return;
     }
 
     va_list args;
     va_start(args, fmt);
-    char* s = str::FmtV(fmt, args);
-    log(s, true);
-    str::Free(s);
+    AutoFreeStr s = str::FmtV(fmt, args);
+    log(s.Get(), true);
     va_end(args);
 }
 
@@ -237,7 +230,7 @@ bool WriteCurrentLogToFile(const char* path) {
 }
 
 void DestroyLogging() {
-    gDestroyedLogging = true;
+    gStopLogging = true;
     gLogMutex.Lock();
     delete gLogBuf;
     gLogBuf = nullptr;

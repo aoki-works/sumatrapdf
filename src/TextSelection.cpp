@@ -342,7 +342,7 @@ WCHAR* TextSelection::ExtractText(const char* lineSep) {
         }
     }
 
-    TempStr res = JoinTemp(&lines, lineSep);
+    TempStr res = JoinTemp(lines, lineSep);
     return ToWStr(res);
 }
 
@@ -360,7 +360,7 @@ WCHAR* TextSelection::ExtractText(const char* lineSep, const int pageNo) {
             FillResultRects(this, pageNo, glyph, length, &lines);
         }
     }
-    TempStr res = JoinTemp(&lines, lineSep);
+    TempStr res = JoinTemp(lines, lineSep);
     return ToWStr(res);
 }
 

@@ -581,20 +581,6 @@ static bool PrintToDevice(const PrintData& pd) {
     return true;
 }
 
-struct UpdatePrintProgressData {
-    NotificationWnd* wnd;
-    int current;
-    int total;
-};
-
-static void UpdatePrintProgress(UpdatePrintProgressData* d) {
-    UpdateNotificationProgress(d->wnd, d->current, d->total);
-    delete d;
-}
-
-class PrintThreadData;
-void RemovePrintNotif(PrintThreadData* self, NotificationWnd*);
-
 class PrintThreadData : public ProgressUpdateUI {
   public:
     NotificationWnd* wnd = nullptr;
@@ -605,24 +591,13 @@ class PrintThreadData : public ProgressUpdateUI {
     PrintData* data = nullptr;
     HANDLE thread = nullptr; // close the print thread handle after execution
 
-    // called when printing has been canceled
-    void RemovePrintNotification() {
-        isCanceled = true;
-        cookie.Abort();
-        if (this->wnd && IsMainWindowValid(win)) {
-            RemoveNotification(this->wnd);
-        }
-        this->wnd = nullptr;
-    }
-
     PrintThreadData(MainWindow* win, PrintData* data) {
         this->win = win;
         this->data = data;
         NotificationCreateArgs args;
         args.hwndParent = win->hwndCanvas;
         args.timeoutMs = 0;
-        auto fn = MkFunc1(RemovePrintNotif, this);
-        args.onRemoved = fn;
+        args.onRemoved = [this](NotificationWnd* wnd) { RemovePrintNotification(); };
         args.progressMsg = _TRA("Printing page %d of %d...");
         // don't use a groupId for this notification so that
         // multiple printing notifications could coexist between tabs
@@ -638,41 +613,27 @@ class PrintThreadData : public ProgressUpdateUI {
         RemovePrintNotification();
     }
 
+    // called when printing has been canceled
+    void RemovePrintNotification() {
+        isCanceled = true;
+        cookie.Abort();
+        if (this->wnd && MainWindowStillValid(win)) {
+            RemoveNotification(this->wnd);
+        }
+        this->wnd = nullptr;
+    }
+
     void UpdateProgress(int current, int total) override {
-        auto data = new UpdatePrintProgressData;
-        data->wnd = wnd;
-        data->current = current;
-        data->total = total;
-        auto fn = MkFunc0<UpdatePrintProgressData>(UpdatePrintProgress, data);
-        uitask::Post(fn, "TaskPrintUpdateProgress");
+        uitask::Post(TaskPrintUpdateProgress, [=] { UpdateNotificationProgress(wnd, current, total); });
     }
 
     bool WasCanceled() override {
-        return isCanceled || !IsMainWindowValid(win) || win->printCanceled;
+        return isCanceled || !MainWindowStillValid(win) || win->printCanceled;
     }
 };
 
-void RemovePrintNotif(PrintThreadData* self, NotificationWnd*) {
-    self->RemovePrintNotification();
-}
-
-struct DeletePrinterThreadData {
-    MainWindow* win;
-    HANDLE thread;
-    PrintThreadData* threadData;
-};
-
-static void DeletePrinterThread(DeletePrinterThreadData* d) {
-    auto win = d->win;
-    if (IsMainWindowValid(win) && d->thread == win->printThread) {
-        win->printThread = nullptr;
-    }
-    delete d->threadData;
-    delete d;
-}
-
-static DWORD WINAPI PrintThread(void* d) {
-    PrintThreadData* threadData = (PrintThreadData*)d;
+static DWORD WINAPI PrintThread(LPVOID data) {
+    PrintThreadData* threadData = (PrintThreadData*)data;
     MainWindow* win = threadData->win;
     // wait for PrintToDeviceOnThread to return so that we
     // close the correct handle to the current printing thread
@@ -687,12 +648,12 @@ static DWORD WINAPI PrintThread(void* d) {
     pd->abortCookie = &threadData->cookie;
     PrintToDevice(*pd);
 
-    auto data = new DeletePrinterThreadData;
-    data->win = win;
-    data->thread = thread;
-    data->threadData = threadData;
-    auto fn = MkFunc0<DeletePrinterThreadData>(DeletePrinterThread, data);
-    uitask::Post(fn, "PrintDeleteThread");
+    uitask::Post(PrintDeleteThread, [=] {
+        if (MainWindowStillValid(win) && thread == win->printThread) {
+            win->printThread = nullptr;
+        }
+        delete threadData;
+    });
     DestroyTempAllocator();
     return 0;
 }
@@ -778,7 +739,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     if (win->AsChm()) {
         // the Print dialog allows access to the file system, so fall back
         // to printing the entire document without dialog if that isn't desired
-        bool showUI = CanAccessDisk();
+        bool showUI = HasPermission(Perm::DiskAccess);
         win->AsChm()->PrintCurrentPage(showUI);
         return;
     }
@@ -814,7 +775,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
 
     // the Print dialog allows access to the file system, so fall back
     // to printing the entire document without dialog if that isn't desired
-    if (!CanAccessDisk()) {
+    if (!HasPermission(Perm::DiskAccess)) {
         PrintFile2(engine);
         return;
     }
@@ -1136,7 +1097,7 @@ static void ApplyPrintSettings(Printer* printer, const char* settings, int pageC
 
     StrVec rangeList;
     if (settings) {
-        Split(&rangeList, settings, ",", true);
+        Split(rangeList, settings, ",", true);
     }
 
     for (char* s : rangeList) {

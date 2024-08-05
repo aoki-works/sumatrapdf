@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -47,10 +47,7 @@ public class Link
 	public native void setURI(String uri);
 
 	public boolean isExternal() {
-		return Link.isExternal(getURI());
-	}
-
-	public static boolean isExternal(String uri) {
+		String uri = getURI();
 		char c = uri.charAt(0);
 		if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z'))
 			return false;

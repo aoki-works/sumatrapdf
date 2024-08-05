@@ -13,7 +13,7 @@
 // per RFC 1945 10.15 and 3.7, a user agent product token shouldn't contain whitespace
 constexpr const WCHAR* kUserAgent = L"SumatraPdfHTTP";
 
-bool IsHttpRspOk(const HttpRsp* rsp) {
+bool HttpRspOk(const HttpRsp* rsp) {
     if (rsp->error != ERROR_SUCCESS) {
         logf("HttpRspOk: rsp->error %d, should be %d (ERROR_SUCCESS)\n", (int)rsp->error, (int)ERROR_SUCCESS);
         return false;
@@ -88,7 +88,7 @@ Exit:
     if (hInet) {
         InternetCloseHandle(hInet);
     }
-    return IsHttpRspOk(rspOut);
+    return HttpRspOk(rspOut);
 
 Error:
     rspOut->error = GetLastError();
@@ -98,10 +98,8 @@ Error:
     goto Exit;
 }
 
-constexpr const int kBufSize = 256 * 1024;
-
 // Download content of a url to a file
-bool HttpGetToFile(const char* urlA, const char* destFilePath, const Func1<HttpProgress*>& cbProgress) {
+bool HttpGetToFile(const char* urlA, const char* destFilePath) {
     logf("HttpGetToFile: url: '%s', file: '%s'\n", urlA, destFilePath);
     bool ok = false;
     HINTERNET hReq = nullptr, hInet = nullptr;
@@ -109,9 +107,7 @@ bool HttpGetToFile(const char* urlA, const char* destFilePath, const Func1<HttpP
     DWORD headerBuffSize = sizeof(DWORD);
     DWORD statusCode = 0;
     WCHAR* url = ToWStrTemp(urlA);
-    char* buf = nullptr;
-
-    HttpProgress progress{0};
+    char buf[1024];
 
     WCHAR* pathW = ToWStrTemp(destFilePath);
     HANDLE hf =
@@ -119,11 +115,6 @@ bool HttpGetToFile(const char* urlA, const char* destFilePath, const Func1<HttpP
     if (INVALID_HANDLE_VALUE == hf) {
         logf("HttpGetToFile: CreateFileW('%s') failed\n", destFilePath);
         LogLastError();
-        goto Exit;
-    }
-
-    buf = AllocArray<char>(kBufSize);
-    if (!buf) {
         goto Exit;
     }
 
@@ -146,7 +137,7 @@ bool HttpGetToFile(const char* urlA, const char* destFilePath, const Func1<HttpP
     }
 
     for (;;) {
-        if (!InternetReadFile(hReq, buf, kBufSize, &dwRead)) {
+        if (!InternetReadFile(hReq, buf, sizeof(buf), &dwRead)) {
             goto Exit;
         }
         if (dwRead == 0) {
@@ -157,8 +148,6 @@ bool HttpGetToFile(const char* urlA, const char* destFilePath, const Func1<HttpP
         if (!wroteOk) {
             goto Exit;
         }
-        progress.nDownloaded += (int)dwRead;
-        cbProgress.Call(&progress);
 
         if (size != dwRead) {
             goto Exit;
@@ -177,7 +166,6 @@ Exit:
     if (!ok) {
         file::Delete(destFilePath);
     }
-    free(buf);
     return ok;
 }
 

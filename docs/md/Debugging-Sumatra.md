@@ -12,11 +12,11 @@ Those instructions require SumatraPDF 3.2 or later.
 
 ## Getting logs
 
-We log information that might be helpful in diagnosing issues.
+We log information that might be helpful in debugging issues in memory. Sometimes we might ask you to send us logs.
 
-To see the logs: `Ctrl + K` ([Command Palette](Command-Palette.md)), type `show log`
+To see the logs: press `Ctrl + K` ([Command Palette](Command-Palette.md)), type `show log`
 
-This saves logs to a file and opens default editor for `.txt` files with log file.
+This saves current logs to a file and opens default .txt editor with log file.
 
 ## Install necessary software
 
@@ -25,7 +25,7 @@ This saves logs to a file and opens default editor for `.txt` files with log fil
 
 First, vocabulary. `%ProgramFiles%` means the standard directory where Windows installs programs. It's `c:\Program Files` on 32-bit Windows and `c:\Program Files (x86)` on 64-bit Windows.
 
-## Debugging a crash
+## **Debugging a crash**
 
 To debug crashes:
 
@@ -37,7 +37,7 @@ To debug crashes:
         - `g`
 - when Sumatra crashes, type: `!analyze -v` and paste the result of that to the bug report
 
-## Debugging a hang
+## **Debugging a hang**
 
 Here are the steps to follow if Sumatra hangs
 

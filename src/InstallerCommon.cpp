@@ -79,7 +79,7 @@ static Color gMsgColor;
 static StrVec gProcessesToClose;
 
 PreviousInstallationInfo::~PreviousInstallationInfo() {
-    str::Free(installationDir);
+    free(installationDir);
 }
 
 // This is in HKLM. Note that on 64bit windows, if installing 32bit app
@@ -139,16 +139,13 @@ void GetPreviousInstallInfo(PreviousInstallationInfo* info) {
     char* dirCU = LoggedReadRegStrTemp(HKEY_CURRENT_USER, regPathUninst, "InstallLocation");
     if (dirLM && dirCU) {
         info->typ = PreviousInstallationType::Both;
-        info->allUsers = true;
     } else if (dirLM) {
         info->typ = PreviousInstallationType::Machine;
-        info->allUsers = true;
     } else {
         info->typ = PreviousInstallationType::User;
     }
-    logf("GetPreviousInstallInfo: dir '%s', search filter: %d, preview: %d, typ: %d, needsElevation: %d\n",
-         info->installationDir, (int)info->searchFilterInstalled, (int)info->previewInstalled, (int)info->typ,
-         (int)info->allUsers);
+    logf("GetPreviousInstallInfo: dir '%s', search filter: %d, preview: %d, typ: %d\n", info->installationDir,
+         (int)info->searchFilterInstalled, (int)info->previewInstalled, (int)info->typ);
 }
 
 static char* GetExistingInstallationFilePathTemp(const char* name) {
@@ -159,10 +156,20 @@ static char* GetExistingInstallationFilePathTemp(const char* name) {
     return path::JoinTemp(dir, name);
 }
 
+char* GetInstallDirTemp() {
+    logf("GetInstallDirTemp() => %s\n", gCli->installDir);
+    return gCli->installDir;
+}
+
 char* GetInstallationFilePathTemp(const char* name) {
     TempStr res = path::JoinTemp(gCli->installDir, name);
     logf("GetInstallationFilePath(%s) = > %s\n", name, res);
     return res;
+}
+
+TempStr GetInstalledExePathTemp() {
+    TempStr dir = GetInstallDirTemp();
+    return path::JoinTemp(dir, kExeName);
 }
 
 TempStr GetShortcutPathTemp(int csidl) {
@@ -504,10 +511,10 @@ void SetDefaultMsg() {
 }
 
 void InvalidateFrame() {
-    HwndRepaintNow(gHwndFrame);
+    HwndInvalidate(gHwndFrame);
 }
 
-bool CheckInstallUninstallPossible(HWND hwnd, bool silent) {
+bool CheckInstallUninstallPossible(bool silent) {
     logf("CheckInstallUninstallPossible(silent=%d)\n", silent);
     KillProcessesUsingInstallation();
     // logf("CheckInstallUninstallPossible: KillProcessesUsingInstallation() returned %d\n", ok);
@@ -528,7 +535,8 @@ bool CheckInstallUninstallPossible(HWND hwnd, bool silent) {
             MessageBeep(MB_ICONEXCLAMATION);
         }
     }
-    HwndRepaintNow(hwnd);
+    InvalidateFrame();
+
     return possible;
 }
 
@@ -652,7 +660,7 @@ static void CalcLettersLayout(Graphics& g, Font* f, int dx) {
     WCHAR s[2]{};
     Gdiplus::PointF origin(0.f, 0.f);
     Gdiplus::RectF bbox;
-    for (int i = 0; i < dimofi(gLetters); i++) {
+    for (int i = 0; i < dimof(gLetters); i++) {
         li = &gLetters[i];
         s[0] = li->c;
         g.MeasureString(s, 1, f, origin, &sfmt, &bbox);
@@ -663,7 +671,7 @@ static void CalcLettersLayout(Graphics& g, Font* f, int dx) {
     }
 
     float x = ((float)dx - totalDx) / 2.f;
-    for (int i = 0; i < dimofi(gLetters); i++) {
+    for (int i = 0; i < dimof(gLetters); i++) {
         li = &gLetters[i];
         li->x = x;
         x += li->dx;
@@ -706,7 +714,7 @@ static float DrawMessage(Graphics& g, const char* msg, float y, float dx, Color 
 static void DrawSumatraLetters(Graphics& g, Font* f, Font* fVer, float y) {
     LetterInfo* li;
     WCHAR s[2]{};
-    for (int i = 0; i < dimofi(gLetters); i++) {
+    for (int i = 0; i < dimof(gLetters); i++) {
         li = &gLetters[i];
         s[0] = li->c;
         if (s[0] == ' ') {

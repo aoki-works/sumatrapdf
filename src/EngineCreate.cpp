@@ -12,7 +12,6 @@
 #include "SumatraConfig.h"
 #include "Annotation.h"
 #include "Settings.h"
-#include "SumatraPDF.h"
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
@@ -165,9 +164,6 @@ static bool IsEngineMupdf(EngineBase* engine) {
 }
 
 bool EngineSupportsAnnotations(EngineBase* engine) {
-    if (AnnotationsAreDisabled()) {
-        return false;
-    }
     if (!IsEngineMupdf(engine)) {
         return false;
     }

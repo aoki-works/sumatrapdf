@@ -17,7 +17,6 @@
 #include "EngineBase.h"
 #include "GlobalPrefs.h"
 #include "Flags.h"
-#include "Commands.h"
 
 #include <float.h>
 #include <math.h>
@@ -104,9 +103,8 @@ static void ParseCommandLineTest() {
 
     {
         Flags i;
-        ParseFlags(
-            L"SumatraPDF.exe -page 37 -view continuousfacing -zoom fitcontent -scroll 45,1234         -reuse-instance",
-            i);
+        ParseFlags(L"SumatraPDF.exe -page 37 -view continuousfacing -zoom fitcontent -scroll 45,1234 -reuse-instance",
+                   i);
         utassert(0 == i.fileNames.Size());
         utassert(i.pageNumber == 37);
         utassert(i.startView == DisplayMode::ContinuousFacing);
@@ -224,79 +222,7 @@ static void colorTest() {
     utassert(c == c2);
 }
 
-static void assertGoToNextPage3(int cmdId) {
-    auto cmd = FindCustomCommand(cmdId);
-    utassert(cmd->origId == CmdGoToNextPage);
-    auto arg = GetCommandArg(cmd, kCmdArgN);
-    utassert(arg->intVal == 3);
-}
-
-void parseCommandsTest() {
-    CommandArg* arg;
-
-    {
-        auto cmd = CreateCommandFromDefinition(" CmdCreateAnnotHighlight   #00ff00 openEdit copytoclipboard");
-        utassert(cmd->origId == CmdCreateAnnotHighlight);
-
-        arg = GetCommandArg(cmd, kCmdArgColor);
-        utassert(arg != nullptr);
-        arg = GetCommandArg(cmd, kCmdArgOpenEdit);
-        utassert(arg != nullptr);
-        utassert(GetCommandBoolArg(cmd, kCmdArgOpenEdit, false) == true);
-        utassert(GetCommandBoolArg(cmd, kCmdArgCopyToClipboard, false) == true);
-    }
-    {
-        auto cmd = CreateCommandFromDefinition(" CmdCreateAnnotHighlight   #00ff00 OpenEdit=yes");
-        utassert(cmd->origId == CmdCreateAnnotHighlight);
-
-        utassert(GetCommandArg(cmd, kCmdArgColor) != nullptr);
-        utassert(GetCommandArg(cmd, kCmdArgOpenEdit) != nullptr);
-        utassert(GetCommandBoolArg(cmd, kCmdArgOpenEdit, false) == true);
-    }
-    {
-        {
-            auto cmd = CreateCommandFromDefinition("CmdGoToNextPage 3");
-            assertGoToNextPage3(cmd->id);
-        }
-        {
-            auto cmd = CreateCommandFromDefinition("CmdGoToNextPage n 3");
-            assertGoToNextPage3(cmd->id);
-        }
-        {
-            auto cmd = CreateCommandFromDefinition("CmdGoToNextPage n: 3");
-            assertGoToNextPage3(cmd->id);
-        }
-        {
-            auto cmd = CreateCommandFromDefinition("CmdGoToNextPage n=3");
-            assertGoToNextPage3(cmd->id);
-        }
-    }
-    {
-        const char* argStr = R"("C:\Program Files\FoxitReader\FoxitReader.exe" /A page=%p "%1)";
-        const char* s = str::JoinTemp("CmdExec   ", argStr);
-        auto cmd = CreateCommandFromDefinition(s);
-        utassert(cmd->origId == CmdExec);
-        auto cmd2 = FindCustomCommand(cmd->id);
-        utassert(cmd == cmd2);
-        arg = GetCommandArg(cmd, kCmdArgExe);
-        utassert(str::Eq(arg->strVal, argStr));
-    }
-    {
-        const char* argStr = R"("C:\Program Files\FoxitReader\FoxitReader.exe" /A page=%p "%1)";
-        const char* s = str::JoinTemp("CmdExec  filter: *.jpeg ", argStr);
-        auto cmd = CreateCommandFromDefinition(s);
-        utassert(cmd->origId == CmdExec);
-        auto cmd2 = FindCustomCommand(cmd->id);
-        utassert(cmd == cmd2);
-        arg = GetCommandArg(cmd, kCmdArgExe);
-        utassert(str::Eq(arg->strVal, argStr));
-        arg = GetCommandArg(cmd, kCmdArgFilter);
-        utassert(str::Eq(arg->strVal, "*.jpeg"));
-    }
-}
-
 void SumatraPDF_UnitTests() {
-    parseCommandsTest();
     colorTest();
     BenchRangeTest();
     ParseCommandLineTest();

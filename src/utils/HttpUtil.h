@@ -1,7 +1,8 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
-struct HttpRsp {
+class HttpRsp {
+  public:
     AutoFreeStr url;
     str::Str data;
     DWORD error = (DWORD)-1;
@@ -10,12 +11,8 @@ struct HttpRsp {
     HttpRsp() = default;
 };
 
-struct HttpProgress {
-    int nDownloaded;
-};
-
-bool IsHttpRspOk(const HttpRsp*);
+bool HttpRspOk(const HttpRsp*);
 
 bool HttpPost(const char* server, int port, const char* url, str::Str* headers, str::Str* data);
 bool HttpGet(const char* url, HttpRsp* rspOut);
-bool HttpGetToFile(const char* url, const char* destFilePath, const Func1<HttpProgress*>& cbProgress);
+bool HttpGetToFile(const char* url, const char* destFilePath);

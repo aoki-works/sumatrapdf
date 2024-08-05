@@ -4,7 +4,6 @@
 #include "BaseUtil.h"
 #include "ScopedWin.h"
 #include "WinDynCalls.h"
-#include "WinUtil.h"
 
 #include "ThreadUtil.h"
 
@@ -57,30 +56,68 @@ void SetThreadName(DWORD, const char*) {
 }
 #endif // COMPILER_MSVC
 
-static DWORD WINAPI ThreadFunc0(void* data) {
-    auto* fn = (Func0*)(data);
-    fn->Call();
-    delete fn;
+// We need a way to uniquely identified threads (so that we can test for equality).
+// Thread id assigned by the OS might be recycled. The memory address given to ThreadBase
+// object can be recycled as well, so we keep our own counter.
+static int GenUniqueThreadId() {
+    static LONG gThreadNoSeq = 0;
+    return (int)InterlockedIncrement(&gThreadNoSeq);
+}
+
+ThreadBase::ThreadBase(const char* name) {
+    threadNo = GenUniqueThreadId();
+    threadName = str::Dup(name);
+    // lf("ThreadBase() %d", threadNo);
+}
+
+ThreadBase::~ThreadBase() {
+    // lf("~ThreadBase() %d", threadNo);
+    CloseHandle(hThread);
+}
+
+DWORD WINAPI ThreadBase::ThreadProc(void* data) {
+    ThreadBase* thread = reinterpret_cast<ThreadBase*>(data);
+    if (thread->threadName) {
+        SetThreadName(thread->threadName);
+    }
+    thread->Run();
+    return 0;
+}
+
+void ThreadBase::Start() {
+    ReportIf(hThread);
+    hThread = CreateThread(nullptr, 0, ThreadProc, this, 0, nullptr);
+}
+
+bool ThreadBase::Join(DWORD waitMs) {
+    DWORD res = WaitForSingleObject(hThread, waitMs);
+    if (WAIT_OBJECT_0 == res) {
+        CloseHandle(hThread);
+        hThread = nullptr;
+        return true;
+    }
+    return false;
+}
+
+static DWORD WINAPI ThreadFunc(void* data) {
+    auto* func = reinterpret_cast<std::function<void()>*>(data);
+    (*func)();
+    delete func;
     DestroyTempAllocator();
     return 0;
 }
 
-HANDLE StartThread(const Func0& fn, const char* threadName) {
-    auto fp = new Func0(fn);
+void RunAsync(const std::function<void()>& func, const char* threadName) {
+    auto fp = new std::function<void()>(func);
     DWORD threadId = 0;
-    HANDLE hThread = CreateThread(nullptr, 0, ThreadFunc0, (void*)fp, 0, &threadId);
+    HANDLE hThread = CreateThread(nullptr, 0, ThreadFunc, (void*)fp, 0, &threadId);
     if (!hThread) {
-        return nullptr;
+        return;
     }
     if (threadName != nullptr) {
         SetThreadName(threadName, threadId);
     }
-    return hThread;
-}
-
-void RunAsync(const Func0& fn, const char* threadName) {
-    HANDLE hThread = StartThread(fn, threadName);
-    SafeCloseHandle(&hThread);
+    CloseHandle(hThread);
 }
 
 AtomicInt gDangerousThreadCount;

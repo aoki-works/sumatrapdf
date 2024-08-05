@@ -96,7 +96,6 @@ struct MainWindow {
 
     HWND hwndFrame = nullptr;
     HWND hwndCanvas = nullptr;
-
     HWND hwndReBar = nullptr;
     HWND hwndToolbar = nullptr;
     HWND hwndFindLabel = nullptr;
@@ -205,7 +204,7 @@ struct MainWindow {
     bool printCanceled = false;
 
     HANDLE findThread = nullptr;
-    bool findCancelled = false;
+    bool findCanceled = false;
 
     ILinkHandler* linkHandler = nullptr;
     IPageElement* linkOnLastButtonDown = nullptr;
@@ -257,14 +256,14 @@ struct MainWindow {
 };
 
 void UpdateControlsColors(MainWindow*);
-void ScheduleRepaint(MainWindow*, int delay);
+void RepaintAsync(MainWindow*, int delay);
 void ClearFindBox(MainWindow*);
 void CreateMovePatternLazy(MainWindow*);
 void ClearMouseState(MainWindow*);
 bool IsRightDragging(MainWindow*);
-MainWindow* FindMainWindowByTab(WindowTab*);
+MainWindow* FindMainWindowByWindowTab(WindowTab*);
 MainWindow* FindMainWindowByHwnd(HWND);
-bool IsMainWindowValid(MainWindow*);
+bool MainWindowStillValid(MainWindow*);
 MainWindow* FindMainWindowByController(DocController*);
+
 extern Vec<MainWindow*> gWindows;
-void HighlightTab(MainWindow*, WindowTab*);

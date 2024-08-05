@@ -38,27 +38,25 @@ static char* GetInstallDate() {
     return str::Format("%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
 }
 
-static void GetDirSizeCb(i64* totalSize, VisitDirData* data) {
-    i64 fileSize = GetFileSize(data->fd);
-    *totalSize += fileSize;
-}
-
 // Note: doesn't handle (total) sizes above 4GB
 static DWORD GetDirSize(const char* dir, bool recur) {
     logf("GetDirSize(%s)\n", dir);
     i64 totalSize = 0;
-    auto fn = MkFunc1(GetDirSizeCb, &totalSize);
-    DirTraverse(dir, recur, fn);
+    DirTraverse(dir, recur, [&totalSize](WIN32_FIND_DATAW* fd, const char*) -> bool {
+        i64 fileSize = GetFileSize(fd);
+        totalSize += fileSize;
+        return true;
+    });
     return (DWORD)totalSize;
 }
 
-bool WriteUninstallerRegistryInfo(HKEY hkey, bool allUsers, const char* installDir) {
-    logf("WriteUninstallerRegistryInfo(hKey: %s, allUsers: %d, installDir: '%s')\n", RegKeyNameTemp(hkey),
-         (int)allUsers, installDir);
+bool WriteUninstallerRegistryInfo(HKEY hkey, bool allUsers) {
+    logf("WriteUninstallerRegistryInfo(hKey: %s, allUsers: %d)\n", RegKeyNameTemp(hkey), (int)allUsers);
     bool ok = true;
 
-    TempStr installedExePath = path::JoinTemp(installDir, kExeName);
+    char* installedExePath = GetInstallationFilePathTemp(kExeName);
     AutoFreeStr installDate = GetInstallDate();
+    char* installDir = GetInstallDirTemp();
     // uninstaller is the same executable with a different flag
     char* uninstallerPath = installedExePath;
     TempStr uninstallCmdLine = str::FormatTemp("\"%s\" -uninstall", uninstallerPath);
@@ -149,8 +147,8 @@ Then in:
 ShCtx\Software\Classes\${ext}\OpenWithProgids
   SumatraPDF.${ext} = "" (empty REG_SZ value)
 */
-static bool RegisterForOpenWith(HKEY hkey, const char* installedExePath) {
-    char* exePathQuoted = str::JoinTemp(R"(")", installedExePath, R"(")");
+bool RegisterForOpenWith(HKEY hkey) {
+    char* exePathQuoted = str::JoinTemp(R"(")", GetInstalledExePathTemp(), R"(")");
     char* cmdOpen = str::JoinTemp(exePathQuoted, R"( "%1" "%2" "%3" "%4")");
     char* cmdPrint = str::JoinTemp(exePathQuoted, " -print-to-default \"%1\"");
     char* cmdPrintTo = str::JoinTemp(exePathQuoted, " -print-to \"%2\" \"%1\"");
@@ -258,7 +256,7 @@ Software\Classes\SumatraPDF\shell\open\command = "$exePath" "%1"
   tells how to call sumatra to open PDF file. %1 is replaced by PDF file path
 
 Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\Progid
-  should be SumatraPDF (Foxit takes it over); only needed for HKEY_CURRENT_USER
+  should be SumatraPDF (FoxIt takes it over); only needed for HKEY_CURRENT_USER
   TODO: No other app seems to set this one, and only UserChoice seems to make
         a difference - is this still required for Windows XP?
 
@@ -466,7 +464,7 @@ bool OldWriteFileAssoc(HKEY hkey) {
 #endif
 
 // http://msdn.microsoft.com/en-us/library/cc144148(v=vs.85).aspx
-bool WriteExtendedFileExtensionInfo(HKEY hkey, const char* installedExePath) {
+bool WriteExtendedFileExtensionInfo(HKEY hkey) {
     logf("WriteExtendedFileExtensionInfo('%s')\n", RegKeyNameTemp(hkey));
     bool ok = true;
     const char* key;
@@ -476,7 +474,7 @@ bool WriteExtendedFileExtensionInfo(HKEY hkey, const char* installedExePath) {
     if (IsWindows10OrGreater()) {
         ok &= RegisterForDefaultPrograms(hkey);
     }
-    ok &= RegisterForOpenWith(hkey, installedExePath);
+    ok &= RegisterForOpenWith(hkey);
 
     // in case these values don't exist yet (we won't delete these at uninstallation)
     ok &= LoggedWriteRegStr(hkey, kRegClassesPdf, "Content Type", "application/pdf");

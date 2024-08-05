@@ -61,7 +61,7 @@ struct OverlappedEx {
 
 // info needed to detect that a file has changed
 struct FileWatcherState {
-    FILETIME time{};
+    FILETIME time = {0};
     i64 size = 0;
 };
 
@@ -78,7 +78,7 @@ struct WatchedFile {
     WatchedFile* next = nullptr;
     WatchedDir* watchedDir = nullptr;
     const char* filePath = nullptr;
-    Func0 onFileChangedCb;
+    std::function<void()> onFileChangedCb;
 
     // if true, the file is on a network drive and we have
     // to check if it changed manually, by periodically checking
@@ -96,6 +96,7 @@ void WatchedFileSetIgnore(WatchedFile* wf, bool ignore) {
 }
 
 static HANDLE gThreadHandle = nullptr;
+static DWORD gThreadId = 0;
 
 static HANDLE gThreadControlHandle = nullptr;
 
@@ -177,7 +178,7 @@ static void NotifyAboutFile(WatchedDir* d, const char* fileName) {
         // because the time granularity is so big that this can cause genuine
         // file notifications to be ignored. (This happens for instance for
         // PDF files produced by pdftex from small.tex document)
-        wf->onFileChangedCb.Call();
+        wf->onFileChangedCb();
     }
 }
 
@@ -242,7 +243,7 @@ static void CALLBACK ReadDirectoryChangesNotification(DWORD errCode, DWORD bytes
         logf("ReadDirectoryChangesNotification: %s '%s'\n", actionName, fileName);
         if (notify->Action == FILE_ACTION_ADDED || notify->Action == FILE_ACTION_MODIFIED ||
             notify->Action == FILE_ACTION_RENAMED_NEW_NAME) {
-            AppendIfNotExists(&changedFiles, fileName);
+            AppendIfNotExists(changedFiles, fileName);
         }
 
         // step to the next entry if there is one
@@ -272,6 +273,8 @@ static void CALLBACK StartMonitoringDirForChangesAPC(ULONG_PTR arg) {
     if (wd->startMonitoring) {
         logf("StartMonitoringDirForChangesAPC() %s\n", wd->dirPath);
     }
+
+    ReportIf(gThreadId != GetCurrentThreadId());
 
     DWORD dwNotifyFilter = FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME;
     ReadDirectoryChangesW(wd->hDir,
@@ -307,12 +310,12 @@ static void RunManualChecks() {
         }
         if (FileStateChanged(wf->filePath, &wf->fileState)) {
             // logf("RunManualCheck() %s changed\n", wf->filePath);
-            wf->onFileChangedCb.Call();
+            wf->onFileChangedCb();
         }
     }
 }
 
-static void FileWatcherThread() {
+static DWORD WINAPI FileWatcherThread(void*) {
     HANDLE handles[1];
     // must be alertable to receive ReadDirectoryChangesW() callbacks and APCs
     BOOL alertable = TRUE;
@@ -345,6 +348,7 @@ static void FileWatcherThread() {
         }
     }
     DestroyTempAllocator();
+    return 0;
 }
 
 static WatchedDir* FindExistingWatchedDir(const char* dirPath) {
@@ -394,7 +398,7 @@ static WatchedDir* NewWatchedDir(const char* dirPath) {
     return wd;
 }
 
-static WatchedFile* NewWatchedFile(const char* filePath, const Func0& onFileChangedCb) {
+static WatchedFile* NewWatchedFile(const char* filePath, const std::function<void()>& onFileChangedCb) {
     WCHAR* pathW = ToWStrTemp(filePath);
     bool isManualCheck = PathIsNetworkPathW(pathW);
     TempStr dirPath = path::GetDirTemp(filePath);
@@ -445,7 +449,7 @@ We take ownership of observer object.
 Returns a cancellation token that can be used in FileWatcherUnsubscribe(). That
 way we can support multiple callers subscribing to the same file.
 */
-WatchedFile* FileWatcherSubscribe(const char* path, const Func0& onFileChangedCb) {
+WatchedFile* FileWatcherSubscribe(const char* path, const std::function<void()>& onFileChangedCb) {
     // logf("FileWatcherSubscribe() path: %s\n", path);
 
     if (!file::Exists(path)) {
@@ -463,8 +467,10 @@ WatchedFile* FileWatcherSubscribe(const char* path, const Func0& onFileChangedCb
         InitializeCriticalSection(&gThreadCritSec);
         gThreadControlHandle = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 
-        auto fn = MkFunc0Void(FileWatcherThread);
-        gThreadHandle = StartThread(fn, "FileWatcherThread");
+        gThreadHandle = CreateThread(nullptr, 0, FileWatcherThread, nullptr, 0, &gThreadId);
+        if (gThreadHandle) {
+            SetThreadName("FileWatcherThread", gThreadId);
+        }
     }
 
     ScopedCritSec cs(&gThreadCritSec);

@@ -3,10 +3,10 @@
 
 struct NotificationWnd;
 
-extern Kind kNotifCursorPos;
-extern Kind kNotifActionResponse;
+extern Kind kNotifGroupCursorPos;
+extern Kind kNotifGroupActionResponse;
 
-using NotificationWndRemoved = Func1<NotificationWnd*>;
+using NotificationWndRemovedCallback = std::function<void(NotificationWnd*)>;
 
 constexpr const int kNotifDefaultTimeOut = 1000 * 3; // 3 seconds
 constexpr const int kNotif5SecsTimeOut = 1000 * 5;
@@ -14,17 +14,17 @@ constexpr const int kNotif5SecsTimeOut = 1000 * 5;
 struct NotificationCreateArgs {
     HWND hwndParent = nullptr;
     HFONT font = nullptr;
-    Kind groupId = kNotifActionResponse;
+    Kind groupId = kNotifGroupActionResponse;
     bool warning = false;
     int timeoutMs = 0; // if 0 => persists until closed manually
     const char* msg = nullptr;
     const char* progressMsg = nullptr;
-    NotificationWndRemoved onRemoved;
+    NotificationWndRemovedCallback onRemoved;
 };
 
 void NotificationUpdateMessage(NotificationWnd* wnd, const char* msg, int timeoutInMS = 0, bool highlight = false);
 void RemoveNotification(NotificationWnd*);
-bool RemoveNotificationsForGroup(HWND hwnd, Kind);
+void RemoveNotificationsForGroup(HWND hwnd, Kind);
 NotificationWnd* GetNotificationForGroup(HWND hwnd, Kind);
 bool UpdateNotificationProgress(NotificationWnd*, int, int);
 bool NotificationExists(NotificationWnd*);

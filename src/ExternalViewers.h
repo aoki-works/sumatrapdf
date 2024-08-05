@@ -1,7 +1,8 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
-bool HasKnownExternalViewerForCmd(int cmd);
+bool HasExternalViewerForCmd(int cmd);
+bool ViewWithExternalViewer(WindowTab* tab, size_t idx);
 
 void DetectExternalViewers();
 void FreeExternalViewers();
@@ -12,6 +13,4 @@ bool CanSendAsEmailAttachment(WindowTab* tab = nullptr);
 bool SendAsEmailAttachment(WindowTab* tab, HWND hwndParent = nullptr);
 
 bool CouldBePDFDoc(WindowTab*);
-bool PathMatchFilter(const char* path, const char* filter);
-
-bool RunWithExe(WindowTab* tab, const char* cmdLine, const char* filter);
+bool PathMatchFilter(const char* path, char* filter);

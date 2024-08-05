@@ -49,15 +49,9 @@ struct TreeModel {
     virtual HTREEITEM GetHandle(TreeItem) = 0;
 };
 
-struct TreeItemVisitorData {
-    TreeModel* model = nullptr;
-    TreeItem item = 0;
-    bool stopTraversal = false;
-};
-
 // function called for every item in the TreeModel
 // return false to stop iteration
-using TreeItemVisitor = Func1<TreeItemVisitorData*>;
+using TreeItemVisitor = std::function<bool(TreeModel*, TreeItem)>;
 
 bool VisitTreeModelItems(TreeModel*, const TreeItemVisitor& visitor);
 

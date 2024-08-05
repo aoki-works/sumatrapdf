@@ -10,7 +10,6 @@ struct PreviousInstallationInfo {
     PreviousInstallationType typ = PreviousInstallationType::None;
     bool searchFilterInstalled = false;
     bool previewInstalled = false;
-    bool allUsers = false;
 
     PreviousInstallationInfo() = default;
     ~PreviousInstallationInfo();
@@ -60,6 +59,8 @@ bool ExtractInstallerFiles(char* dir);
 
 char* GetExistingInstallationDir();
 
+char* GetInstallDirTemp();
+TempStr GetInstalledExePathTemp();
 void GetPreviousInstallInfo(PreviousInstallationInfo* info);
 
 char* GetInstallationFilePathTemp(const char* name);
@@ -72,7 +73,7 @@ void UnRegisterSearchFilter();
 
 void UninstallBrowserPlugin();
 
-bool CheckInstallUninstallPossible(HWND hwnd, bool silent = false);
+bool CheckInstallUninstallPossible(bool silent = false);
 char* GetInstallerLogPath();
 
 TempStr GetRegPathUninstTemp(const char* appName);
@@ -82,8 +83,8 @@ void RemoveAppShortcuts();
 
 // RegistryInstaller.cpp
 
-bool WriteUninstallerRegistryInfo(HKEY hkey, bool allUsers, const char* installedExePat);
-bool WriteExtendedFileExtensionInfo(HKEY hkey, const char* installedExePat);
+bool WriteUninstallerRegistryInfo(HKEY hkey, bool allUsers);
+bool WriteExtendedFileExtensionInfo(HKEY hkey);
 bool RemoveUninstallerRegistryInfo(HKEY hkey);
 void RemoveInstallRegistryKeys(HKEY hkey);
 int GetInstallerWinDx();

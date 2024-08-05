@@ -33,16 +33,16 @@ static void doMainLayout() {
     InvalidateRect(g_hwnd, nullptr, false);
 }
 
-static void onCheckboxChanged(Checkbox::State state) {
+static void onCheckboxChanged(CheckState state) {
     const char* name = "";
     switch (state) {
-        case Checkbox::State::Unchecked:
+        case CheckState::Unchecked:
             name = "unchecked";
             break;
-        case Checkbox::State::Checked:
+        case CheckState::Checked:
             name = "checked";
             break;
-        case Checkbox::State::Indeterminate:
+        case CheckState::Indeterminate:
             name = "indeterminate";
             break;
         default:
@@ -56,7 +56,7 @@ static void onCheckboxChanged(Checkbox::State state) {
 static CheckboxCtrl* CreateCheckbox(HWND parent, std::string_view s) {
     auto b = new CheckboxCtrl();
     b->SetText(s);
-    b->onStateChanged = onCheckboxChanged;
+    b->onCheckStateChanged = onCheckboxChanged;
     b->Create(parent);
     return b;
 }
@@ -112,7 +112,7 @@ static ProgressCtrl* CreateProgress(HWND parent, int maxRange) {
     return w;
 }
 
-static void ToggleMainAxis(void*) {
+static void ToggleMainAxis() {
     u8 n = (u8)vboxLayout->alignMain + 1;
     if (n > (u8)MainAxisAlign::Homogeneous) {
         n = 0;
@@ -122,7 +122,7 @@ static void ToggleMainAxis(void*) {
     doMainLayout();
 }
 
-static void ToggleCrossAxis(void*) {
+static void ToggleCrossAxis() {
     u8 n = (u8)vboxLayout->alignCross + 1;
     if (n > (u8)CrossAxisAlign::CrossEnd) {
         n = 0;
@@ -132,7 +132,7 @@ static void ToggleCrossAxis(void*) {
     doMainLayout();
 }
 
-static void AdvanceProgress(void*) {
+static void AdvanceProgress() {
     currProgress++;
     if (currProgress > maxProgress) {
         currProgress = 0;
@@ -147,12 +147,12 @@ static void CreateMainLayout(HWND hwnd) {
     vbox->alignMain = MainAxisAlign::MainEnd;
     vbox->alignCross = CrossAxisAlign::Stretch;
     {
-        auto b = CreateButton(hwnd, "toggle main axis", mkFunc0<void>(ToggleMainAxis, nullptr));
+        auto b = CreateButton(hwnd, "toggle main axis", ToggleMainAxis);
         vbox->AddChild(b);
     }
 
     {
-        auto b = CreateButton(hwnd, "advance progress", mkFunc0<void>(AdvanceProgress, nullptr));
+        auto b = CreateButton(hwnd, "advance progress", AdvanceProgress);
         vbox->AddChild(b);
     }
 
@@ -162,7 +162,7 @@ static void CreateMainLayout(HWND hwnd) {
     }
 
     {
-        auto b = CreateButton(hwnd, "toggle cross axis", mkFunc0<void>(ToggleCrossAxis, nullptr));
+        auto b = CreateButton(hwnd, "toggle cross axis", ToggleCrossAxis);
         vbox->AddChild(b);
     }
 

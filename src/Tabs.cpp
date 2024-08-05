@@ -43,7 +43,7 @@ static void UpdateTabTitle(WindowTab* tab) {
     MainWindow* win = tab->win;
     int idx = win->GetTabIdx(tab);
     const char* title = tab->GetTabTitle();
-    const char* tooltip = tab->filePath;
+    const char* tooltip = tab->filePath.Get();
     win->tabsCtrl->SetTextAndTooltip(idx, title, tooltip);
 }
 
@@ -96,22 +96,16 @@ void RemoveTab(WindowTab* tab) {
     int idx = win->GetTabIdx(tab);
     WindowTab* tab2 = win->tabsCtrl->RemoveTab<WindowTab*>(idx);
     ReportIf(tab != tab2);
-    bool closedCurrentTab = (tab == win->CurrentTab());
-    if (closedCurrentTab) {
+    if (tab == win->CurrentTab()) {
         win->ctrl = nullptr;
         win->currentTabTemp = nullptr;
     }
     UpdateTabWidth(win);
 
-    int nTabs = win->TabCount();
-    if (nTabs < 1) {
-        return;
-    }
-    if (!closedCurrentTab) {
-        return;
-    }
     // if the removed tab was the current one, select another
-#if 0
+    if (win->TabCount() < 1) {
+        return;
+    }
     WindowTab* curr = win->CurrentTab();
     WindowTab* newCurrent = curr;
     if (!curr || newCurrent == tab) {
@@ -126,17 +120,6 @@ void RemoveTab(WindowTab* tab) {
     win->tabsCtrl->SetSelected(newIdx);
     tab = win->CurrentTab();
     LoadModelIntoTab(tab);
-#else
-    // select tab to the right or to the left if nothing to the right
-    int newIdx = idx;
-    int lastIdx = nTabs - 1;
-    if (newIdx > lastIdx) {
-        newIdx = lastIdx;
-    }
-    win->tabsCtrl->SetSelected(newIdx);
-    tab = win->CurrentTab();
-    LoadModelIntoTab(tab);
-#endif
 }
 
 static void CloseWindowIfNoDocuments(MainWindow* win) {
@@ -305,7 +288,7 @@ void CloseAllTabs(MainWindow* win) {
 static void TabsContextMenu(ContextMenuEvent* ev) {
     MainWindow* win = FindMainWindowByHwnd(ev->w->hwnd);
     TabsCtrl* tabsCtrl = (TabsCtrl*)ev->w;
-    TabsCtrl::MouseState tabState = tabsCtrl->TabStateFromMousePosition(ev->mouseWindow);
+    TabMouseState tabState = tabsCtrl->TabStateFromMousePosition(ev->mouseWindow);
     int tabIdx = tabState.tabIdx;
     if (tabIdx < 0) {
         return;
@@ -317,7 +300,7 @@ static void TabsContextMenu(ContextMenuEvent* ev) {
         return;
     }
     POINT pt = ToPOINT(ev->mouseScreen);
-    HMENU popup = BuildMenuFromDef(menuDefContextTab, CreatePopupMenu(), nullptr);
+    HMENU popup = BuildMenuFromMenuDef(menuDefContextTab, CreatePopupMenu(), nullptr);
 
     Vec<WindowTab*> toCloseOther;
     Vec<WindowTab*> toCloseRight;
@@ -366,7 +349,7 @@ static void TabsContextMenu(ContextMenuEvent* ev) {
             break;
         }
         case CmdShowInFolder: {
-            SumatraOpenPathInExplorer(tabUnderMouse->filePath);
+            SumatraOpenPathInExplorer(tabUnderMouse->GetPath());
             break;
         }
         case CmdCopyFilePath: {
@@ -385,51 +368,46 @@ static void TabsContextMenu(ContextMenuEvent* ev) {
     }
 }
 
-static void MainWindowTabClosed(MainWindow* win, TabsCtrl::ClosedEvent* ev) {
-    int closedTabIdx = ev->tabIdx;
-    WindowTab* tab = win->GetTab(closedTabIdx);
-    CloseTab(tab, false);
-}
-
-static void MainWindowTabSelectionChanging(MainWindow* win, TabsCtrl::SelectionChangingEvent* ev) {
-    // TODO: Should we allow the switch of the tab if we are in process of printing?
-    SaveCurrentWindowTab(win);
-    ev->preventChanging = false;
-}
-
-static void MainWindowTabSelectionChanged(MainWindow* win, TabsCtrl::SelectionChangedEvent* ev) {
-    int currentIdx = win->tabsCtrl->GetSelected();
-    WindowTab* tab = win->Tabs()[currentIdx];
-    LoadModelIntoTab(tab);
-}
-
-static void MainWindowTabMigration(MainWindow* win, TabsCtrl::MigrationEvent* ev) {
-    WindowTab* tab = win->GetTab(ev->tabIdx);
-    MainWindow* releaseWnd = nullptr;
-    POINT p;
-    p.x = ev->releasePoint.x;
-    p.y = ev->releasePoint.y;
-    HWND hwnd = WindowFromPoint(p);
-    if (hwnd != nullptr) {
-        releaseWnd = FindMainWindowByHwnd(hwnd);
-    }
-    if (releaseWnd == win) {
-        // don't re-add to the same window
-        releaseWnd = nullptr;
-    }
-    MigrateTab(tab, releaseWnd);
-}
-
 void CreateTabbar(MainWindow* win) {
     TabsCtrl* tabsCtrl = new TabsCtrl();
 
-    tabsCtrl->onTabClosed = MkFunc1(MainWindowTabClosed, win);
-    tabsCtrl->onSelectionChanging = MkFunc1(MainWindowTabSelectionChanging, win);
-    tabsCtrl->onSelectionChanged = MkFunc1(MainWindowTabSelectionChanged, win);
-    tabsCtrl->onContextMenu = MkFunc1Void(TabsContextMenu);
-    tabsCtrl->onTabMigration = MkFunc1(MainWindowTabMigration, win);
+    tabsCtrl->onTabClosed = [win](TabClosedEvent* ev) {
+        int closedTabIdx = ev->tabIdx;
+        WindowTab* tab = win->GetTab(closedTabIdx);
+        CloseTab(tab, false);
+    };
 
-    TabsCtrl::CreateArgs args;
+    tabsCtrl->onSelectionChanging = [win](TabsSelectionChangingEvent* ev) -> bool {
+        // TODO: Should we allow the switch of the tab if we are in process of printing?
+        SaveCurrentWindowTab(win);
+        return false;
+    };
+
+    tabsCtrl->onSelectionChanged = [win](TabsSelectionChangedEvent* ev) {
+        int currentIdx = win->tabsCtrl->GetSelected();
+        WindowTab* tab = win->Tabs()[currentIdx];
+        LoadModelIntoTab(tab);
+    };
+    tabsCtrl->onContextMenu = TabsContextMenu;
+
+    tabsCtrl->onTabMigration = [win](TabMigrationEvent* ev) {
+        WindowTab* tab = win->GetTab(ev->tabIdx);
+        MainWindow* releaseWnd = nullptr;
+        POINT p;
+        p.x = ev->releasePoint.x;
+        p.y = ev->releasePoint.y;
+        HWND hwnd = WindowFromPoint(p);
+        if (hwnd != nullptr) {
+            releaseWnd = FindMainWindowByHwnd(hwnd);
+        }
+        if (releaseWnd == win) {
+            // don't re-add to the same window
+            releaseWnd = nullptr;
+        }
+        MigrateTab(tab, releaseWnd);
+    };
+
+    TabsCreateArgs args;
     args.parent = win->hwndFrame;
     args.withToolTips = true;
     args.font = GetAppFont();
@@ -519,7 +497,7 @@ WindowTab* AddTabToWindow(MainWindow* win, WindowTab* tab) {
     tab->canvasRc = win->canvasRc;
     TabInfo* newTab = new TabInfo();
     newTab->text = str::Dup(tab->GetTabTitle());
-    newTab->tooltip = str::Dup(tab->filePath);
+    newTab->tooltip = str::Dup(tab->filePath.Get());
     newTab->userData = (UINT_PTR)tab;
 
     int insertedIdx = tabs->InsertTab(idx, newTab);
@@ -581,7 +559,7 @@ void TabsOnCtrlTab(MainWindow* win, bool reverse) {
     if (!win) {
         return;
     }
-    int count = win->TabCount();
+    int count = (int)win->TabCount();
     if (count < 2) {
         return;
     }

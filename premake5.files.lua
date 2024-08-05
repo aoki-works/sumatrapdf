@@ -601,17 +601,6 @@ files {
 }
 
 function sumatrapdf_files()
-  files_in_dir(".", {
-    "do/*.go",
-    "docs/*.txt",
-    "docs/*.html",
-    "docs/md/*.md",
-    "docs/www/*.css",
-    "premake5.lua",
-    "premake5.obsolete.lua",
-    "premake5.files.lua",
-    ".gitignore",
-  })
   files_in_dir("src", {
     "Accelerators.*",
     "Actions.*",
@@ -630,7 +619,6 @@ function sumatrapdf_files()
     "DocController.h",
     "DocProperties.*",
     "EditAnnotations.*",
-    "EngineDump.cpp",
     "ExternalViewers.*",
     "Favorites.*",
     "FileHistory.*",
@@ -652,6 +640,7 @@ function sumatrapdf_files()
     "RegistryPreview.*",
     "RegistrySearchFilter.*",
     "resource.h",
+    "SaveAsPdf.*",
     "SearchAndDDE.*",
     "Selection.*",
     "Settings.h",
@@ -684,6 +673,15 @@ function sumatrapdf_files()
 
     "ext/versions.txt",
     "scratch.txt",
+    "../docs/*.txt",
+    "../docs/*.html",
+    "../docs/md/*.md",
+    "../premake5.lua",
+    "../premake5.obsolete.lua",
+    "../premake5.files.lua",
+    "../.gitignore",
+
+    "../do/*.go",
   })
   filter {"configurations:Debug or DebugFull"}
     files_in_dir("src", {
@@ -803,6 +801,7 @@ function engines_files()
     "EngineDjVu.*",
     "EngineEbook.*",
     "EngineImages.*",
+    "EngineMulti.*",
     "EngineMupdf.*",
     "EngineMupdfImpl.*",
     "EnginePs.*",
@@ -1178,7 +1177,6 @@ function test_util_files()
   files_in_dir("src", {
     --"StressTesting.*",
     --"AppTools.*",
-    "Commands.*",
     "CrashHandlerNoOp.cpp",
     "DisplayMode.*",
     "Flags.*",
@@ -1186,6 +1184,17 @@ function test_util_files()
     "SettingsStructs.*",
     "SumatraUnitTests.cpp",
     "tools/test_util.cpp"
+  })
+end
+
+function engine_dump_files()
+  files_in_dir("src", {
+    "CrashHandlerNoOp.cpp",
+    "EngineDump.cpp",
+    "SumatraConfig.*",
+    "FzImgReader.*",
+    "mui/Mui.*",
+    "mui/TextRender.*"
   })
 end
 

@@ -4,12 +4,11 @@
 
   let idx = 2;
   /** @type {[string, number][]} */
-  let logs = [];
+  let logs = [["Logview SumatraPDF", 1]];
   let filteredLogs = [];
   let autoScrollPaused = false;
   let btnText = "pause scrolling";
   let searchTerm = "";
-  let searchTermLC = "";
   let element;
 
   /**
@@ -20,7 +19,6 @@
     if (searchTerm === "") {
       return false;
     }
-    s = s.toLowerCase();
     return s.includes(searchTerm);
   }
 
@@ -33,24 +31,21 @@
     s = s.trimEnd();
     let lines = s.split("\n");
     let didMatch = false;
-    console.log(`lines: ${lines.length}`);
     for (let l of lines) {
       /** @type {[string, number]}*/
       let el = [l, idx];
       idx = idx + 1;
       logs.push(el);
-      if (matches(l, searchTermLC)) {
+      if (matches(l, searchTerm)) {
         filteredLogs.push(el);
         didMatch = true;
       }
     }
-
-    if (searchTermLC === "") {
+    if (searchTerm === "") {
       logs = logs;
       filteredLogs = logs;
       return;
     }
-
     if (didMatch) {
       filteredLogs = filteredLogs;
     }
@@ -63,14 +58,13 @@
    */
   function filterLogs(searchTerm) {
     searchTerm = searchTerm.trim();
-    searchTermLC = searchTerm.toLowerCase();
-    if (searchTermLC === "") {
+    if (searchTerm === "") {
       filteredLogs = logs;
       return;
     }
     let res = [];
     for (let el of logs) {
-      if (matches(el[0], searchTermLC)) {
+      if (matches(el[0], searchTerm)) {
         res.push(el);
       }
     }
@@ -109,10 +103,9 @@
     return o ? o.length : 0;
   }
   function clearLogs() {
-    logs = [];
-    filteredLogs = [];
+    logs = [["Logview SumatraPDF", 1]];
+    filteredLogs = logs;
   }
-
   function aboutClicked() {
     let uri = "https://www.sumatrapdfreader.org/docs/Logview";
     // @ts-ignore

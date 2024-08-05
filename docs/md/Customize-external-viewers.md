@@ -2,16 +2,16 @@
 
 SumatraPDF makes it easy for you to open current document in a different program.
 
-For example, if you also have Adobe Reader installed, you can use `File` menu to open PDF document you're viewing in Adobe Reader. We auto-detect some popular apps (Adobe, Foxit, PDF X-Change etc.).
+For example, if you also have Adobe Reader installed, you can use `File` menu to easily open PDF document you're viewing in Adobe Reader. We auto-detect a bunch of popular apps (Adobe, FoxIt, PDF X-Change etc.).
 
-You can add custom viewers using [advanced settings](https://www.sumatrapdfreader.org/settings/settings.html).
+You can also add custom readers using [advanced settings](https://www.sumatrapdfreader.org/settings/settings.html).
 
-To configure an external viewer:
+To configure an external reader:
 
 - use `Settings / Advanced Settings...` menu to open configuration file
 - modify`ExternalViewers` section
 
-Relevant settings:
+Here are the relevant settings:
 
 ```
 ExternalViewers [
@@ -19,33 +19,29 @@ ExternalViewers [
     CommandLine =
     Name =
     Filter =
-
-    // ver 3.6+:
-    Key = 
   ]
 ]
 ```
 
-Example:
+An example could be:
 
 ```
 ExternalViewers [
-  [
-    CommandLine = "C:\Program Files\FoxitReader\FoxitReader.exe" /A page=%p "%1"
-    Name = Foxit &Reader
-    Filter = *.pdf
-    Key = Ctrl + m
-  ]
+	[
+		CommandLine = "C:\Program Files\FoxitReader\FoxitReader.exe" /A page=%p "%1"
+		Name = Foxit &Basic 3D view or Review Text
+		Filter = *.pdf
+	]
 ]
 ```
 
-`CommandLine` is a full path of executable to open a file with arguments.
+`CommandLine` is a full path of executable that opens a given type of the file.
 
-Arguments can use special values:
+You can use special values in `CommandLine`:
 
 - `"%1"` : will be replaced with a full path of the current document
-- `%p` : will be replaced with current page number. Not all viewers support page numbers
-- `"%d"` : will be replaced with directory of the current document. Useful for launching file managers. Available in version **3.5** and later
+- `%p` : replaced with current page number. Not all viewers support page number
+- `"%d"` : replaced with directory of the current document. Useful for launching file managers. Available in version **3.5** and later
 
 Please make sure to use quotes around file / directory special values (i.e. `"%1"` and `"%d"`) to avoid issues with file paths that have spaces in them.
 
@@ -57,4 +53,4 @@ Please make sure to use quotes around file / directory special values (i.e. `"%1
 - to activate for PNG and JPEG files, use `*.png;*.jpg;*.jpeg`
 - to allow all files, use `*` (useful for file managers)
 
-`Key` is optional and is a keyboard shortcut to invoke that viewer. Available in **3.6** and later.
+You can configure up to 10 external viewers.

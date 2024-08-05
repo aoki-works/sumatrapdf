@@ -5,6 +5,7 @@ struct fz_outline;
 struct fz_link;
 
 extern Kind kindEngineMupdf;
+extern Kind kindEngineMulti;
 extern Kind kindEngineDjVu;
 extern Kind kindEngineImage;
 extern Kind kindEngineImageDir;
@@ -306,7 +307,7 @@ struct TocItem {
     int id = 0;
 
     int fontFlags = 0; // fontBitBold, fontBitItalic
-    COLORREF color{kColorUnset};
+    COLORREF color{ColorUnset};
 
     IPageDestination* dest = nullptr;
     bool destNotOwned = false;
@@ -319,6 +320,14 @@ struct TocItem {
     // caching to speed up ChildAt
     TocItem* currChild = nullptr;
     int currChildNo = 0;
+
+    // -- only for .EngineMulti
+    // marks a node that represents a file
+    char* engineFilePath = nullptr;
+    int nPages = 0;
+    // auto-calculated page number that tells us a span from
+    // pageNo => endPageNo
+    int endPageNo = 0;
 
     TocItem() = default;
 
@@ -362,15 +371,8 @@ struct TocTree : TreeModel {
     HTREEITEM GetHandle(TreeItem) override;
 };
 
-struct VisitTocTreeData {
-    TocItem* ti = nullptr;
-    TocItem* parent = nullptr; // only for VisitTocTreeWithParent
-    bool stopTraversal = false;
-};
-
-using VisitTocTreeCb = Func1<VisitTocTreeData*>;
-bool VisitTocTree(TocItem* ti, const VisitTocTreeCb& f);
-bool VisitTocTreeWithParent(TocItem* ti, const VisitTocTreeCb& f);
+bool VisitTocTree(TocItem* ti, const std::function<bool(TocItem*)>& f);
+bool VisitTocTreeWithParent(TocItem* ti, const std::function<bool(TocItem* ti, TocItem* parent)>& f);
 void SetTocTreeParents(TocItem* treeRoot);
 
 // a helper that allows for rendering interruptions in an engine-agnostic way

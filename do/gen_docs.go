@@ -121,7 +121,7 @@ func renderCodeBlock(w io.Writer, cb *ast.CodeBlock, entering bool) {
 	// os.WriteFile("temp.csv", csvContent, 0644)
 	r := csv.NewReader(bytes.NewReader(csvContent))
 	records, err := r.ReadAll()
-	if err != nil {
+	if (err != nil) {
 		logf("csv:\n%s\n\n", string(csvContent))
 		must(err)
 	}
@@ -140,10 +140,8 @@ func renderColumns(w io.Writer, columns *Columns, entering bool) {
 func makeRenderHook(r *mdhtml.Renderer, isMainPage bool) mdhtml.RenderNodeFunc {
 	seenFirstH1 := false
 	return func(w io.Writer, node ast.Node, entering bool) (ast.WalkStatus, bool) {
-		if h, ok := node.(*ast.Heading); ok {
-			// first h1 is always a title of the page, turn it into bread-crumbs
-			// (except for the main index page)
-			if !seenFirstH1 && h.Level == 1 {
+		if !seenFirstH1 {
+			if h, ok := node.(*ast.Heading); ok && h.Level == 1 {
 				if isMainPage {
 					seenFirstH1 = true
 					return ast.SkipChildren, true
@@ -151,15 +149,6 @@ func makeRenderHook(r *mdhtml.Renderer, isMainPage bool) mdhtml.RenderNodeFunc {
 				renderFirstH1(w, h, entering, &seenFirstH1)
 				return ast.GoToNext, true
 			}
-			// add: <a class="hlink" href="#${id}">#</a>
-			if entering {
-				r.HeadingEnter(w, h)
-			} else {
-				href := `<a class="hlink" href="#` + h.HeadingID + `"> # </a>`
-				r.Outs(w, href)
-				r.HeadingExit(w, h)
-			}
-			return ast.GoToNext, true
 		}
 		if cb, ok := node.(*ast.CodeBlock); ok {
 			if string(cb.Info) != "commands" {
@@ -265,7 +254,6 @@ func removeNotionId(s string) string {
 }
 
 func getHTMLFileName(mdName string) string {
-	mdName, _ = parseMdFileName(mdName)
 	parts := strings.Split(mdName, ".")
 	panicIf(len(parts) != 2)
 	panicIf(parts[1] != "md")
@@ -287,16 +275,6 @@ func FsFileExistsMust(fsys fs.FS, name string) {
 func checkMdFileExistsMust(name string) {
 	path := path.Join(mdDocsDir, name)
 	FsFileExistsMust(fsys, path)
-}
-
-// Commands.md#foo => "Commands.md", "foo"
-func parseMdFileName(name string) (string, string) {
-	parts := strings.Split(name, "#")
-	if len(parts) == 1 {
-		return name, ""
-	}
-	panicIf(len(parts) != 2)
-	return parts[0], parts[1]
 }
 
 func astWalk(doc ast.Node) {
@@ -333,15 +311,14 @@ func astWalk(doc ast.Node) {
 				return ast.GoToNext
 			}
 			logvf("  link.Destination: %s\n", uri)
-			fileNameWithHash := strings.Replace(uri, "%20", " ", -1)
-			logvf("  mdName          : %s\n", fileNameWithHash)
-			if strings.HasPrefix(fileNameWithHash, "Untitled Database") {
-				fileNameWithHash = strings.Replace(fileNameWithHash, ".md", ".csv", -1)
-				logvf("  mdName          : %s\n", fileNameWithHash)
+			fileName := strings.Replace(uri, "%20", " ", -1)
+			logvf("  mdName          : %s\n", fileName)
+			if strings.HasPrefix(fileName, "Untitled Database") {
+				fileName = strings.Replace(fileName, ".md", ".csv", -1)
+				logvf("  mdName          : %s\n", fileName)
 				return ast.GoToNext
 			}
 
-			fileName, hash := parseMdFileName(fileNameWithHash)
 			checkMdFileExistsMust(fileName)
 			ext := getFileExt(fileName)
 			if ext == ".png" || ext == ".jpg" || ext == ".jpeg" {
@@ -352,11 +329,7 @@ func astWalk(doc ast.Node) {
 			}
 			panicIf(ext != ".md")
 			push(&mdToProcess, fileName)
-			dest := getHTMLFileName(fileName)
-			if hash != "" {
-				dest = dest + "#" + hash
-			}
-			link.Destination = []byte(dest)
+			link.Destination = []byte(getHTMLFileName(fileName))
 		}
 
 		return ast.GoToNext
@@ -626,13 +599,6 @@ func copyDocsToWebsite() {
 	files := []string{"notion.css", "sumatra.css"}
 	for _, name := range files {
 		srcPath := filepath.Join("docs", "www", name)
-		dstPath := filepath.Join(websiteDir, "server", "www", name)
-		copyFileMust(dstPath, srcPath)
-	}
-
-	files = []string{"gen_docs.search.js", "gen_docs.search.html"}
-	for _, name := range files {
-		srcPath := filepath.Join("do", name)
 		dstPath := filepath.Join(websiteDir, "server", "www", name)
 		copyFileMust(dstPath, srcPath)
 	}

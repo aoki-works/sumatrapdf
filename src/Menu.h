@@ -22,15 +22,12 @@ void MenuCustomDrawMesureItem(HWND, MEASUREITEMSTRUCT*);
 void MenuCustomDrawItem(HWND, DRAWITEMSTRUCT*);
 HFONT GetMenuFont();
 
-HMENU BuildMenuFromDef(MenuDef* menuDefs, HMENU menu, BuildMenuCtx* ctx);
+HMENU BuildMenuFromMenuDef(MenuDef* menuDefs, HMENU menu, BuildMenuCtx* ctx);
 void RemoveBadMenuSeparators(HMENU menu);
 HMENU BuildMenu(MainWindow* win);
 void OnWindowContextMenu(MainWindow* win, int x, int y);
 void OnAboutContextMenu(MainWindow* win, int x, int y);
-int CmdIdFromVirtualZoom(float virtualZoom);
+int MenuIdFromVirtualZoom(float virtualZoom);
 void UpdateAppMenu(MainWindow* win, HMENU m);
 void ToggleMenuBar(MainWindow* win, bool showTemporarily);
 float ZoomMenuItemToZoom(int menuItemId);
-std::pair<bool, bool> GetCommandIdState(BuildMenuCtx* ctx, int cmdId);
-BuildMenuCtx* NewBuildMenuCtx(WindowTab* tab, Point pt);
-void DeleteBuildMenuCtx(BuildMenuCtx*);

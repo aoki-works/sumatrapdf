@@ -117,7 +117,7 @@ An example input file, which adds an image, a triangle and some text:
    %%CJKFont Song zh-Hant
    %%CJKFont Mincho ja
    %%CJKFont Batang ko
-   %%Image I0 docs/examples/huntingofthesnark.png
+   %%Image I0 logo/mupdf-simplified-logo.png
 
    % Draw an image.
    q

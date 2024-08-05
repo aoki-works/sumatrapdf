@@ -1,7 +1,6 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
-#include <vector>
 struct MainWindow;
 struct WindowTab;
 struct Annotation;

@@ -624,15 +624,15 @@ TempStr EngineEbook::ExtractFontListTemp() {
                 continue;
             }
             char* fontName = ToUtf8Temp(fontNameW);
-            AppendIfNotExists(&fonts, fontName);
+            AppendIfNotExists(fonts, fontName);
         }
     }
     if (fonts.Size() == 0) {
         return nullptr;
     }
 
-    SortNatural(&fonts);
-    return JoinTemp(&fonts, "\n");
+    SortNatural(fonts);
+    return JoinTemp(fonts, "\n");
 }
 
 static void AppendTocItem(TocItem*& root, TocItem* item, int level) {
@@ -1446,7 +1446,7 @@ static uint ExtractHttpCharset(const char* html, size_t htmlLen) {
             {"KOI8-R", 20866},     {"shift-jis", 932}, {"x-euc", 932},     {"euc-kr", 949},
             {"Big5", 950},         {"GB2312", 936},    {"UTF-8", CP_UTF8},
         };
-        for (int i = 0; i < dimofi(codepages); i++) {
+        for (int i = 0; i < dimof(codepages); i++) {
             if (str::EqI(charset, codepages[i].name)) {
                 return codepages[i].codepage;
             }

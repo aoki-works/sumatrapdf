@@ -13,9 +13,6 @@ var (
 	keyboardShortcut = []*Field{
 		mkField("Cmd", String, "", "command"),
 		mkField("Key", String, "", "keyboard shortcut (e.g. Ctrl-Alt-F)"),
-		mkField("Name", String, nil, "name shown in command palette").setVersion("3.6"),
-		mkField("ToolbarText", String, nil, "if given, shows in toolbar").setVersion("3.6"),
-		mkField("CmdId", Int, nil, "command id").setVersion("3.6").setInternal(),
 	}
 
 	scrollPos = []*Field{
@@ -111,13 +108,12 @@ var (
 			"name of the external viewer to be shown in the menu (implied by CommandLine if missing)"),
 		mkField("Filter", String, nil,
 			"optional filter for which file types the menu item is to be shown; separate multiple entries using ';' and don't include any spaces (e.g. *.pdf;*.xps for all PDF and XPS documents)"),
-		mkField("Key", String, nil, "optional: keyboard shortcut e.g. Alt + 7").setVersion("3.6"),
 	}
 
 	selectionHandler = []*Field{
 		mkField("URL", String, nil, "url to invoke for the selection. ${selection} will be replaced with current selection and ${userlang} with language code for current UI (e.g. 'de' for German)"),
 		mkField("Name", String, nil, "name shown in context menu"),
-		mkField("Key", String, nil, "keyboard shortcut").setVersion("3.6"),
+		mkField("CmdID", Int, 0, "").setInternal(),
 	}
 
 	annotations = []*Field{
@@ -323,10 +319,9 @@ var (
 			"if true, we use Windows system colors for background/text color. Over-rides other settings").setExpert(),
 		mkField("UseTabs", Bool, false,     // CPS Lab
 			"if true, documents are opened in tabs instead of new windows").setVersion("3.0"),
-		mkCompactArray("ZoomLevels", Float, "",
+		mkCompactArray("ZoomLevels", Float, "8.33 12.5 18 25 33.33 50 66.67 75 100 125 150 200 300 400 600 800 1000 1200 1600 2000 2400 3200 4800 6400",
 			"zoom levels which zooming steps through in addition to Fit Page, Fit Width and "+
 				"the minimum and maximum allowed values (8.33 and 6400)").setExpert().setDoc("sequence of zoom levels when zooming in/out; all values must lie between 8.33 and 6400"),
-		mkCompactArray("ZoomLevelsCmdIds", Int, "", "").setInternal(),
 		mkField("ZoomIncrement", Float, 0,
 			"zoom step size in percents relative to the current zoom level. "+
 				"if zero or negative, the values from ZoomLevels are used instead").setExpert(),
