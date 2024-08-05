@@ -272,7 +272,7 @@ static TempStr FormatPermissionsTemp(DocController* ctrl) {
         denials.Append(_TRA("copying text"));
     }
 
-    return JoinTemp(denials, ", ");
+    return JoinTemp(&denials, ", ");
 }
 
 static Rect CalcPropertiesLayout(PropertiesLayout* layoutData, HDC hdc) {
@@ -365,20 +365,15 @@ static Rect CalcPropertiesLayout(PropertiesLayout* layoutData, HDC hdc) {
     return rect;
 }
 
-static void ShowExtendedProperties(HWND hwnd) {
-    PropertiesLayout* pl = FindPropertyWindowByHwnd(hwnd);
-    if (!pl) {
-        return;
-    }
-    MainWindow* win = FindMainWindowByHwnd(pl->hwndParent);
+static void ShowExtendedProperties(PropertiesLayout* pl) {
+    MainWindow* win = FindMainWindowByHwnd(pl ? pl->hwndParent : nullptr);
     if (win && !pl->HasProperty(_TRA("Fonts:"))) {
-        DestroyWindow(hwnd);
+        DestroyWindow(pl->hwnd);
         ShowProperties(win->hwndFrame, win->ctrl, true);
     }
 }
 
-static void CopyPropertiesToClipboard(HWND hwnd) {
-    PropertiesLayout* layoutData = FindPropertyWindowByHwnd(hwnd);
+static void CopyPropertiesToClipboard(PropertiesLayout* layoutData) {
     if (!layoutData) {
         return;
     }
@@ -425,9 +420,9 @@ static bool CreatePropertiesWindow(HWND hParent, PropertiesLayout* layoutData, b
     layoutData->hwnd = hwnd;
     layoutData->hwndParent = hParent;
     bool isRtl = IsUIRightToLeft();
-    SetRtl(hwnd, isRtl);
+    HwndSetRtl(hwnd, isRtl);
     {
-        ButtonCreateArgs args;
+        Button::CreateArgs args;
         args.parent = hwnd;
         args.text = _TRA("Copy To Clipboard");
 
@@ -435,21 +430,21 @@ static bool CreatePropertiesWindow(HWND hParent, PropertiesLayout* layoutData, b
         b->Create(args);
 
         layoutData->btnCopyToClipboard = b;
-        b->SetRtl(isRtl);
-        b->onClicked = [hwnd] { CopyPropertiesToClipboard(hwnd); };
+        HwndSetRtl(b->hwnd, isRtl);
+        b->onClicked = MkFunc0(CopyPropertiesToClipboard, layoutData);
     }
 
     if (!extended) {
-        ButtonCreateArgs args;
+        Button::CreateArgs args;
         args.parent = hwnd;
         args.text = _TRA("Get Fonts Info");
 
         auto b = new Button();
         b->Create(args);
 
-        b->SetRtl(isRtl);
+        HwndSetRtl(b->hwnd, isRtl);
         layoutData->btnGetFonts = b;
-        b->onClicked = [hwnd] { ShowExtendedProperties(hwnd); };
+        b->onClicked = MkFunc0(ShowExtendedProperties, layoutData);
     }
 
     // get the dimensions required for the about box's content
@@ -507,7 +502,7 @@ static void AddPdfFileStructure(DocController* ctrl, PropertiesLayout* layoutDat
         return;
     }
     StrVec parts;
-    Split(parts, fstruct, ",", true);
+    Split(&parts, fstruct, ",", true);
 
     StrVec props;
 
@@ -530,7 +525,7 @@ static void AddPdfFileStructure(DocController* ctrl, PropertiesLayout* layoutDat
         props.Append("PDF/E (ISO 24517)");
     }
 
-    TempStr val = JoinTemp(props, ", ");
+    TempStr val = JoinTemp(&props, ", ");
     layoutData->AddProperty(_TRA("PDF Optimizations:"), val);
 }
 
@@ -684,14 +679,15 @@ static void OnPaintProperties(HWND hwnd) {
 
 static void PropertiesOnCommand(HWND hwnd, WPARAM wp) {
     auto cmd = LOWORD(wp);
+    PropertiesLayout* pl = FindPropertyWindowByHwnd(hwnd);
     switch (cmd) {
         case CmdCopySelection:
-            CopyPropertiesToClipboard(hwnd);
+            CopyPropertiesToClipboard(pl);
             break;
 
         case CmdProperties:
             // make a repeated Ctrl+D display some extended properties
-            ShowExtendedProperties(hwnd);
+            ShowExtendedProperties(pl);
             break;
     }
 }

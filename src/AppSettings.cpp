@@ -12,6 +12,7 @@
 #include "wingui/UIModels.h"
 
 #include "Settings.h"
+#include "Commands.h"
 #include "DisplayMode.h"
 #include "DocController.h"
 #include "EngineBase.h"
@@ -23,6 +24,7 @@
 #include "ProgressUpdateUI.h"
 #include "SumatraPDF.h"
 #include "WindowTab.h"
+#include "ExternalViewers.h"
 #include "Flags.h"
 #include "MainWindow.h"
 #include "AppSettings.h"
@@ -91,6 +93,87 @@ static void setMinMax(int& i, int minVal, int maxVal) {
     }
     if (i > maxVal) {
         i = maxVal;
+    }
+}
+
+static void SetCommandNameAndShortcut(CustomCommand* cmd, const char* name, const char* key) {
+    if (!cmd) {
+        return;
+    }
+    cmd->name = str::IsEmptyOrWhiteSpace(name) ? nullptr : str::Dup(name);
+    if (str::IsEmptyOrWhiteSpace(key)) {
+        return;
+    }
+    if (!IsValidShortcutString(key)) {
+        logf("SetCommandNameAndShortcut: '%s' is not a valid shortcut for '%s'\n", key, cmd->definition);
+        return;
+    }
+    cmd->key = str::Dup(key);
+}
+
+/* for every selection handler defined by user in advanced settings, create
+    a command that will be inserted into a menu item */
+static void CreateSelectionHandlerCommands() {
+    if (!HasPermission(Perm::InternetAccess) || !HasPermission(Perm::CopySelection)) {
+        // TODO: when we add exe handlers, only filter the URL ones
+        return;
+    }
+
+    for (auto& sh : *gGlobalPrefs->selectionHandlers) {
+        if (!sh || !sh->url || !sh->name) {
+            // can happen for bad selection handler definition
+            continue;
+        }
+        if (str::IsEmptyOrWhiteSpace(sh->url) || str::IsEmptyOrWhiteSpace(sh->name)) {
+            continue;
+        }
+
+        CommandArg* args = NewStringArg(kCmdArgURL, sh->url);
+        auto cmd = CreateCustomCommand(sh->url, CmdSelectionHandler, args);
+        SetCommandNameAndShortcut(cmd, sh->name, sh->key);
+    }
+}
+
+static void CreateExternalViewersCommands() {
+    for (ExternalViewer* ev : *gGlobalPrefs->externalViewers) {
+        if (!ev || str::IsEmptyOrWhiteSpace(ev->commandLine)) {
+            continue;
+        }
+        CommandArg* args = NewStringArg(kCmdArgCommandLine, ev->commandLine);
+        if (!str::IsEmptyOrWhiteSpace(ev->filter)) {
+            auto arg = NewStringArg(kCmdArgFilter, ev->filter);
+            InsertArg(&args, arg);
+        }
+        auto cmd = CreateCustomCommand("", CmdViewWithExternalViewer, args);
+        SetCommandNameAndShortcut(cmd, ev->name, ev->key);
+    }
+}
+
+static void CreateZoomCommands() {
+    auto prefs = gGlobalPrefs;
+    delete prefs->zoomLevelsCmdIds;
+    int n = prefs->zoomLevels->Size();
+    if (n <= 0) {
+        return;
+    }
+    Vec<int>* cmdIds = new Vec<int>(n);
+    prefs->zoomLevelsCmdIds = cmdIds;
+    for (int i = 0; i < n; i++) {
+        float zoomLevel = prefs->zoomLevels->At(i);
+        CommandArg* arg = NewFloatArg(kCmdArgLevel, zoomLevel);
+        auto cmd = CreateCustomCommand("CmdZoomCustom", CmdZoomCustom, arg);
+        cmdIds->InsertAt(i, cmd->id);
+    }
+}
+
+static void CreateCustomShortcuts() {
+    for (Shortcut* shortcut : *gGlobalPrefs->shortcuts) {
+        auto cmd = CreateCommandFromDefinition(shortcut->cmd);
+        if (!cmd) {
+            continue;
+        }
+        shortcut->cmdId = cmd->id;
+        SetCommandNameAndShortcut(cmd, shortcut->name, shortcut->key);
     }
 }
 
@@ -188,6 +271,20 @@ bool LoadSettings() {
     }
     ResetCachedFonts();
 
+    // re-create commands
+    FreeCustomCommands();
+    // Note: some are also created in ReCreateSumatraAcceleratorTable()
+    CreateZoomCommands();
+    CreateThemeCommands();
+    CreateExternalViewersCommands();
+    CreateSelectionHandlerCommands();
+    CreateCustomShortcuts();
+
+    // re-create accelerators
+    FreeAcceleratorTables();
+    CreateSumatraAcceleratorTable();
+
+    ReCreateToolbars();
     logf("LoadSettings('%s') took %.2f ms\n", settingsPath, TimeSinceInMs(timeStart));
     return true;
 }
@@ -210,7 +307,7 @@ static void RememberSessionState() {
             if (tab->IsAboutTab()) {
                 continue;
             }
-            char* fp = tab->filePath;
+            const char* fp = tab->filePath;
             FileState* fs = NewDisplayState(fp);
             if (tab->ctrl) {
                 tab->ctrl->GetDisplayState(fs);
@@ -293,10 +390,10 @@ bool SaveSettings() {
 
 // refresh the preferences when a different SumatraPDF process saves them
 // or if they are edited by the user using a text editor
-bool ReloadSettings() {
+static void ReloadSettings() {
     TempStr settingsPath = GetSettingsPathTemp();
     if (!file::Exists(settingsPath)) {
-        return false;
+        return;
     }
 
     // make sure that the settings file is readable - else wait
@@ -314,12 +411,12 @@ bool ReloadSettings() {
         }
     }
     if (!ok) {
-        return false;
+        return;
     }
 
     FILETIME time = file::GetModificationTime(settingsPath);
     if (FileTimeEq(time, gGlobalPrefs->lastPrefUpdate)) {
-        return true;
+        return;
     }
 
     const char* uiLanguage = str::DupTemp(gGlobalPrefs->uiLanguage);
@@ -353,8 +450,6 @@ bool ReloadSettings() {
 
     UpdateDocumentColors();
     UpdateFixedPageScrollbarsVisibility();
-    ReCreateSumatraAcceleratorTable();
-    return true;
 }
 
 void CleanUpSettings() {
@@ -362,8 +457,9 @@ void CleanUpSettings() {
     gGlobalPrefs = nullptr;
 }
 
-void schedulePrefsReload() {
-    uitask::Post(TaskReloadSettings, ReloadSettings);
+static void SchedulePrefsReload() {
+    auto fn = MkFunc0Void(ReloadSettings);
+    uitask::Post(fn, "TaskReloadSettings");
 }
 
 void RegisterSettingsForFileChanges() {
@@ -373,7 +469,8 @@ void RegisterSettingsForFileChanges() {
 
     ReportIf(gWatchedSettingsFile); // only call me once
     TempStr path = GetSettingsPathTemp();
-    gWatchedSettingsFile = FileWatcherSubscribe(path, schedulePrefsReload);
+    auto fn = MkFunc0Void(SchedulePrefsReload);
+    gWatchedSettingsFile = FileWatcherSubscribe(path, fn);
 }
 
 void UnregisterSettingsForFileChanges() {

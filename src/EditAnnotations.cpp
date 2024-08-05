@@ -40,8 +40,6 @@ extern "C" {
 
 #include "utils/Log.h"
 
-using std::placeholders::_1;
-
 constexpr int borderWidthMin = 0;
 constexpr int borderWidthMax = 12;
 
@@ -95,7 +93,7 @@ static AnnotationType gAnnotsWithColor[] = {
     AnnotationType::Squiggly,
 };
 
-// list of annotaions where GetColor() returns background color
+// list of annotations where GetColor() returns background color
 // TODO: probably incomplete;
 static AnnotationType gAnnotsIsColorBackground[] = {
     AnnotationType::FreeText,
@@ -384,8 +382,8 @@ static void RebuildAnnotationsListBox(EditAnnotationsWindow* ew) {
 }
 
 // TODO: this should be OnDestroy()
-static void OnClose(WmCloseEvent& ev) {
-    auto w = (EditAnnotationsWindow*)ev.e->self;
+static void OnClose(Wnd::CloseEvent* ev) {
+    auto w = (EditAnnotationsWindow*)ev->e->self;
     HWND toActivate = w->tab->win->hwndFrame;
     w->tab->editAnnotsWindow = nullptr;
     delete w; // TODO: sketchy
@@ -605,9 +603,13 @@ static void DoTextSize(EditAnnotationsWindow* ew, Annotation* annot) {
     ew->trackbarTextSize->SetIsVisible(true);
 }
 
-static void TextFontSizeChanging(EditAnnotationsWindow* ew, TrackbarPosChangingEvent* ev) {
+static void TextFontSizeChanging(EditAnnotationsWindow* ew, Trackbar::PositionChangingEvent* ev) {
+    auto annot = ew->tab->selectedAnnotation;
+    if (!annot) {
+        return;
+    }
     int fontSize = ev->pos;
-    SetDefaultAppearanceTextSize(ew->tab->selectedAnnotation, fontSize);
+    SetDefaultAppearanceTextSize(annot, fontSize);
     TempStr s = str::FormatTemp(_TRA("Text Size: %d"), fontSize);
     ew->staticTextSize->SetText(s);
     EnableSaveIfAnnotationsChanged(ew);
@@ -648,7 +650,7 @@ static void DoBorder(EditAnnotationsWindow* ew, Annotation* annot) {
     ew->trackbarBorder->SetIsVisible(true);
 }
 
-static void BorderWidthChanging(EditAnnotationsWindow* ew, TrackbarPosChangingEvent* ev) {
+static void BorderWidthChanging(EditAnnotationsWindow* ew, Trackbar::PositionChangingEvent* ev) {
     int borderWidth = ev->pos;
     SetBorderWidth(ew->tab->selectedAnnotation, borderWidth);
     TempStr s = str::FormatTemp(_TRA("Border: %d"), borderWidth);
@@ -711,6 +713,9 @@ static void DoIcon(EditAnnotationsWindow* ew, Annotation* annot) {
             break;
         case AnnotationType::Stamp:
             items = gStampIcons;
+            break;
+        default:
+            // no-op
             break;
     }
     if (!items || str::IsEmpty(itemName)) {
@@ -800,7 +805,7 @@ static void DoSaveEmbed(EditAnnotationsWindow* ew, Annotation* annot) {
     ew->buttonEmbedAttachment->SetIsVisible(true);
 }
 
-static void OpacityChanging(EditAnnotationsWindow* ew, TrackbarPosChangingEvent* ev) {
+static void OpacityChanging(EditAnnotationsWindow* ew, Trackbar::PositionChangingEvent* ev) {
     int opacity = ev->pos;
     SetOpacity(ew->tab->selectedAnnotation, opacity);
     TempStr s = str::FormatTemp(_TRA("Opacity: %d"), opacity);
@@ -843,11 +848,11 @@ static void UpdateUIForSelectedAnnotation(EditAnnotationsWindow* ew, Annotation*
         ew->listBox->SetCurrentSelection(itemNo);
         ew->buttonDelete->SetIsVisible(true);
         if (setEditFocus && ew->editContents->IsVisible()) {
-            ew->editContents->SetFocus();
+            HwndSetFocus(ew->editContents->hwnd);
             ew->editContents->SetCursorPositionAtEnd();
         }
     } else {
-        ew->listBox->SetFocus();
+        HwndSetFocus(ew->listBox->hwnd);
     }
 
     // TODO: get from client size
@@ -937,6 +942,10 @@ static void ButtonDeleteHandler(EditAnnotationsWindow* ew) {
     DeleteSelectedAnnotation(ew);
 }
 
+static void ListBoxSelectionChanged(EditAnnotationsWindow* ew) {
+    ew->ListBoxSelectionChanged();
+}
+
 void EditAnnotationsWindow::ListBoxSelectionChanged() {
     int itemNo = listBox->GetCurrentSelection();
     if (!annotations.isValidIndex(itemNo)) {
@@ -973,7 +982,7 @@ static void ContentsChanged(EditAnnotationsWindow* ew) {
     UINT timeoutInMs = 1000;
     gMainWindowForRender = win;
     gMainWindowRerenderTimer = SetTimer(win->hwndCanvas, 1, timeoutInMs, [](HWND, UINT, UINT_PTR, DWORD) {
-        if (MainWindowStillValid(gMainWindowForRender)) {
+        if (IsMainWindowValid(gMainWindowForRender)) {
             // logf("ContentsChanged: re-rendering MainWindow\n");
             MainWindowRerender(gMainWindowForRender);
         } else {
@@ -983,7 +992,7 @@ static void ContentsChanged(EditAnnotationsWindow* ew) {
     });
 }
 
-void EditAnnotationsWindow::OnSize(UINT msg, UINT type, SIZE size) {
+void EditAnnotationsWindow::OnSize(UINT msg, UINT, SIZE size) {
     if (msg != WM_SIZE) {
         return;
     }
@@ -1005,7 +1014,7 @@ void EditAnnotationsWindow::OnSize(UINT msg, UINT type, SIZE size) {
 
 static Static* CreateStatic(HWND parent, const char* s = nullptr) {
     auto w = new Static();
-    StaticCreateArgs args;
+    Static::CreateArgs args;
     args.parent = parent;
     args.text = s;
     args.font = GetAppFont();
@@ -1022,7 +1031,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     HFONT fnt = GetAppFont();
 
     {
-        ListBoxCreateArgs args;
+        ListBox::CreateArgs args;
         args.parent = parent;
         args.idealSizeLines = 5;
         args.font = fnt;
@@ -1031,7 +1040,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->Create(args);
         auto lbModel = new ListBoxModelStrings();
         w->SetModel(lbModel);
-        w->onSelectionChanged = std::bind(&EditAnnotationsWindow::ListBoxSelectionChanged, ew);
+        w->onSelectionChanged = MkFunc0(ListBoxSelectionChanged, ew);
         ew->listBox = w;
         vbox->AddChild(w);
     }
@@ -1070,7 +1079,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        EditCreateArgs args;
+        Edit::CreateArgs args;
         args.parent = parent;
         args.isMultiLine = true;
         args.idealSizeLines = 5;
@@ -1079,7 +1088,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         HWND hwnd = w->Create(args);
         ReportIf(!hwnd);
         w->maxDx = 150;
-        w->onTextChanged = [ew]() { return ContentsChanged(ew); };
+        w->onTextChanged = MkFunc0(ContentsChanged, ew);
         ew->editContents = w;
         vbox->AddChild(w);
     }
@@ -1092,7 +1101,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
 
@@ -1101,7 +1110,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->Create(args);
 
         w->SetItemsSeqStrings(gQuaddingNames);
-        w->onSelectionChanged = [ew]() { return TextAlignmentSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(TextAlignmentSelectionChanged, ew);
         ew->dropDownTextAlignment = w;
         vbox->AddChild(w);
     }
@@ -1114,7 +1123,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
         auto w = new DropDown();
@@ -1122,7 +1131,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
 
         w->Create(args);
         w->SetItemsSeqStrings(gQuaddingNames);
-        w->onSelectionChanged = [ew]() { return TextFontSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(TextFontSelectionChanged, ew);
         ew->dropDownTextFont = w;
         vbox->AddChild(w);
     }
@@ -1135,7 +1144,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        TrackbarCreateArgs args;
+        Trackbar::CreateArgs args;
         args.parent = parent;
         args.rangeMin = 8;
         args.rangeMax = 36;
@@ -1146,7 +1155,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
 
         w->Create(args);
 
-        w->onPosChanging = [ew](auto&& PH1) { return TextFontSizeChanging(ew, std::forward<decltype(PH1)>(PH1)); };
+        w->onPositionChanging = MkFunc1(TextFontSizeChanging, ew);
         ew->trackbarTextSize = w;
         vbox->AddChild(w);
     }
@@ -1158,7 +1167,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
 
@@ -1167,7 +1176,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->Create(args);
 
         w->SetItemsSeqStrings(gColors);
-        w->onSelectionChanged = [ew]() { return TextColorSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(TextColorSelectionChanged, ew);
         ew->dropDownTextColor = w;
         vbox->AddChild(w);
     }
@@ -1180,7 +1189,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
 
@@ -1188,7 +1197,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->SetInsetsPt(4, 0, 0, 0);
         w->Create(args);
 
-        w->onSelectionChanged = [ew]() { return LineStartSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(LineStartSelectionChanged, ew);
         ew->dropDownLineStart = w;
         vbox->AddChild(w);
     }
@@ -1201,7 +1210,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
 
@@ -1209,7 +1218,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->SetInsetsPt(4, 0, 0, 0);
         w->Create(args);
 
-        w->onSelectionChanged = [ew]() { return LineEndSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(LineEndSelectionChanged, ew);
         ew->dropDownLineEnd = w;
         vbox->AddChild(w);
     }
@@ -1222,7 +1231,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
 
@@ -1230,7 +1239,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->SetInsetsPt(4, 0, 0, 0);
         w->Create(args);
 
-        w->onSelectionChanged = [ew]() { return IconSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(IconSelectionChanged, ew);
         ew->dropDownIcon = w;
         vbox->AddChild(w);
     }
@@ -1243,7 +1252,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        TrackbarCreateArgs args;
+        Trackbar::CreateArgs args;
         args.parent = parent;
         args.rangeMin = borderWidthMin;
         args.rangeMax = borderWidthMax;
@@ -1251,7 +1260,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
 
         auto w = new Trackbar();
         w->Create(args);
-        w->onPosChanging = [ew](auto&& PH1) { return BorderWidthChanging(ew, std::forward<decltype(PH1)>(PH1)); };
+        w->onPositionChanging = MkFunc1(BorderWidthChanging, ew);
         ew->trackbarBorder = w;
         vbox->AddChild(w);
     }
@@ -1264,7 +1273,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
 
@@ -1272,7 +1281,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->SetInsetsPt(4, 0, 0, 0);
         w->Create(args);
         w->SetItemsSeqStrings(gColors);
-        w->onSelectionChanged = [ew]() { return ColorSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(ColorSelectionChanged, ew);
         ew->dropDownColor = w;
         vbox->AddChild(w);
     }
@@ -1285,7 +1294,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        DropDownCreateArgs args;
+        DropDown::CreateArgs args;
         args.parent = parent;
         args.font = fnt;
 
@@ -1294,7 +1303,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         w->Create(args);
 
         w->SetItemsSeqStrings(gColors);
-        w->onSelectionChanged = [ew]() { return InteriorColorSelectionChanged(ew); };
+        w->onSelectionChanged = MkFunc0(InteriorColorSelectionChanged, ew);
         ew->dropDownInteriorColor = w;
         vbox->AddChild(w);
     }
@@ -1307,7 +1316,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        TrackbarCreateArgs args;
+        Trackbar::CreateArgs args;
         args.parent = parent;
         args.rangeMin = 0;
         args.rangeMax = 255;
@@ -1316,13 +1325,13 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         auto w = new Trackbar();
         w->Create(args);
 
-        w->onPosChanging = [ew](auto&& PH1) { return OpacityChanging(ew, std::forward<decltype(PH1)>(PH1)); };
+        w->onPositionChanging = MkFunc1(OpacityChanging, ew);
         ew->trackbarOpacity = w;
         vbox->AddChild(w);
     }
 
     {
-        ButtonCreateArgs args;
+        Button::CreateArgs args;
         args.parent = parent;
         args.text = "Save...";
         args.font = fnt;
@@ -1332,13 +1341,13 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         HWND hwnd = w->Create(args);
         ReportIf(!hwnd);
 
-        w->onClicked = [ew] { return ButtonSaveAttachment(ew); };
+        w->onClicked = MkFunc0(ButtonSaveAttachment, ew);
         ew->buttonSaveAttachment = w;
         vbox->AddChild(w);
     }
 
     {
-        ButtonCreateArgs args;
+        Button::CreateArgs args;
         args.parent = parent;
         args.text = "Embed...";
         args.font = fnt;
@@ -1348,13 +1357,13 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         HWND hwnd = w->Create(args);
         ReportIf(!hwnd);
 
-        w->onClicked = [ew] { return ButtonEmbedAttachment(ew); };
+        w->onClicked = MkFunc0(ButtonEmbedAttachment, ew);
         ew->buttonEmbedAttachment = w;
         vbox->AddChild(w);
     }
 
     {
-        ButtonCreateArgs args;
+        Button::CreateArgs args;
         args.parent = parent;
         args.text = "Delete annotation";
         args.font = fnt;
@@ -1367,7 +1376,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         // TODO: doesn't work
         // w->SetTextColor(MkColor(0xff, 0, 0));
 
-        w->onClicked = [ew] { return ButtonDeleteHandler(ew); };
+        w->onClicked = MkFunc0(ButtonDeleteHandler, ew);
         ew->buttonDelete = w;
         vbox->AddChild(w);
     }
@@ -1379,7 +1388,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        ButtonCreateArgs args;
+        Button::CreateArgs args;
         args.parent = parent;
         // TODO: maybe  file name e.g. "Save changes to foo.pdf"
         args.text = _TRA("Save changes to existing PDF");
@@ -1390,13 +1399,13 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         ReportIf(!hwnd);
 
         w->SetIsEnabled(false); // only enabled if there are changes
-        w->onClicked = [ew] { return ButtonSaveToCurrentPDFHandler(ew); };
+        w->onClicked = MkFunc0(ButtonSaveToCurrentPDFHandler, ew);
         ew->buttonSaveToCurrentFile = w;
         vbox->AddChild(w);
     }
 
     {
-        ButtonCreateArgs args;
+        Button::CreateArgs args;
         args.parent = parent;
         // TODO: maybe  file name e.g. "Save changes to foo.pdf"
         args.text = _TRA("Save changes to a new PDF");
@@ -1408,7 +1417,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         ReportIf(!hwnd);
 
         w->SetIsEnabled(false); // only enabled if there are changes
-        w->onClicked = [ew] { return ButtonSaveToNewFileHandler(ew); };
+        w->onClicked = MkFunc0(ButtonSaveToNewFileHandler, ew);
         ew->buttonSaveToNewFile = w;
         vbox->AddChild(w);
     }
@@ -1426,7 +1435,7 @@ void ShowEditAnnotationsWindow(WindowTab* tab) {
         return;
     }
     ew = new EditAnnotationsWindow();
-    ew->onClose = OnClose;
+    ew->onClose = MkFunc1Void(OnClose);
     CreateCustomArgs args;
     HMODULE h = GetModuleHandleW(nullptr);
     WCHAR* iconName = MAKEINTRESOURCEW(GetAppIconID());

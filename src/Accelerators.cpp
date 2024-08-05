@@ -24,6 +24,7 @@
     V(VK_NUMPAD7, "numpad7")        \
     V(VK_NUMPAD8, "numpad8")        \
     V(VK_NUMPAD9, "numpad9")        \
+    V(VK_TAB, "Tab")                \
     V(VK_END, "End")                \
     V(VK_HOME, "Home")              \
     V(VK_LEFT, "Left")              \
@@ -145,8 +146,7 @@ ACCEL gBuiltInAccelerators[] = {
     {FCONTROL | FVIRTKEY, 'G', CmdGoToPage},
     {0, 'g', CmdGoToPage},
     {FCONTROL | FVIRTKEY, 'K', CmdCommandPalette},
-    {FSHIFT | FCONTROL | FVIRTKEY, 'K', CmdCommandPaletteNoFiles},
-    {FALT | FVIRTKEY, 'K', CmdCommandPaletteOnlyTabs},
+    //{FALT | FVIRTKEY, 'K', CmdCommandPaletteOnlyTabs}, // removed in 3.6
     {FSHIFT | FCONTROL | FVIRTKEY, 'S', CmdSaveAnnotations},
     {FCONTROL | FVIRTKEY, 'P', CmdPrint},
     {FCONTROL | FVIRTKEY, 'Q', CmdExit},
@@ -191,6 +191,8 @@ ACCEL gBuiltInAccelerators[] = {
     {FSHIFT | FCONTROL | FVIRTKEY, 'T', CmdReopenLastClosedFile},
     {FCONTROL | FVIRTKEY, VK_NEXT, CmdNextTab},
     {FCONTROL | FVIRTKEY, VK_PRIOR, CmdPrevTab},
+    {FCONTROL | FVIRTKEY, VK_TAB, CmdNextTabSmart},
+    {FCONTROL | FSHIFT | FVIRTKEY, VK_TAB, CmdPrevTabSmart},
     {FVIRTKEY, VK_F1, CmdHelpOpenManual},
 
     // need 2 entries for 'a' and 'Shift + a'
@@ -201,8 +203,8 @@ ACCEL gBuiltInAccelerators[] = {
     {0, 'u', CmdCreateAnnotUnderline},
     {0, 'U', CmdCreateAnnotUnderline},
 
-    {0, 'i', CmdInvertColors},
-    {0, 'I', CmdTogglePageInfo},
+    {0, 'I', CmdInvertColors},
+    {0, 'i', CmdTogglePageInfo},
 
     {FCONTROL | FVIRTKEY, VK_DELETE, CmdDeleteAnnotation},
 
@@ -217,8 +219,10 @@ ACCEL gBuiltInAccelerators[] = {
     // // for Logitech's wireless presenters which target PowerPoint's shortcuts
     {0, '.', CmdPresentationBlackBackground},
     {0, 'c', CmdToggleContinuousView},
-
 };
+
+ACCEL* gAccels = nullptr;
+int gAccelsCount = 0;
 
 static void SkipWS(const char*& s) {
     while (*s) {
@@ -266,7 +270,7 @@ static WORD ParseVirtKey(const char* s) {
     if (idx < 0) {
         return 0;
     }
-    ReportIf(idx >= dimof(gVirtKeysIds));
+    ReportIf(idx >= dimofi(gVirtKeysIds));
     WORD keyId = gVirtKeysIds[idx];
     return keyId;
 }
@@ -275,7 +279,6 @@ static WORD ParseVirtKey(const char* s) {
 // We accept variants: "Ctrl+A", "Ctrl-A", "Ctrl + A"
 static bool ParseShortcut(const char* shortcut, ACCEL& accel) {
     BYTE fVirt = 0;
-    WORD key = 0;
 
 again:
     SkipWS(shortcut);
@@ -311,6 +314,11 @@ again:
     }
     accel.key = c;
     return true;
+}
+
+bool IsValidShortcutString(const char* shortcut) {
+    ACCEL accel;
+    return ParseShortcut(shortcut, accel);
 }
 
 static const char* getVirt(BYTE key, bool isEng) {
@@ -467,11 +475,13 @@ static const char* getVirt(BYTE key, bool isEng) {
     return nullptr;
 }
 
-void AppendAccelKeyToMenuString(str::Str& str, const ACCEL& a) {
+static TempStr AppendAccelKeyToMenuStringTemp(TempStr menuStr, const ACCEL& a) {
     auto lang = trans::GetCurrentLangCode();
     bool isEng = str::IsEmpty(lang) || str::Eq(lang, "en");
     bool isGerman = str::Eq(lang, "de");
+    bool isAscii = false;
 
+    str::Str str;
     str.Append("\t"); // marks start of an accelerator in menu item
     BYTE virt = a.fVirt;
     if (virt & FALT) {
@@ -502,34 +512,50 @@ void AppendAccelKeyToMenuString(str::Str& str, const ACCEL& a) {
         if (key >= VK_NUMPAD0 && key <= VK_NUMPAD9) {
             WCHAR c = (WCHAR)key - VK_NUMPAD0 + '0';
             str.AppendChar(c);
-            return;
+            goto Exit;
         }
         if (key >= VK_F1 && key <= VK_F24) {
             int n = key - VK_F1 + 1;
             str.AppendFmt("F%d", n);
-            return;
+            goto Exit;
         }
         const char* s = getVirt(key, isEng);
         if (s) {
             str.Append(s);
-            return;
+            goto Exit;
         }
     }
 
     // virtual codes overlap with some ascii chars like '-' is VK_INSERT
     // so for non-virtual assume it's a single char
-    bool isAscii = (key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') || (key >= '0' && key <= '9');
+    isAscii = (key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') || (key >= '0' && key <= '9');
     static const char* otherAscii = "[]'`~@#$%^&*(){}/\\|?<>!,.+-=_;:\"";
     if (str::FindChar(otherAscii, key)) {
         isAscii = true;
     }
     if (isAscii) {
         str.AppendChar((char)key);
-        return;
+        goto Exit;
     }
 
     logf("Unknown key: 0x%x, virt: 0x%x\n", key, virt);
     ReportIf(true);
+    return menuStr;
+Exit:
+    TempStr res = str::JoinTemp(menuStr, str.Get());
+    return res;
+}
+
+TempStr AppendAccelKeyToMenuStringTemp(TempStr menuStr, int cmdId) {
+    ACCEL a;
+    for (int i = 0; i < gAccelsCount; i++) {
+        a = gAccels[i];
+        if (a.cmd == cmdId) {
+            TempStr res = AppendAccelKeyToMenuStringTemp(menuStr, a);
+            return res;
+        }
+    }
+    return menuStr;
 }
 
 static bool SameAccelKey(const ACCEL& a1, const ACCEL& a2) {
@@ -588,9 +614,6 @@ static bool IsSafeAccel(const ACCEL& a) {
     return true;
 }
 
-ACCEL* gAccels = nullptr;
-int gAccelsCount = 0;
-
 static HACCEL gAccelTables[3] = {
     nullptr, // for all but edit and tree view
     nullptr, // for edit
@@ -599,72 +622,65 @@ static HACCEL gAccelTables[3] = {
 
 /* returns a pointer to HACCEL so that we can update it and message loop will use
 the latest version */
-static void CreateSumatraAcceleratorTable() {
+void CreateSumatraAcceleratorTable() {
     ReportIf(gAccelTables[0] || gAccelTables[1] || gAccelTables[2]);
 
-    int nBuiltIn = (int)dimof(gBuiltInAccelerators);
+    int nMax = (int)dimof(gBuiltInAccelerators);
+    auto curr = gFirstCustomCommand;
+    while (curr) {
+        if ((curr->id > 0) && !str::IsEmptyOrWhiteSpace(curr->key)) {
+            nMax++;
+        }
+        curr = curr->next;
+    }
 
-    int nCustomShortcuts = 0;
-    nCustomShortcuts = gGlobalPrefs->shortcuts->Size();
-
-    // build a combined accelerator table of those defined in settings file
-    // and built-in shortcuts. Custom shortcuts over-ride built-in
-    int nMax = nBuiltIn + nCustomShortcuts;
     // https://github.com/sumatrapdfreader/sumatrapdf/issues/2981
     // sizeof(ACCEL) is 6 so odd number will cause treeViewAccels to
     // be mis-aligined. Rounding to 2 should be enoug, do 4 for extra safety
     nMax = RoundUp(nMax, 4);
     ACCEL* accels = AllocArray<ACCEL>(nMax);
-    int nAccels = 0;
     // perf: only 1 allocation for 2 arrays
-    ACCEL* toFreeAccels = AllocArray<ACCEL>(nMax * 2);
-    ACCEL* editAccels = toFreeAccels;
-    ACCEL* treeViewAccels = toFreeAccels + nMax;
+    ACCEL* editAccels = AllocArray<ACCEL>(nMax * 2);
+    ACCEL* treeViewAccels = editAccels + nMax;
+
+    int nAccels = 0;
     int nEditAccels = 0;
     int nTreeViewAccels = 0;
 
-    for (Shortcut* shortcut : *gGlobalPrefs->shortcuts) {
-        char* cmd = shortcut->cmd;
-        int cmdId = GetCommandIdByName(cmd);
-        if (cmdId < 0) {
-            // TODO: make it a notification
-            logf("CreateSumatraAcceleratorTable: unknown cmd name '%s'\n", cmd);
-            continue;
-        }
-        ACCEL accel = {};
-        accel.cmd = cmdId;
-        if (!ParseShortcut(shortcut->key, accel)) {
-            // TODO: make it a notification
-            logf("CreateSumatraAcceleratorTable: bad shortcut '%s'\n", shortcut->key);
-            continue;
-        }
-        accels[nAccels++] = accel;
-        if (IsSafeAccel(accel)) {
-            editAccels[nEditAccels++] = accel;
-            treeViewAccels[nTreeViewAccels++] = accel;
-        }
-        if (cmdId == CmdToggleBookmarks && !IsSafeAccel(accel)) {
-            // https://github.com/sumatrapdfreader/sumatrapdf/issues/2832
-            treeViewAccels[nTreeViewAccels++] = accel;
-        }
-    }
-
-    // add built-in but only if the shortcut doesn't conflict with custom shortcut
-    nCustomShortcuts = nAccels;
-    for (ACCEL accel : gBuiltInAccelerators) {
+    auto addShortcutIfNotExists = [&](ACCEL accel) -> void {
         bool shortcutExists = false;
         for (int i = 0; !shortcutExists && i < nAccels; i++) {
-            ACCEL accelExisting = accels[i];
             shortcutExists = SameAccelKey(accels[i], accel);
         }
         if (shortcutExists) {
-            continue;
+            return;
         }
         accels[nAccels++] = accel;
         if (IsSafeAccel(accel)) {
             editAccels[nEditAccels++] = accel;
             treeViewAccels[nTreeViewAccels++] = accel;
         }
+        if (((int)accel.cmd == (int)CmdToggleBookmarks) && !IsSafeAccel(accel)) {
+            // https://github.com/sumatrapdfreader/sumatrapdf/issues/2832
+            treeViewAccels[nTreeViewAccels++] = accel;
+        }
+    };
+
+    curr = gFirstCustomCommand;
+    while (curr) {
+        if ((curr->id > 0) && !str::IsEmptyOrWhiteSpace(curr->key)) {
+            ACCEL accel{};
+            accel.cmd = curr->id;
+            if (ParseShortcut(curr->key, accel)) {
+                addShortcutIfNotExists(accel);
+            }
+        }
+        curr = curr->next;
+    }
+
+    // add built-in but only if the shortcut doesn't conflict with custom shortcut
+    for (ACCEL accel : gBuiltInAccelerators) {
+        addShortcutIfNotExists(accel);
     }
 
     gAccels = accels;
@@ -677,7 +693,7 @@ static void CreateSumatraAcceleratorTable() {
     gAccelTables[2] = CreateAcceleratorTableW(treeViewAccels, nTreeViewAccels);
     ReportIf(gAccelTables[2] == nullptr);
 
-    free(toFreeAccels);
+    free(editAccels);
 }
 
 void FreeAcceleratorTables() {
@@ -691,25 +707,9 @@ void FreeAcceleratorTables() {
     gAccels = nullptr;
 }
 
-void ReCreateSumatraAcceleratorTable() {
-    FreeAcceleratorTables();
-    CreateSumatraAcceleratorTable();
-}
-
 HACCEL* GetAcceleratorTables() {
     if (gAccelTables[0] == nullptr) {
         CreateSumatraAcceleratorTable();
     }
     return gAccelTables;
-}
-
-bool GetAccelByCmd(int cmdId, ACCEL& accelOut) {
-    for (int i = 0; i < gAccelsCount; i++) {
-        ACCEL& a = gAccels[i];
-        if (a.cmd == cmdId) {
-            accelOut = a;
-            return true;
-        }
-    }
-    return false;
 }

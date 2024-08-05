@@ -1,34 +1,26 @@
 # Commands
 
-You can control SumatraPDF with commands.
-
-You can:
+You can control SumatraPDF with commands:
 
 - use [command palette](Command-Palette.md) (`Ctrl + K`) to invoke a command by its description
-- you can [customize a keyboard shortcut](Customizing-keyboard-shortcuts.md) to invoke a command by it’s id
-- (since 3.5) you can [send a command via DDE](DDE-Commands.md) e.g. `[CmdClose]` to invoke `Close Document` command
+- [customize a keyboard shortcut](Customizing-keyboard-shortcuts.md) to invoke a command by its id
+- **ver 3.5+:** [send a command via DDE](DDE-Commands.md) e.g. `[CmdClose]` to invoke `Close Document` command
+- **ver 3.6+:** some commands [accept arguments](Commands.md#commands-with-arguments)
 
 :search:
 
-### **File**
+## File
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette,Notes
 CmdClose,"Ctrl + W, Ctrl + F4",Close Document,
 CmdCloseCurrentDocument,q,Close Current Document,
-CmdCloseAllTabs,,Close All Tabs,ver 3.6+
-CmdCloseTabsToTheLeft,,Close Tabs To The Left,ver 3.6+
-CmdCloseTabsToTheRight,,Close Tabs To The Right,ver 3.6+
-CmdCloseOtherTabs,,Close Other Tabs,ver 3.6+
 CmdCommandPalette,Ctrl + K,Command Palette,
-CmdCommandPaletteNoFiles,Shift + Ctrl + K,Command Palette No Files,
-CmdCommandPaletteOnlyTabs,Alt + K,Command Palette Only Tabs,ver 3.5+
 CmdDuplicateInNewWindow,Shift + Ctrl + N,Open Current Document In New Window,
 CmdExit,Ctrl + Q,Exit Application,
 CmdMoveFrameFocus,F6,Move Frame Focus,
 CmdNewWindow,Ctrl + N,Open New SumatraPDF Window,
 CmdOpenFile,Ctrl + O,Open File...,
-CmdOpenFolder,,Open Folder...,
 CmdOpenNextFileInFolder,Shift + Ctrl + Right,Open Next File In Folder,
 CmdOpenPrevFileInFolder,Shift + Ctrl + Left,Open Previous File In Folder,
 CmdOpenSelectedDocument,,Open Selected Document,
@@ -57,7 +49,7 @@ CmdCopyFilePath,,Copy File Path,ver 3.5+
 CmdDeleteFile,,Delete Currently Opened File, ver 3.6+
 ```
 
-### **Search**
+## Search
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
@@ -69,7 +61,7 @@ CmdFindPrev,Shift + F3,Find Previous
 CmdFindPrevSel,Shift + Ctrl + F3,Find Previous Selection
 ```
 
-### **Viewing**
+## Viewing
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette,Notes
@@ -86,14 +78,26 @@ CmdToggleMenuBar,F9,Toggle Menu Bar,
 CmdTogglePageInfo,Shift + i,Show / Hide Current Page Number,
 CmdToggleScrollbars,,Toggle Scrollbars,
 CmdToggleToolbar,F8,Toggle Toolbar,
-CmdNextTab,Ctrl + Right,Next Tab,
-CmdPrevTab,Ctrl + Left,Previous Tab,
 CmdToggleFrequentlyRead,,Toggle Frequently Read,ver 3.5+
 CmdSelectNextTheme,,Select Next Theme,ver 3.5+
 CmdToggleLinks,,Toggle Show Links, Toggle drawing blue rectangle around links
 ```
 
-### **Navigation**
+## Tabs
+
+```commands
+Command IDs,Keyboard shortcuts,Command Palette,Notes
+CmdCloseAllTabs,,Close All Tabs,ver 3.6+
+CmdCloseTabsToTheLeft,,Close Tabs To The Left,ver 3.6+
+CmdCloseTabsToTheRight,,Close Tabs To The Right,ver 3.6+
+CmdCloseOtherTabs,,Close Other Tabs,ver 3.6+
+CmdNextTab,Ctrl + PageUp,Next Tab,
+CmdPrevTab,Ctrl + PageDown,Previous Tab,
+CmdNextTabSmart,Ctrl + Tab,Smart tab Switch,ver 3.6+
+CmdPrevTabSmart,Ctrl + Shift + Tab,Smart tab Switch,ver 3.6+
+```
+
+## Navigation
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
@@ -109,14 +113,14 @@ CmdScrollLeftPage,Shift + Left,Scroll Left By Page
 CmdScrollRightPage,Shift + Right,Scroll Right By Page
 CmdGoToFirstPage,"Ctrl + Home, Home",First Page
 CmdGoToLastPage,"Ctrl + End, End",Last Page
-CmdGoToPrevPage,"p, Ctrl + PageUp",Previous Page
-CmdGoToNextPage,"n, Ctrl + PageDown",Next Page
+CmdGoToPrevPage,"p",Previous Page
+CmdGoToNextPage,"n",Next Page
 CmdGoToPage,"g, Ctrl + G",Go to Page...
 CmdNavigateBack,"Alt + Left, Backspace",Navigate Back
 CmdNavigateForward,"Alt + Right, Shift + Backspace",Navigate Forward
 ```
 
-### **Favorite**
+## Favorites
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
@@ -125,7 +129,7 @@ CmdFavoriteDel,,Delete Favorite
 CmdFavoriteToggle,,Toggle Favorites
 ```
 
-### **Presentation**
+## Presentation
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
@@ -134,7 +138,7 @@ CmdPresentationBlackBackground,.,Presentation Black Background
 CmdPresentationWhiteBackground,w,Presentation White Background
 ```
 
-### **Annotation**
+## Annotations
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette,Notes
@@ -162,50 +166,50 @@ CmdSaveAnnotations,Shift + Ctrl + S,Save Annotations to existing PDF,
 CmdSaveAnnotationsNewFile,,Save Annotations to new PDF,ver 3.6+
 ```
 
-### **Zoom menu**
-
-```commands
-Command IDs,Keyboard shortcuts,Command Palette
-CmdToggleZoom,z,Toggle Zoom
-CmdZoomActualSize,Ctrl + 1,Zoom: Actual Size
-CmdZoomCustom,Ctrl + Y,Zoom: Custom...
-CmdZoomFitContent,Ctrl + 3,Zoom: Fit Content
-CmdZoomFitPage,Ctrl + 0,Zoom: Fit Page
-CmdZoomFitPageAndSinglePage,,Zoom: Fit Page and Single Page
-CmdZoomFitWidth,Ctrl + 2,Zoom: Fit Width
-CmdZoomFitWidthAndContinuous,,Zoom: Fit Width And Continuous
-CmdZoomIn,Ctrl + Add,Zoom In
-CmdZoomOut,Ctrl + Subtract,Zoom Out
-CmdZoom100,,Zoom: 100%
-CmdZoom12_5,,Zoom: 12.5%
-CmdZoom125,,Zoom: 125%
-CmdZoom150,,Zoom: 150%
-CmdZoom1600,,Zoom: 1600%
-CmdZoom200,,Zoom: 200%
-CmdZoom25,,Zoom: 25%
-CmdZoom3200,,Zoom: 3200%
-CmdZoom400,,Zoom: 400%
-CmdZoom50,,Zoom: 50%
-CmdZoom6400,,Zoom: 6400%
-CmdZoom8_33,,Zoom: 8.33%
-CmdZoom800,,Zoom: 800%
-```
-
-### **External app**
+## Zoom
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette,Notes
-CmdOpenWithExplorer,,Open Directory In Explorer,3.5 or later
-CmdOpenWithDirectoryOpus,,Open Directory In Directory Opu,3.5 or later
-CmdOpenWithTotalCommander,,Open Directory In Total Commander,3.5 or later
-CmdOpenWithDoubleCommander,,Open Directory In Double Commander,3.5 or later
-CmdOpenWithAcrobat,,Open With Adobe Acrobat,
-CmdOpenWithFoxIt,,Open With FoxIt,
-CmdOpenWithFoxItPhantom,,Open With FoxIt Phantom,
-CmdOpenWithHtmlHelp,,Open With HTML Help,
-CmdOpenWithPdfDjvuBookmarker,,Open With Pdf&Djvu Bookmarker,
-CmdOpenWithPdfXchange,,Open With PdfXchange,
-CmdOpenWithXpsViewer,,Open With Xps Viewer,
+CmdToggleZoom,z,Toggle Zoom,
+CmdZoomActualSize,Ctrl + 1,Zoom: Actual Size,
+CmdZoomCustom,Ctrl + Y,Zoom: Custom...,
+CmdZoomFitContent,Ctrl + 3,Zoom: Fit Content,
+CmdZoomFitPage,Ctrl + 0,Zoom: Fit Page,
+CmdZoomFitPageAndSinglePage,,Zoom: Fit Page and Single Page,
+CmdZoomFitWidth,Ctrl + 2,Zoom: Fit Width,
+CmdZoomFitWidthAndContinuous,,Zoom: Fit Width And Continuous,
+CmdZoomIn,Ctrl + Add,Zoom In,
+CmdZoomOut,Ctrl + Subtract,Zoom Out,
+CmdZoom100,,Zoom: 100%,
+CmdZoom12_5,,Zoom: 12.5%,
+CmdZoom125,,Zoom: 125%,
+CmdZoom150,,Zoom: 150%,
+CmdZoom1600,,Zoom: 1600%,
+CmdZoom200,,Zoom: 200%,
+CmdZoom25,,Zoom: 25%,
+CmdZoom3200,,Zoom: 3200%,
+CmdZoom400,,Zoom: 400%,
+CmdZoom50,,Zoom: 50%,
+CmdZoom6400,,Zoom: 6400%,
+CmdZoom8_33,,Zoom: 8.33%,
+CmdZoom800,,Zoom: 800%,
+```
+
+## External app
+
+```commands
+Command IDs,Keyboard shortcuts,Command Palette,Notes
+CmdOpenWithExplorer,,Open Directory In Explorer,ver 3.5+
+CmdOpenWithDirectoryOpus,,Open Directory In Directory Opus,ver 3.5+
+CmdOpenWithTotalCommander,,Open Directory In Total Commander,ver 3.5+
+CmdOpenWithDoubleCommander,,Open Directory In Double Commander,ver 3.5+
+CmdOpenWithAcrobat,,Open in Adobe Acrobat,
+CmdOpenWithFoxIt,,Open in Foxit Reader,
+CmdOpenWithFoxItPhantom,,Open in Foxit Phantom,
+CmdOpenWithHtmlHelp,,Open in Microsoft HTML Help,
+CmdOpenWithPdfDjvuBookmarker,,Open in Pdf&Djvu Bookmarker,
+CmdOpenWithPdfXchange,,Open in PDF-XChange,
+CmdOpenWithXpsViewer,,Open in Microsoft Xps Viewer,
 CmdTranslateSelectionWithDeepL,,Translate Selection With DeepL,
 CmdTranslateSelectionWithGoogle,,Translate Selection with Google,
 CmdSearchSelectionWithBing,,Search Selection with Bing,
@@ -217,7 +221,7 @@ CmdInvokeInverseSearch,,Invoke Inverse Search,ver 3.6+
 
 ```
 
-### **System**
+## System
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
@@ -229,21 +233,21 @@ CmdClearHistory,,Clear History
 CmdContributeTranslation,,Contribute Translation
 CmdForgetSelectedDocument,,Remove Selected Document From History
 CmdOptions,,Options...
-CmdShowLog,,Show Log
+CmdShowLog,,Show Logs
 ```
 
-### **Help**
+## Help
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
-CmdHelpOpenManual,,Help: Manual
+CmdHelpOpenManual,F1,Help: Manual
 CmdHelpOpenKeyboardShortcuts,,Help: Keyboard Shortcuts
 CmdHelpAbout,,Help: About SumatraPDF
 CmdHelpOpenManualOnWebsite,,Help: Manual On Website
 CmdHelpVisitWebsite,,Help: SumatraPDF Website
 ```
 
-### **Debug**
+## Debug
 
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
@@ -255,9 +259,164 @@ CmdDebugTestApp,,Debug: Test App
 CmdNone,,Do nothing
 ```
 
-### **Deprecated**
+## Deprecated or internal
+
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
-CmdOpenWithFirst,,don't use
-CmdOpenWithLast,,don't use
+CmdDebugCorruptMemory,,don't use
+CmdOpenWithKnownExternalViewerFirst,,don't use
+CmdOpenWithKnownExternalViewerLast,,don't use
+CmdSelectionHandler,,use SelectionHandlers advanced setting instead
+CmdSetTheme,,don't use
+CmdViewWithExternalViewer,,don't use
+CmdSaveAttachment,,don't use
+CmdOpenAttachment,,don't use
 ```
+
+# Commands with arguments
+
+**Ver 3.6+:** some commands accept arguments which provides more capabilities when creating [custom keyboard shortcut](Customizing-keyboard-shortcuts.md).
+
+For example:
+
+```
+Shortcuts [
+    [
+        Cmd = CmdCreateAnnotHighlight #00ff00 openedit
+        Key = a
+    ]
+]
+```
+
+By default `a` invokes `CmdCreateAnnotHighlight` with default yellow color.
+
+You can over-ride `a` shortcut to creat green (`#00ff00`) highlight annotation instead and automatically open annotations edit window (`openedit` boolean argument).
+
+You can create multiple keyboard shortcuts for multiple colors.
+
+Arguments can be: strings, numbers, booleans, colors (`#rrggbb` or `#aarrggbb` format).
+
+Arguments have names. For example `CmdCreateAnnotHighlight` has `color` argument of type color and optional `openedit` boolean argument.
+
+The format of providing arguments is: `CmdCreateAnnotHighlight color: #fafafa openedit: true`.
+
+For boolean arguments name is the same as `true` value i.e. `openedit` is the same as `openedit: true`.
+
+For default arguments you can skip the name. For example: `color` is a default `CmdCreateAnnotHighlight` argument so `CmdCreateAnnotHighlight #fafafa` is the same as `CmdCreateAnnotHighlight color: #fafafa`
+
+You can combine those rules: `CmdCreateAnnotHighlight #fafafa openedit` is the same as `CmdCreateAnnotHighlight color: #fafafa openedit: true`.
+
+## `CmdScrollUp`, `CmdScrollDown`
+
+**Ver 3.6+**
+
+Arguments:
+
+- `n` : default, integer, how many lines to scroll up or down (default: 1)
+
+Use case: if you want to speed up scrolling with `j`, `k` keys, you can re-assign them:
+
+```
+Shortcuts [
+    [
+        Cmd = CmdScrollDown 5
+        Key = j
+    ]
+    [
+        Cmd = CmdScrollUp n: 5
+        Key = k
+    ]
+]
+```
+
+## `CmdGoToNextPage`, `CmdGoToPrevPage`
+
+**Ver 3.6+**
+
+Arguments:
+
+- `n` : default, integer, how many pages to advance by (default: 1)
+
+Use case: if you want to go forward, back by more than 1 page
+
+## `CmdCreateAnnotHighlight` and other `CmdCreateAnnot*`
+
+Arguments:
+
+- `color` : default, color
+- `openedit` : boolean, `false` if not given
+- `copytoclipboard` : boolean, `false` if not given. For highlight/underline/squiggly/strikeout  annotations, copies the selection (text of annotation) to clipboard. This used to be default behavior for built-in `a` etc. keyboard shortcuts but now it has to be explicitly chosen.
+- `setcontent` : boolean, false if not give. For highlight/underline/squiggly/strikeout sets content of annotation to the selection (text of annotation)
+
+Use cases: 
+- change default color for annotations
+- create multiple shortcuts for different colors
+
+Example: change `a` to create green highlight annotation:
+
+```
+Shortcuts [
+    [
+        Cmd = CmdCreateAnnotHighlight #00ff00 openedit
+        Key = a
+    ]
+]
+```
+
+## `CmdZoomCustom`
+
+**Ver 3.6+**
+
+Arguments:
+- `level` : default, string or intenger, zoom level
+
+`level` can be:
+- a number describing zoom level in percent e.g.:
+    - `50` or `50%` means 50% zoom
+    - `125` means 125% zoom
+- a virtual zoom level:
+  - `actual size` (100% zoom level)
+  - `fit page`
+  - `fit width`
+  - `fit content`
+
+Example:
+
+```
+Shortcuts [
+    [
+        Cmd = CmdZoomCustom 50%
+        Key = z
+    ]
+]
+```
+
+
+## `CmdCommandPalette`
+
+**Ver 3.6+**
+
+Argument:
+- `mode` : default, optional string, Values:
+  - `@` for opened files (tabs)
+  - `#` for history of files
+  - `>` for commands
+
+Without an argument it defaults to `>`.
+
+Example:
+
+```
+Shortcuts [
+    [
+        Cmd = CmdCommandPalette #
+        Key = Ctrl + h
+    ]
+]
+```
+
+# Debugging
+
+If a custom shortcut defined in `Shortcuts` doesn't work it could be caused by invalid command name or invalid command arguments.
+
+We log information about unsuccessful parsing of a shortcut so [check the logs](Debugging-Sumatra.md#getting-logs) if things don't work as expected.

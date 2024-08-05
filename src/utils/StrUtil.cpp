@@ -201,7 +201,23 @@ StrSpan::StrSpan(const char* s) {
 
 StrSpan::StrSpan(const char* s, int sLen) {
     d = (char*)s;
-    size = sLen;
+    if (sLen < 0) {
+        size = str::Leni(s);
+    } else {
+        size = sLen;
+    }
+}
+
+bool IsEqual(const StrSpan& d1, const StrSpan& d2) {
+    if (d1.Len() != d2.Len()) {
+        return false;
+    }
+    if (d1.Len() == 0) {
+        return true;
+    }
+    ReportIf(!d1.d || !d2.d);
+    int res = memcmp(d1.d, d2.d, d1.Len());
+    return res == 0;
 }
 
 namespace str {
@@ -1109,8 +1125,8 @@ int CmpNatural(const char* a, const char* b) {
     return diff;
 }
 
-bool EmptyOrWhiteSpaceOnly(const char* s) {
-    if (!s || !*s) {
+bool IsEmptyOrWhiteSpace(const char* s) {
+    if (!s) {
         return true;
     }
     while (*s) {
@@ -1128,6 +1144,16 @@ bool Skip(const char*& s, const char* toSkip) {
         return true;
     }
     return false;
+}
+
+const char* SkipChar(const char* s, char toSkip) {
+    if (!s) {
+        return nullptr;
+    }
+    while (*s == toSkip) {
+        s++;
+    }
+    return s;
 }
 
 } // namespace str
@@ -1157,10 +1183,11 @@ void DecodeInPlace(char* url) {
 // of L1 cache
 namespace seqstrings {
 
-void Next(const char*& s, int& idx) {
+void Next(const char*& s, int* idxInOut) {
+    int idx = *idxInOut;
     if (!s || !*s || idx < 0) {
         s = nullptr;
-        idx = -1;
+        *idxInOut = -1;
         return;
     }
     while (*s) {
@@ -1172,11 +1199,12 @@ void Next(const char*& s, int& idx) {
         return;
     }
     idx++;
+    *idxInOut = idx;
 }
 
 void Next(const char*& s) {
     int idxDummy = 0;
-    Next(s, idxDummy);
+    Next(s, &idxDummy);
 }
 
 // Returns nullptr if s is the same as toFind
@@ -1884,21 +1912,6 @@ int WStr::Remove(const WCHAR& el) {
     return i;
 }
 
-void WStr::Reverse() const {
-    for (size_t i = 0; i < len / 2; i++) {
-        std::swap(els[i], els[len - i - 1]);
-    }
-}
-
-WCHAR& WStr::FindEl(const std::function<bool(WCHAR&)>& check) const {
-    for (size_t i = 0; i < len; i++) {
-        if (check(els[i])) {
-            return els[i];
-        }
-    }
-    return els[len]; // nullptr-sentinel
-}
-
 bool WStr::IsEmpty() const {
     return len == 0;
 }
@@ -2206,23 +2219,6 @@ int BufSet(WCHAR* dst, int dstCchSize, const char* src) {
     return BufSet(dst, dstCchSize, ToWStrTemp(src));
 }
 
-int BufAppend(WCHAR* dst, int cchDst, const WCHAR* s) {
-    ReportIf(0 == cchDst);
-
-    int currDstCchLen = str::Leni(dst);
-    if (currDstCchLen + 1 >= cchDst) {
-        return 0;
-    }
-    int left = cchDst - currDstCchLen - 1;
-    int srcCchSize = str::Leni(s);
-    int toCopy = std::min(left, srcCchSize);
-
-    errno_t err = wcsncat_s(dst, cchDst, s, toCopy);
-    ReportIf(err || dst[currDstCchLen + toCopy] != '\0');
-
-    return toCopy;
-}
-
 // append as much of s at the end of dst (which must be properly null-terminated)
 // as will fit.
 int BufAppend(char* dst, int dstCch, const char* s) {
@@ -2508,3 +2504,20 @@ TempStr GetFileNameTemp(const char* url) {
 }
 
 } // namespace url
+
+int ParseInt(const char* s) {
+    bool negative = *s == '-';
+    if (negative) {
+        s++;
+    }
+    int value = 0;
+    int overflowCheck = negative ? 1 : 0;
+    for (; str::IsDigit(*s); s++) {
+        value = value * 10 + (*s - '0');
+        // return 0 on overflow
+        if (value - overflowCheck < 0) {
+            return 0;
+        }
+    }
+    return negative ? -value : value;
+}

@@ -55,7 +55,7 @@
 
 #include "utils/Log.h"
 
-Kind kNotifGroupAnnotation = "notifAnnotation";
+Kind kNotifAnnotation = "notifAnnotation";
 
 // Timer for mouse wheel smooth scrolling
 constexpr UINT_PTR kSmoothScrollTimerID = 6;
@@ -344,7 +344,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
     }
 
     Point pos{x, y};
-    NotificationWnd* cursorPosNotif = GetNotificationForGroup(win->hwndCanvas, kNotifGroupCursorPos);
+    NotificationWnd* cursorPosNotif = GetNotificationForGroup(win->hwndCanvas, kNotifCursorPos);
 
     if (win->dragStartPending) {
         if (!IsDragDistance(x, win->dragStart.x, y, win->dragStart.y)) {
@@ -370,10 +370,10 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
                     if (annot) {
                         // auto r = annot->bounds;
                         // logf("new pos: %d-%d, size: %d-%d\n", (int)r.x, (int)r.y, (int)r.dx, (int)r.dy);
-                        RemoveNotificationsForGroup(win->hwndCanvas, kNotifGroupAnnotation);
+                        RemoveNotificationsForGroup(win->hwndCanvas, kNotifAnnotation);
                         NotificationCreateArgs args;
                         args.hwndParent = win->hwndCanvas;
-                        args.groupId = kNotifGroupAnnotation;
+                        args.groupId = kNotifAnnotation;
                         args.timeoutMs = -1;
                         TempStr name = annot ? AnnotationReadableNameTemp(annot->type) : (TempStr) "none";
                         args.msg = str::FormatTemp(_TRN("%s annotation. Ctrl+click to edit."), name);
@@ -382,7 +382,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
                 }
             }
             if (!annot) {
-                RemoveNotificationsForGroup(win->hwndCanvas, kNotifGroupAnnotation);
+                RemoveNotificationsForGroup(win->hwndCanvas, kNotifAnnotation);
             }
             win->annotationUnderCursor = annot;
             break;
@@ -415,7 +415,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
             }
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
             OnSelectionEdgeAutoscroll(win, x, y);
-            RepaintAsync(win, 0);
+            ScheduleRepaint(win, 0);
             break;
         }
         case MouseAction::Dragging: {
@@ -606,7 +606,7 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
             DeleteOldSelectionInfo(win, true);
             tab->selectionOnPage = SelectionOnPage::FromRectangle(dm, dm->CvtToScreen(pageNo, link->GetRect()));
             win->showSelection = tab->selectionOnPage != nullptr;
-            RepaintAsync(win, 0);
+            ScheduleRepaint(win, 0);
         }
         SetCursorCached(IDC_ARROW);
         win->ctrl->HandleLink(dest, win->linkHandler);
@@ -623,7 +623,7 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     if (win->fwdSearchMark.show && gGlobalPrefs->forwardSearch.highlightPermanent) {
         /* if there's a permanent forward search mark, hide it */
         win->fwdSearchMark.show = false;
-        RepaintAsync(win, 0);
+        ScheduleRepaint(win, 0);
         return;
     }
 
@@ -667,8 +667,8 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
     int elementPageNo = -1;
     IPageElement* pageEl = dm->GetElementAtPos(mousePos, &elementPageNo);
 
-    WindowTab* tab = win->CurrentTab();
 #if 0
+    WindowTab* tab = win->CurrentTab();
     if (IsCtrlPressed() && win->annotationUnderCursor) {
         ShowEditAnnotationsWindow(tab);
         SetSelectedAnnotation(tab, win->annotationUnderCursor);
@@ -681,8 +681,9 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
             PointF pt = dm->CvtFromScreen(mousePos, pageNo);
             dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y, IsCtrlPressed());
             UpdateTextSelection(win, false);
-            RepaintAsync(win, 0);
+            ScheduleRepaint(win, 0);
             /* callback to user application via DDE. CPS Lab.*/
+            WindowTab* tab = win->CurrentTab();
             tab->markers->sendSelectMessage(win, IsCtrlPressed());
         }
         return;
@@ -701,8 +702,7 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         DeleteOldSelectionInfo(win, true);
         win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
         win->showSelection = win->CurrentTab()->selectionOnPage != nullptr;
-        RepaintAsync(win, 0);
-
+        ScheduleRepaint(win, 0);
         if (cpslab::MODE == cpslab::CpsMode::Document) {
             cpslab::sendSelectImage(win, x, y);
         }
@@ -825,8 +825,11 @@ static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect& pageRect, bool 
 #else
 static void PaintPageFrameAndShadow(HDC hdc, Rect& bounds, Rect&, bool) {
     AutoDeletePen pen(CreatePen(PS_NULL, 0, 0));
-    auto col = ThemeMainWindowBackgroundColor();
-    AutoDeleteBrush brush(CreateSolidBrush(col));
+    auto bgCol = ThemeMainWindowBackgroundColor();
+    if (gGlobalPrefs->fixedPageUI.invertColors) {
+        ThemeDocumentColors(bgCol);
+    }
+    AutoDeleteBrush brush(CreateSolidBrush(bgCol));
     ScopedSelectPen restorePen(hdc, pen);
     ScopedSelectObject restoreBrush(hdc, brush);
     Rectangle(hdc, bounds.x, bounds.y, bounds.x + bounds.dx + 1, bounds.y + bounds.dy + 1);
@@ -923,7 +926,7 @@ NO_INLINE static void PaintCurrentEditAnnotationMark(WindowTab* tab, HDC hdc, Di
     // Gdiplus::Pen pen(col, 4);
     Gdiplus::Pen pen(&br, 4);
     Gdiplus::Graphics gs(hdc);
-    Gdiplus::Status stat = gs.DrawRectangle(&pen, rect.x, rect.y, rect.dx, rect.dy);
+    gs.DrawRectangle(&pen, rect.x, rect.y, rect.dx, rect.dy);
 }
 
 static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
@@ -932,6 +935,7 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
         return;
     }
     DisplayModel* dm = win->AsFixed();
+    logf("DrawDocument RenderCache:\n");
 
     bool isImage = dm->GetEngine()->IsImageCollection();
     // draw comic books and single images on a black background
@@ -1033,11 +1037,15 @@ static void DrawDocument(MainWindow* win, HDC hdc, RECT* rcArea) {
         if (renderDelay != 0) {
             HFONT fontRightTxt = CreateSimpleFont(hdc, "MS Shell Dlg", 14);
             HGDIOBJ hPrevFont = SelectObject(hdc, fontRightTxt);
-            auto col = ThemeWindowTextColor();
-            SetTextColor(hdc, col);
-            if (renderDelay != RENDER_DELAY_FAILED) {
+            auto txtCol = ThemeWindowTextColor();
+            if (gGlobalPrefs->fixedPageUI.invertColors) {
+                COLORREF dummy;
+                txtCol = ThemeDocumentColors(dummy);
+            }
+            SetTextColor(hdc, txtCol);
+            if (renderDelay != kRenderDelayFailed) {
                 if (renderDelay < REPAINT_MESSAGE_DELAY_IN_MS) {
-                    RepaintAsync(win, REPAINT_MESSAGE_DELAY_IN_MS / 4);
+                    ScheduleRepaint(win, REPAINT_MESSAGE_DELAY_IN_MS / 4);
                 } else {
                     DrawCenteredText(hdc, bounds, _TRA("Please wait - rendering..."), isRtl);
                 }
@@ -1124,7 +1132,7 @@ static LRESULT OnSetCursorMouseNone(MainWindow* win, HWND hwnd) {
         win->DeleteToolTip();
         return FALSE;
     }
-    if (GetNotificationForGroup(win->hwndCanvas, kNotifGroupCursorPos)) {
+    if (GetNotificationForGroup(win->hwndCanvas, kNotifCursorPos)) {
         SetCursorCached(IDC_CROSS);
         return TRUE;
     }
@@ -1193,7 +1201,77 @@ float ScaleZoomBy(MainWindow* win, float factor) {
     return factor * zoomVirt;
 }
 
-static bool gWheelScrollRelative = true;
+static bool gWheelZoomRelative = true;
+
+// we guess this is part of continous zoom action if WM_MOUSEWHEEL
+bool IsFirstWheelMsg(LARGE_INTEGER& lastTime) {
+    auto currTime = TimeGet();
+    auto elapsedMs = TimeDiffMs(lastTime, currTime);
+    // 150 ms is a heuristic based on looking at logs
+    if (elapsedMs < 150.0) {
+        // logf("IsFirstWheelMsg: no, elapsed: %.f\n", (float)elapsedMs);
+        lastTime = currTime;
+        return false;
+    }
+    // logf("IsFirstWheelMsg: yes, elapsed: %.f\n", (float)elapsedMs);
+    lastTime = currTime;
+    return true;
+}
+
+// this does zooming via mouse wheel (with ctrl or right mouse buttone)
+static void ZoomByMouseWheel(MainWindow* win, WPARAM wp) {
+    // don't show the context menu when zooming with the right mouse-button down
+    win->dragStartPending = false;
+    // Kill the smooth scroll timer when zooming
+    // We don't want to move to the new updated y offset after zooming
+    KillTimer(win->hwndCanvas, kSmoothScrollTimerID);
+
+    short delta = GET_WHEEL_DELTA_WPARAM(wp);
+    Point pt = HwndGetCursorPos(win->hwndCanvas);
+    float newZoom;
+    float factor = 0;
+    if (!gWheelZoomRelative) {
+        // before 3.6 we were scrolling by steps
+        newZoom = win->ctrl->GetNextZoomStep(delta < 0 ? kZoomMin : kZoomMax);
+        bool smartZoom = false; // Note: if true will prioritze selection
+        SmartZoom(win, newZoom, &pt, smartZoom);
+        return;
+    }
+
+    static LARGE_INTEGER lastWheelMsgTime{};
+    static int accumDelta = 0;
+    static float initialZoomVritual = 0;
+
+    if (IsFirstWheelMsg(lastWheelMsgTime)) {
+        initialZoomVritual = win->ctrl->GetZoomVirtual(true);
+        accumDelta = 0;
+    }
+
+    // special case the value coming from pinch gensture on thinkpad touchpad
+    // WHEEL_DELTA is 120, which is too fast, so we slow down zooming
+    // 10 is heuristic
+    if (delta == WHEEL_DELTA) {
+        delta = 10;
+    } else if (delta == -WHEEL_DELTA) {
+        delta = -10;
+    }
+
+    accumDelta += delta;
+    // calc zooming factor as centered around 1.f (1 is no change, > 1 is zoom in, < 1 is zoom out)
+    // from delta values that are centered around 0
+    bool negative = accumDelta < 0;
+
+    factor = (float)std::abs(accumDelta) / 100.f;
+    factor = 1.f + factor;
+    if (negative) {
+        factor = 1 / factor;
+    }
+    newZoom = initialZoomVritual * factor;
+    bool smartZoom = false; // Note: if true will prioritze selection
+    SmartZoom(win, newZoom, &pt, smartZoom);
+
+    // logf("delta: %d, accumDelta: %d, factor: %f, newZoom: %f\n", delta, accumDelta, factor, newZoom);
+}
 
 static LRESULT CanvasOnMouseWheel(MainWindow* win, UINT msg, WPARAM wp, LPARAM lp) {
     // Scroll the ToC sidebar, if it's visible and the cursor is in it
@@ -1207,8 +1285,6 @@ static LRESULT CanvasOnMouseWheel(MainWindow* win, UINT msg, WPARAM wp, LPARAM l
         return res;
     }
 
-    short delta = GET_WHEEL_DELTA_WPARAM(wp);
-
     // Note: not all mouse drivers correctly report the Ctrl key's state
     // isCtrl is also set if this is pinch gestore from touchpad (on thinkpad x1 at least).
     bool isCtrl = (LOWORD(wp) & MK_CONTROL) || IsCtrlPressed();
@@ -1216,62 +1292,7 @@ static LRESULT CanvasOnMouseWheel(MainWindow* win, UINT msg, WPARAM wp, LPARAM l
     bool isRightButton = (LOWORD(wp) & MK_RBUTTON);
     bool isZooming = isCtrl || isRightButton;
     if (isZooming) {
-        Point pt = HwndGetCursorPos(win->hwndCanvas);
-
-        float newZoom;
-        float factor = 0;
-        short delta2 = delta;
-        if (gWheelScrollRelative) {
-            // calc zooming factor as centered around 1.f (1 is no change, > 1 is zoom in, < 1 is zoom out)
-            // from delta values that are centered around 0
-            bool negative = false;
-            // delta is 120 (WHEEL_DELTA) when pinch on thinkpad touchpad
-            // 4 - 248 when ctrl + scrollpoint
-
-            if (delta < 0) {
-                negative = true;
-                delta2 = -delta;
-            }
-
-            if (delta2 == WHEEL_DELTA) {
-                // special case the value coming from pinch gensture on thinkpad touchpad
-                // otherwise it's too slow (would end up 6)
-                delta = 16;
-            } else {
-                // logarithmically dampen delta because otherwise it zooms too fast
-                // the higher the value, the more we dampen
-                // 2 is chosen heuristically
-                double dampenFactor = 2;
-                double logX = log10((double)delta2) / log10(dampenFactor);
-                delta2 = (int)logX;
-            }
-            factor = (float)delta2 / 100.f;
-            if (factor > 0.5f) {
-                factor = 0.5f;
-            }
-            factor = 1.f + factor;
-            if (negative) {
-                factor = 1 / factor;
-            }
-            newZoom = ScaleZoomBy(win, factor);
-        } else {
-            // before 3.6 we were scrolling by steps
-            newZoom = win->ctrl->GetNextZoomStep(delta < 0 ? kZoomMin : kZoomMax);
-        }
-        // logf("delta: %d, delta2: %d, factor: %f, newZoom: %f, isRightButton: %d, isCtrl: %d\n", delta, delta2,
-        // factor, newZoom, (int)isRightButton, (int)isCtrl);
-        bool smartZoom = false; // Note: if true will prioritze selection
-        SmartZoom(win, newZoom, &pt, smartZoom);
-
-        // don't show the context menu when zooming with the right mouse-button down
-        if ((LOWORD(wp) & MK_RBUTTON)) {
-            win->dragStartPending = false;
-        }
-
-        // Kill the smooth scroll timer when zooming
-        // We don't want to move to the new updated y offset after zooming
-        KillTimer(win->hwndCanvas, kSmoothScrollTimerID);
-
+        ZoomByMouseWheel(win, wp);
         return 0;
     }
 
@@ -1289,6 +1310,7 @@ static LRESULT CanvasOnMouseWheel(MainWindow* win, UINT msg, WPARAM wp, LPARAM l
         gSupressNextAltMenuTrigger = true;
     }
 
+    short delta = GET_WHEEL_DELTA_WPARAM(wp);
     if (vScroll && !isCont) {
         constexpr int pageFlipDelta = WHEEL_DELTA * 3;
         float zoomVirt = win->ctrl->GetZoomVirtual();
@@ -1598,6 +1620,14 @@ static LRESULT OnGesture(MainWindow* win, UINT msg, WPARAM wp, LPARAM lp) {
 static LRESULT WndProcCanvasFixedPageUI(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     // DbgLogMsg("canvas:", hwnd, msg, wp, lp);
 
+    if (!IsMainWindowValid(win)) {
+        bool hwndValid = IsWindow(hwnd);
+        logf("WndProcCanvasFixedPageUI: MainWindow win: 0x%p is no longer valid, msg: %d, hwnd valid: %d\n", win,
+             (int)msg, (int)hwndValid);
+        ReportIfQuick(true);
+        return 0;
+    }
+
     int x = GET_X_LPARAM(lp);
     int y = GET_Y_LPARAM(lp);
     switch (msg) {
@@ -1730,7 +1760,7 @@ static void OnPaintError(MainWindow* win) {
     FillRect(hdc, &ps.rcPaint, bgBrush);
     // TODO: should this be "Error opening %s"?
     auto tab = win->CurrentTab();
-    const char* filePath = tab->filePath.Get();
+    const char* filePath = tab->filePath;
     TempStr msg = str::FormatTemp(_TRA("Error loading %s"), filePath);
     DrawCenteredText(hdc, ClientRect(win->hwndCanvas), msg, IsUIRightToLeft());
     SelectObject(hdc, hPrevFont);
@@ -1756,19 +1786,34 @@ static LRESULT WndProcCanvasLoadError(MainWindow* win, HWND hwnd, UINT msg, WPAR
 
 ///// methods needed for all types of canvas /////
 
-void RepaintAsync(MainWindow* win, int delayInMs) {
+struct RepaintTaskData {
+    MainWindow* win = nullptr;
+    int delayInMs = 0;
+};
+
+static void RepaintTask(RepaintTaskData* d) {
+    AutoDelete delData(d);
+
+    auto win = d->win;
+    if (!IsMainWindowValid(win)) {
+        return;
+    }
+    if (!d->delayInMs) {
+        WndProcCanvas(win->hwndCanvas, WM_TIMER, REPAINT_TIMER_ID, 0);
+    } else if (!win->delayedRepaintTimer) {
+        win->delayedRepaintTimer = SetTimer(win->hwndCanvas, REPAINT_TIMER_ID, (uint)d->delayInMs, nullptr);
+    }
+}
+
+void ScheduleRepaint(MainWindow* win, int delayInMs) {
+    logf("ScheduleRepaint RenderCache:\n");
+    auto data = new RepaintTaskData;
+    data->win = win;
+    data->delayInMs = delayInMs;
+    auto fn = MkFunc0<RepaintTaskData>(RepaintTask, data);
     // even though RepaintAsync is mostly called from the UI thread,
     // we depend on the repaint message to happen asynchronously
-    uitask::Post(TaskRepaintAsync, [win, delayInMs] {
-        if (!MainWindowStillValid(win)) {
-            return;
-        }
-        if (!delayInMs) {
-            WndProcCanvas(win->hwndCanvas, WM_TIMER, REPAINT_TIMER_ID, 0);
-        } else if (!win->delayedRepaintTimer) {
-            win->delayedRepaintTimer = SetTimer(win->hwndCanvas, REPAINT_TIMER_ID, (uint)delayInMs, nullptr);
-        }
-    });
+    uitask::Post(fn, nullptr);
 }
 
 static void OnTimer(MainWindow* win, HWND hwnd, WPARAM timerId) {
@@ -1812,9 +1857,9 @@ static void OnTimer(MainWindow* win, HWND hwnd, WPARAM timerId) {
             } else if (win->fwdSearchMark.hideStep >= HIDE_FWDSRCHMARK_STEPS) {
                 KillTimer(hwnd, HIDE_FWDSRCHMARK_TIMER_ID);
                 win->fwdSearchMark.show = false;
-                RepaintAsync(win, 0);
+                ScheduleRepaint(win, 0);
             } else {
-                RepaintAsync(win, 0);
+                ScheduleRepaint(win, 0);
             }
             break;
 
@@ -1885,7 +1930,7 @@ static void OnDropFiles(MainWindow* win, HDROP hDrop, bool dragFinish) {
             win = CreateAndShowMainWindow(nullptr);
             args.win = win;
         }
-        LoadDocumentAsync(&args);
+        StartLoadDocument(&args);
     }
 }
 

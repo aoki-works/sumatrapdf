@@ -6,6 +6,7 @@
 #include "utils/WinDynCalls.h"
 #include "utils/CmdLineArgsIter.h"
 #include "utils/DbgHelpDyn.h"
+#include "utils/DirIter.h"
 #include "utils/Dpi.h"
 #include "utils/FileUtil.h"
 #include "utils/FileWatcher.h"
@@ -378,7 +379,7 @@ static bool SetupPluginMode(Flags& i) {
         TempStr args = str::DupTemp(str::FindChar(i.pluginURL, '#') + 1);
         str::TransCharsInPlace(args, "#", "&");
         StrVec parts;
-        Split(parts, args, "&", true);
+        Split(&parts, args, "&", true);
         for (int k = 0; k < parts.Size(); k++) {
             char* part = parts.At(k);
             int pageNo;
@@ -840,6 +841,45 @@ static void ShowNoAdminErrorMessage() {
     TaskDialogIndirect(&dialogConfig, nullptr, nullptr, nullptr);
 }
 
+static void MaybeDeleteStaleDirectory(char* dir, VisitDirData* d) {
+    auto fd = d->fd;
+    ReportIf(!IsDirectory(fd->dwFileAttributes));
+    TempStr name = ToUtf8Temp(fd->cFileName);
+    bool maybeDelete = str::StartsWith(name, "manual-") || str::StartsWith(name, "crashinfo-");
+    if (!maybeDelete) {
+        logf("MaybeDeleteStaleDirectory: skipping '%s' because not manual-* or crsahinfo-*\n", name);
+        return;
+    }
+    TempStr currVer = GetVerDirNameTemp("");
+    if (str::Contains(name, currVer)) {
+        logf("MaybeDeleteStaleDirectory: skipping '%s' because our ver '%s'\n", name, currVer);
+        return;
+    }
+    bool ok = dir::RemoveAll(dir);
+    logf("MaybeDeleteStaleDirectory: dir::RemoveAll('%s') returned %d\n", dir, ok);
+    return;
+}
+
+// delete symbols and manual from possibly previous versions
+static void DeleteStaleFilesAsync() {
+    TempStr dir = GetNotImportantDataDirTemp();
+    auto fn = MkFunc1(MaybeDeleteStaleDirectory, dir);
+    VisitDir(dir, kVisitDirIncludeDirs, fn);
+}
+
+void StartDeleteStaleFiles() {
+    // for now we only care about pre-release builds as they can be updated frequently
+    if (false && !gIsPreReleaseBuild) {
+        logf("DeleteStaleFiles: skipping because gIsPreRelaseBuild: %d\n", (int)gIsPreReleaseBuild);
+        return;
+    }
+    TempStr dir = GetNotImportantDataDirTemp();
+    TempStr ver = GetVerDirNameTemp("");
+    logf("DeleteStaleFiles: dir: '%s', gIsPreRelaseBuild: %d, ver: %s\n", dir, (int)gIsPreReleaseBuild, ver);
+    auto fn = MkFunc0Void(DeleteStaleFilesAsync);
+    RunAsync(fn, "DeleteStaleFilesThread");
+}
+
 // non-admin process cannot send DDE messages to admin process
 // so when that happens we need to alert the user
 // TODO: maybe a better fix is to re-launch ourselves as admin?
@@ -941,6 +981,27 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     gCli = &flags;
 
     CheckIsStoreBuild();
+
+    if (false) {
+        const char* dir = "C:\\Users\\kjk\\Downloads\\test";
+        auto di = DirIter{dir};
+        for (VisitDirData* d : di) {
+            logf("d->filePath: '%s'\n", d->filePath);
+        }
+    }
+
+    // do this before running installer etc. so that we have disk / net permissions
+    // (default policy is to disallow everything)
+    InitializePolicies(flags.restrictedUse);
+
+#if defined(DEBUG)
+    if (false) {
+        TempStr exePath = GetExePathTemp();
+        RunNonElevated(exePath);
+        return 0;
+    }
+#endif
+
     bool isInstaller = flags.install || flags.runInstallNow || flags.fastInstall || IsInstallerAndNamedAsSuch();
     bool isUninstaller = flags.uninstall;
     bool noLogHere = isInstaller || isUninstaller;
@@ -954,7 +1015,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
 
     {
         char* s = ToUtf8Temp(GetCommandLineW());
-        logf("Starting SumatraPDF %s, GetCommandLineW():\n%s\n", UPDATE_CHECK_VERA, s);
+        logf("Starting SumatraPDF %s, GetCommandLineW(): '%s', flags.install: %d, flags.uninstall: %d\n",
+             UPDATE_CHECK_VERA, s, (int)flags.install, (int)flags.uninstall);
     }
 #if defined(DEBUG)
     if (gIsDebugBuild || gIsPreReleaseBuild) {
@@ -992,6 +1054,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         return exitCode;
     }
 
+    logf("  isInstaller: %d\n", (int)isInstaller);
     if (isInstaller) {
         if (!ExeHasInstallerResources()) {
             ShowNotValidInstallerError();
@@ -1003,12 +1066,14 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         ::ExitProcess(exitCode);
     }
 
+    logf("  isUninstaller: %d, flags.uninstaller: %d\n", (int)isUninstaller, (int)flags.uninstall);
     if (isUninstaller) {
         exitCode = RunUninstaller();
         ::ExitProcess(exitCode);
     }
 
     if (flags.updateSelfTo) {
+        logf(" flags.updateSelfTo: '%s'\n", flags.updateSelfTo);
         RedirectIOToExistingConsole();
         UpdateSelfTo(flags.updateSelfTo);
         if (flags.exitWhenDone) {
@@ -1018,6 +1083,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     }
 
     if (flags.deleteFile) {
+        logf(" flags.deleteFile: '%s'\n", flags.deleteFile);
         RedirectIOToExistingConsole();
         // sleeping for a bit to make sure that the program that launched us
         // had time to exit so that we can overwrite it
@@ -1045,10 +1111,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         ::ExitProcess(exitCode);
     }
 
-    // do this before running installer etc. so that we have disk / net permissions
-    // (default policy is to disallow everything)
-    InitializePolicies(flags.restrictedUse);
-
 #if defined(DEBUG)
     if (flags.testRenderPage) {
         TestRenderPage(flags);
@@ -1062,6 +1124,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         return 0;
     }
 #endif
+
+    if (flags.engineDump) {
+        void EngineDump(const Flags& flags);
+        EngineDump(flags);
+        return 0;
+    }
 
     if (flags.appdataDir) {
         SetAppDataDir(flags.appdataDir);
@@ -1131,6 +1199,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
             str::FreePtr(&flags.search);
         }
     }
+
     if (flags.printerName) {
         // note: this prints all PDF files. Another option would be to
         // print only the first one
@@ -1182,14 +1251,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         existingHwnd = existingInstanceHwnd;
     }
 
-    // call before creating first window and menu. Otherwise menu shortcuts will be missing
-    GetAcceleratorTables();
-
     if (flags.dde) {
         logf("sending flags.dde '%s', hwnd: 0x%p\n", flags.dde, existingHwnd);
         SendMyselfDDE(flags.dde, existingHwnd);
         goto Exit;
     }
+
     if (existingHwnd) {
         int nFiles = flags.fileNames.Size();
         // we allow -new-window on its own if no files given
@@ -1354,11 +1421,11 @@ ContinueOpenWindow:
     //  \Documents is a good directory to use
     ChangeCurrDirToDocuments();
 
-    CheckForUpdateAsync(win, UpdateCheck::Automatic);
+    StartAsyncUpdateCheck(win, UpdateCheck::Automatic);
 
     BringWindowToTop(win->hwndFrame);
 
-    DeleteStaleFilesAsync();
+    StartDeleteStaleFiles();
 
     exitCode = RunMessageLoop();
     SafeCloseHandle(&hMutex);
@@ -1431,6 +1498,7 @@ Exit:
 
     ShutdownCleanup();
     EngineEbookCleanup();
+    FreeCustomCommands();
 
     // it's still possible to crash after this (destructors of static classes,
     // atexit() code etc.) point, but it's very unlikely

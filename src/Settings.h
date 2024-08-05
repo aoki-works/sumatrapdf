@@ -138,6 +138,8 @@ struct ExternalViewer {
     // separate multiple entries using ';' and don't include any spaces
     // (e.g. *.pdf;*.xps for all PDF and XPS documents)
     char* filter;
+    // optional: keyboard shortcut e.g. Alt + 7
+    char* key;
 };
 
 // customization options for how we show forward search results (used
@@ -173,8 +175,8 @@ struct SelectionHandler {
     char* url;
     // name shown in context menu
     char* name;
-    //
-    int cmdID;
+    // keyboard shortcut
+    char* key;
 };
 
 // custom keyboard shortcuts
@@ -183,6 +185,12 @@ struct Shortcut {
     char* cmd;
     // keyboard shortcut (e.g. Ctrl-Alt-F)
     char* key;
+    // name shown in command palette
+    char* name;
+    // if given, shows in toolbar
+    char* toolbarText;
+    // command id
+    int cmdId;
 };
 
 // Values which are persisted for bookmarks/favorites
@@ -391,6 +399,8 @@ struct GlobalPrefs {
     // zoom levels which zooming steps through in addition to Fit Page, Fit
     // Width and the minimum and maximum allowed values (8.33 and 6400)
     Vec<float>* zoomLevels;
+    //
+    Vec<int>* zoomLevelsCmdIds;
     // zoom step size in percents relative to the current zoom level. if
     // zero or negative, the values from ZoomLevels are used instead
     float zoomIncrement;
@@ -534,9 +544,10 @@ static const FieldInfo gExternalViewerFields[] = {
     {offsetof(ExternalViewer, commandLine), SettingType::String, 0},
     {offsetof(ExternalViewer, name), SettingType::String, 0},
     {offsetof(ExternalViewer, filter), SettingType::String, 0},
+    {offsetof(ExternalViewer, key), SettingType::String, 0},
 };
-static const StructInfo gExternalViewerInfo = {sizeof(ExternalViewer), 3, gExternalViewerFields,
-                                               "CommandLine\0Name\0Filter"};
+static const StructInfo gExternalViewerInfo = {sizeof(ExternalViewer), 4, gExternalViewerFields,
+                                               "CommandLine\0Name\0Filter\0Key"};
 
 static const FieldInfo gForwardSearchFields[] = {
     {offsetof(ForwardSearch, highlightOffset), SettingType::Int, 0},
@@ -555,14 +566,18 @@ static const StructInfo gPrinterDefaultsInfo = {sizeof(PrinterDefaults), 1, gPri
 static const FieldInfo gSelectionHandlerFields[] = {
     {offsetof(SelectionHandler, url), SettingType::String, 0},
     {offsetof(SelectionHandler, name), SettingType::String, 0},
+    {offsetof(SelectionHandler, key), SettingType::String, 0},
 };
-static const StructInfo gSelectionHandlerInfo = {sizeof(SelectionHandler), 2, gSelectionHandlerFields, "URL\0Name"};
+static const StructInfo gSelectionHandlerInfo = {sizeof(SelectionHandler), 3, gSelectionHandlerFields,
+                                                 "URL\0Name\0Key"};
 
 static const FieldInfo gShortcutFields[] = {
     {offsetof(Shortcut, cmd), SettingType::String, (intptr_t) ""},
     {offsetof(Shortcut, key), SettingType::String, (intptr_t) ""},
+    {offsetof(Shortcut, name), SettingType::String, 0},
+    {offsetof(Shortcut, toolbarText), SettingType::String, 0},
 };
-static const StructInfo gShortcutInfo = {sizeof(Shortcut), 2, gShortcutFields, "Cmd\0Key"};
+static const StructInfo gShortcutInfo = {sizeof(Shortcut), 4, gShortcutFields, "Cmd\0Key\0Name\0ToolbarText"};
 
 static const FieldInfo gRectFields[] = {
     {offsetof(Rect, x), SettingType::Int, 0},
@@ -698,9 +713,7 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, uIFontSize), SettingType::Int, 0},
     {offsetof(GlobalPrefs, useSysColors), SettingType::Bool, false},
     {offsetof(GlobalPrefs, useTabs), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, zoomLevels), SettingType::FloatArray,
-     (intptr_t) "8.33 12.5 18 25 33.33 50 66.67 75 100 125 150 200 300 400 600 800 1000 1200 1600 2000 2400 3200 4800 "
-                "6400"},
+    {offsetof(GlobalPrefs, zoomLevels), SettingType::FloatArray, (intptr_t) ""},
     {offsetof(GlobalPrefs, zoomIncrement), SettingType::Float, (intptr_t) "0"},
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, fixedPageUI), SettingType::Struct, (intptr_t)&gFixedPageUIInfo},

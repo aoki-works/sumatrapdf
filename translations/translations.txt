@@ -1,5 +1,5 @@
 AppTranslator: SumatraPDF
-646f82021003458ec08e7c59aec8f304bafc406d
+e6a488227d6c1efeedbd2052d870198c7d08c201
 :%s annotation. Ctrl+click to edit.
 am:%s մեկնաբանություն: Ctrl+քլիք՝ խմբագրելու համար:
 ar:ملاحظة %s. اضغط Ctrl للتحرير.
@@ -18,7 +18,7 @@ fo:%s viðmerking. Ctrl+Klikkja fyri at rætta.
 fr:Annotation %s. Ctrl+clic pour modifier.
 ga:%s nóta mínithe. Brúigh Ctrl+gliogáil chun é a chur in eagar.
 gl:%s anotación. Ctrl+clic para editar.
-he:.כדי לערוך Ctrl +  הערה. לחץ על %s
+he:%s הערה. כדי לערוך לחץ על Ctrl + קליק.
 hi:%s एनोटेशन । संपादित करने के लिए Ctrl+क्लिक करें।
 hu:Megjegyzés: %s. Szerkesztés: Ctrl+kattintás.
 id:%s anotasi. Ctrl+click untuk mengedit.
@@ -68,7 +68,7 @@ hi:बारे में(&A)
 hr:&O programu...
 hu:Név&jegy
 id:&Tentang
-it:&Informazioni su...
+it:&Info sul programma...
 ja:バージョン情報(&A)
 jv:&Babagan
 ka:&პროგრამის შესახებ...
@@ -190,7 +190,7 @@ gl:Opcións &avanzadas...
 he:הגדרות מתקדמות...
 hi:उच्च श्रेणी के सेटिंग्स
 hr:N&apredne mogućnosti
-hu:Speciális beállítások...
+hu:Haladó beállítások…
 id:&Pilihan Lanjutan...
 it:&Opzioni avanzate...
 ja:詳細設定(&A)
@@ -259,7 +259,7 @@ gl:Tod&as as páxinas seleccionadas
 he:כל העמודים הנבחרים
 hi:&सभी चयनित पृष्ठों
 hr:Sve obilježene str&anice
-hu:Az összes kiválasztott oldal
+hu:Az összes kijelölt oldal
 id:&Semua halaman terpilih
 it:&Tutte le pagine selezionate
 ja:すべての選択されたページ(&A)
@@ -944,7 +944,7 @@ el:Προσανατολισμός
 es:&Caras opuestas
 eu:A&urrean
 fi:&Kohtaaminen
-fo:&Standa Fyri
+fo:&Rulla glíðandi
 fr:&Deux pages
 ga:&Dhá leathanach
 gl:Páxina &dobre
@@ -2645,7 +2645,7 @@ by:Запомніць гэтыя параметры для &кожнага да�
 ca-xv:Conserva estes &preferències per a cada document
 ca:Recorda aquestes &preferències per a cada document
 cn:为每一个文档记住这些设置(&R)
-co:Arricurdassi di ste &preferenze per ogni ducumentu
+co:Arricurdassi di sti &parametri per ogni ducumentu
 cy:C&ofio'r gosodiadau hyn ar gyfer pob dogfen
 cz:&Pamatovat si tato nastavení pro každý dokument
 de:Ansicht-&Einstellungen für jedes Dokument einzeln merken
@@ -2710,7 +2710,7 @@ by:&Выдаліць з гісторыі
 ca-xv:&Suprimeix de l'historial
 ca:&Suprimeix de l'historial
 cn:从历史记录删除(&R)
-co:&Caccià da a crunulogia
+co:&Caccià da a cronolugia
 cy:Tynnu o'&r Hanes
 cz:&Odstranit z historie
 de:Aus der Historie entfernen
@@ -2897,6 +2897,7 @@ fr:&Rechercher avec Google
 ga:&Cuardaigh le Google
 gl:Bu&scar con Google
 he:חפש באמצעות Google
+hi:&गूगल में ढूंढें
 hr:Pretraži &sa Google-om
 hu:Keresés Google-el
 id:&Cari dengan Google
@@ -2933,7 +2934,7 @@ by:Налады
 ca-xv:&Preferències
 ca:&Preferències
 cn:设置(&S)
-co:&Preferenze
+co:&Parametri
 cy:&Gosodiadau
 cz:&Nastavení
 de:&Einstellungen
@@ -3077,6 +3078,7 @@ fr:&Une page
 ga:&Leathanach amháin
 gl:Páxina &única
 he:עמוד בודד
+hi:अकेला पृष्ठ
 hr:Jedna &stranica
 hu:&Egyetlen oldal
 id:Halaman Tunggal
@@ -3225,6 +3227,7 @@ fr:&Texte
 ga:&Téacs
 gl:&Texto
 he:טקסט
+hi:&लेख
 hr:&Tekst
 hu:Szöveg
 id:&Teks
@@ -4168,7 +4171,7 @@ ta:பிடித்தவையில்  பக்கம் %s-ஐ (விர
 th:เพิ่มหน้า %s ไปยังรายการโปรดพร้อมชื่อ (สามารถเลือกได้) :
 tl:Magdagdag ng pahina %s sa mga paborito na may (opsyonal) na pangalan:
 tr:%s. sayfayı şu (isteğe bağlı) adla sık kullanılanlara ekle:
-tw:將第 %s 頁加到我的最愛，並(選擇性的)提供名稱:
+tw:將第 %s 頁加到我的最愛，並命名(可留白):
 uk:Додати %s сторінку до закладок з іменем(необов'язково):
 uz:%s betni Tanlanganlarga (boshqa) nom bilan qo'shish:
 vn:Thêm trang %s vào Ưa thích với tên (tùy chọn):
@@ -5008,7 +5011,7 @@ by:&Аўтаматычная праверка абнаўленняў
 ca-xv:&Comprova les actualitzacions automàticament
 ca:&Comprova les actualitzacions automàticament
 cn:自动检查更新(&U)
-co:Cuntrollà autumaticamente i &rinnovi
+co:Cuntrollà autumaticamente e &messe à livellu
 cy:Gwirio'n awtomatig am &ddiweddariadau
 cz:&Automaticky kontrolovat aktualizace
 de:&Automatisch nach Updates suchen
@@ -5820,7 +5823,7 @@ by:Немагчыма здзейсніць зваротны пошук. Калі
 ca-xv:No es pot iniciar l'ordre de cerca inversa. Comproveu la línia de comandes a les preferències.
 ca:No es pot iniciar l'ordre de cerca cap enrere. Comproveu la línia d'ordres a les preferències.
 cn:无法进行逆向搜索，请检查命令行是否在软件设置里正确配置了。
-co:Ùn pò micca lancià a cumanda di ricerca à l’arritrosa. Ci vole à verificà a linea di cumanda in e preferenze.
+co:Ùn pò micca lancià a cumanda di ricerca à l’arritrosa. Ci vole à verificà a linea di cumanda in i parametri.
 cy:Methu cychwyn gorchymyn chwilio gwrthdro. Gwiriwch y linell orchymyn yn y gosodiadau
 cz:Příkaz inverzní hledání nelze spustit. Zkontrolujte nastavení příkazového řádku.
 de:Fehler beim Ausführen des Befehls für die Rückwärtssuche. Bitte überprüfen Sie die Einstellung.
@@ -5962,7 +5965,7 @@ by:Праверыць наяўнасць новай версіі
 ca-xv:&Comprova si hi ha una versió nova
 ca:&Comprova si hi ha una versió nova
 cn:检查更新(&U)
-co:&Cuntrollà e nove versioni
+co:&Cuntrollà e messe à livellu
 cy:Gwirio am &Ddiweddariadau
 cz:&Zkontrolovat aktualizace
 de:Nach &neuer Version suchen
@@ -6031,7 +6034,7 @@ by:Праверка абнаўлення…
 ca-xv:S'està comprovant si hi ha actualitzacions...
 ca:S'està comprovant si hi ha actualitzacions...
 cn:正在检查更新...
-co:Cuntrollu di e nove versioni…
+co:Cuntrollu di e messe à livellu…
 cy:Gwirio am ddiweddariad...
 cz:Kontroluji aktualizace...
 de:Nach einem Update suchen...
@@ -6116,6 +6119,7 @@ lt:Apskritimas
 lv:Aplis
 mk:Круг
 ml:വൃത്തം
+my:Bulat
 ne:बृत्त
 nl:Cirkel
 nn:Sirkel
@@ -6291,10 +6295,12 @@ cy:Cau Pob Tab
 cz:Zavřít všechny karty
 de:Alle Tabs schließen
 es:Cerrar todas las pestañas
+fo:Sløkk øll varðabløð
 fr:Fermer tous les onglets
 ga:Dún Gach Cluaisín
 he:סגור את כל הכרטיסיות
 hi:सभी टैब को बंद करें
+hu:Összes lap bezárása
 id:Tutup Semua Tab
 it:Chiudi tutte le schede
 ja:すべてのタブを閉じる
@@ -6367,9 +6373,12 @@ cy:Cau Tabiau I'r Chwith
 cz:Zavřít karty doleva
 de:Tabs links schließen
 es:Cerrar pestañas a la izquierda
+fo:Sløkk varðabløð vinstrumegin
 fr:Fermer les onglets sur la gauche
 ga:Dún cluaisíní ar chlé
 he:סגור כרטיסיות משמאל
+hi:बाईं ओर के टैब बंद करें
+hu:Balra lévő lapok bezárása
 id:Tutup Tab ke Kiri
 it:Chiudi schede a sinistra
 ja:左のタブをすべて閉じる
@@ -8596,7 +8605,7 @@ bs:Hi
 by:Цёмны
 ca-xv:Fosc
 ca:Fosc
-cn:暗
+cn:蓝黑色
 co:Oscuru
 cy:Tywyll
 cz:Tmavý
@@ -8661,7 +8670,7 @@ br:Mais Escuro
 by:Больш цёмны
 ca-xv:Més fosc
 ca:Més fosc
-cn:更暗
+cn:黑色
 co:Più oscuru
 cy:Tywyllach
 cz:Tmavší
@@ -8753,6 +8762,7 @@ kw:Dedhyas:
 lt:Data:
 lv:Datums:
 ml:തീയ്യതി:
+my:Tarikh:
 ne:मिति:
 nl:Datum:
 nn:Dato:
@@ -8918,10 +8928,12 @@ cy:Dileu
 cz:Vymazat
 de:Löschen
 es:Eliminar
+fo:Strika
 fr:Supprimer
 ga:Scrios
 he:מחק
 hi:मिटाओ
+hu:Törlés
 id:Hapus
 it:Cancella
 ja:削除
@@ -10096,7 +10108,7 @@ et:Kaheleheküljeline
 eu:Bi Aldeetatik
 fa:نمایش دوصفحه‌ای
 fi:Rinnakkain
-fo:Standa Fyri
+fo:Rulla glíðandi
 fr:Deux pages
 fy-nl:Dûbele side
 ga:Dhá Leathanach
@@ -13336,7 +13348,7 @@ br:Claro
 by:Светлы
 ca-xv:Lleuger
 ca:Clar
-cn:明亮
+cn:白色
 co:Chjaru
 cy:Golau
 cz:Světlý
@@ -13353,6 +13365,7 @@ fr:Clair
 ga:éadroime
 gl:Claro
 he:בהירה
+hi:उज्जवल मोड
 hr:Svijetla
 hu:Világos
 id:Terang
@@ -13519,6 +13532,7 @@ fr:Début de ligne :
 ga:Tús an líne:
 gl:Liña inicial:
 he::תחילת שורה
+hi:पंक्ति शुरू करें
 hr:Početak linije:
 hu:Vonalkezdet:
 id:Garis Awal:
@@ -13807,8 +13821,10 @@ co:Manuale nant’à u situ web
 cz:Manuál na webové stránce
 de:Handbuch im Internet
 es:Manual en la Web
+fo:Vegleiðing á Vevsíðu
 fr:Manuel sur le site web
 ga:Lámhleabhar ar an Láithreán Gréasáin
+hu:Kézikönyv a weboldalon
 id:Manual di Situs Web
 it:Manuale (sito web)
 nl:Handleiding op Website
@@ -13818,6 +13834,7 @@ ro:Manual pe site
 ru:Руководство на веб-сайте
 sat:ᱣᱮᱵᱽᱥᱟᱭᱤᱴ ᱨᱮ ᱥᱟᱹᱠᱷᱤ
 sk:Manuál na webovej stránke
+tw:線上說明
 :Match Case
 af:Vind Bypassende Klein Letters / Hoofletters
 am:Հաշվի առնել մեծատառ/փոքրատառը
@@ -14035,7 +14052,7 @@ br:Nova &janela
 by:Новае &акно
 ca:&Finestra nova
 cn:新建窗口(&W)
-co:Nova &finestra
+co:&Finestra nova
 cy:Ffenestr &newydd
 cz:Nové &okno
 de:Neues &Fenster
@@ -14086,7 +14103,7 @@ by:Даступная новая версія
 ca-xv:Hi ha una versió nova disponible
 ca:Hi ha una versió nova disponible
 cn:有新版本
-co:Nova versione dispunibule
+co:Versione nova dispunibule
 cy:Mae fersiwn newydd ar gael
 cz:Je k dispozici nová verze
 de:Neue Version verfügbar
@@ -14212,8 +14229,12 @@ co:Nò
 cz:Ne
 de:Nein
 es:No
+fo:Nei
 fr:Non
 ga:Níl
+he:לא
+hi:नहीं
+hu:Nem
 id:Tidak
 it:No
 nl:Nee
@@ -14223,6 +14244,7 @@ ro:Nu
 ru:Нет
 sat:ᱵᱟᱝᱟ
 sk:Nie
+tw:否
 :No matches were found
 am:Ոչինչ չի գտնվել
 ar:لا توجد متطابقات
@@ -14904,6 +14926,7 @@ id:Buka Lampiran
 it:Apri allegato
 ja:添付を開く
 kr:첨부 파일 열기
+my:Buka Lampiran
 nl:Open Bijlage
 nn:Opne Vedlegg
 no:Åpne vedlegg
@@ -15175,6 +15198,38 @@ sr-rs:Отвори у новом прозору
 ta:புதிய சாளரத்தில் திற
 tl:Buksan sa bagong Window
 tw:在新視窗中開啟
+:Open Next File In Folder
+br:Abrir o Próximo Arquivo na Pasta
+cn:打开文件夹中的下一个文件
+co:Apre u schedariu seguente in u cartulare
+de:Nächste Datei im Ordner öffnen
+fo:Opna Næstu Fílu í Mappuna
+fr:Ouvrir le fichier suivant dans le dossier
+he:פתח את הקובץ הבא שבתיקיה
+it:Apri file successivo nella cartella
+nl:Open Volgend Bestand in Map
+pl:Otwórz następny plik w folderze
+pt:Abrir o Próximo Arquivo na Pasta
+ro:Deschide următorul fișier în folder
+ru:Открыть следующий файл в папке
+sk:Otvoriť nasledujúci súbor v priečinku
+tw:開啟資料夾內的下一個檔案
+:Open Previous File In Folder
+br:Abrir o Arquivo Anterior na Pasta
+cn:打开文件夹中的上一个文件
+co:Apre u schedariu precedente in u cartulare
+de:Vorherige Datei im Ordner öffnen
+fo:Opna Fyrru Fílu í Mappuna
+fr:Ouvrir le fichier précédent dans le dossier
+he:פתח את הקובץ שלפני בתיקיה
+it:Apri file precedente nella cartella
+nl:Open Vorig Bestand in Map
+pl:Otwórz poprzedni plik w folderze
+pt:Abrir o Arquivo Anterior na Pasta
+ro:Deschide fișierul anterior în folder
+ru:Открыть предыдущий файл в папке
+sk:Otvoriť predchádzajúci súbor v priečinku
+tw:開啟資料夾內的上一個檔案
 :Open a document...
 am:Բացել փաստաթուղթ...
 ar:فتح مستند...
@@ -17928,6 +17983,7 @@ fr:Rotation vers la &gauche
 ga:Rothlaigh tuathal é
 gl:Rotar &esquerda
 he:סובב שמאלה
+hi:बाईं ओर घुमाएं
 hr:Rotiraj &lijevo
 hu:Forgatás &balra
 id:Putar Ke Kiri
@@ -18402,7 +18458,7 @@ by:Захаваць змены ў новы PDF
 ca-xv:Desa els canvis a un PDF nou
 ca:Desa els canvis a un PDF nou
 cn:另存为新的 PDF 文件
-co:Arregistrà i cambiamenti in un novu PDF
+co:Arregistrà i cambiamenti in un PDF novu
 cy:Cadw newidiadau i PDF newydd
 cz:Uložit změny do nového PDF souboru
 de:Änderungen in einer neuen PDF-Datei speichern
@@ -18420,7 +18476,7 @@ gl:Gardar anotacións a un novo PDF
 he:חדש PDF שמור שינויים בקובץ
 hi:परिवर्तनों को एक नई पीडीएफ में सहेजें
 hr:Spremi promjene u novi PDF
-hu:Változtatások elmentése egy új PDF-be
+hu:Változások mentése egy új PDF-be
 id:Simpan perubahan ke PDF baru
 it:Salva modifiche in un nuovo PDF
 ja:変更を新しい PDF に保存
@@ -18474,7 +18530,7 @@ ga:Cuir na hathruithe i dtaisce in PDF atá ann
 gl:Gardar cambios nun PDF existente
 he:קיים PDF שמור שינויים במסמך
 hr:Spremi promjene u postojeći PDF
-hu:Változtatások mentése a meglévő PDF-be
+hu:Változások mentése a meglévő PDF-be
 id:Simpan perubahan ke PDF terkini
 it:Salva modifiche in questo PDF
 ja:変更を上書き保存
@@ -18510,7 +18566,7 @@ by:Захаваць &новы PDF
 ca-xv:Desa a un PDF &nou
 ca:Desa a un PDF &nou
 cn:保存至新的 PDF 文件(&N)
-co:Arregistrà in un &novu PDF
+co:Arregistrà in un PDF &novu
 cy:Cadw i PDF &newydd
 cz:Uložit do &nového PDF souboru
 de:In &neue PDF speichern
@@ -18673,6 +18729,7 @@ fr:Rechercher avec &Bing
 ga:Cuardaigh le &Bing
 gl:Buscar con &Bing
 he:חפש באמצעות Bing
+hi:&बिंग में ढूंढें
 hr:Pretraži sa &Bing-om
 hu:Keresés &Bing-el
 id:Cari menggunakan &Bing
@@ -18724,6 +18781,7 @@ fr:Rechercher avec &Google
 ga:Cuardaigh le &Google
 gl:Buscar con &Google
 he:חפש באמצעות Google
+hi:&गूगल में ढूंढें
 hr:Pretraži sa &Google-om
 hu:Keresés &Google-el
 id:Cari menggunakan &Google
@@ -18757,8 +18815,11 @@ co:Circà cù Google &Scholar
 cz:Vyhledat pomocí &Google Scholar
 de:Suche mit &Google Scholar
 es:Buscar con &Google Scholar
+fo:Leita við &Google Scholar
 fr:Rechercher avec &Google Scholar
+hu:Keresés &Google Scholar-ral
 id:Cari dengan &Google Scholar
+it:Cerca con &Google Scholar
 nl:Zoek met Google Scholar
 pl:Szukaj za pomocą &Google Scholar
 pt:Procurar com o &Google Scholar
@@ -18766,6 +18827,7 @@ ro: Caută cu &Google Academic
 ru:  Найти в &Google Scholar
 sat:&Google Scholar ᱥᱟᱶᱛᱮ ᱥᱮᱸᱫᱽᱨᱟᱭ ᱢᱮ
 sk:Vyhľadať na &Google Scholar
+tw:使用Google學術搜尋(&G)
 :Search with &Wikipedia
 br:Procurar com a &Wikipedia
 ca:Cerca amb el &Wikipedia
@@ -18774,8 +18836,11 @@ co:Circà cù &Wikipedia
 cz:Vyhledat na &Wikipedii
 de:Suche mit &Wikipedia
 es:Buscar con &Wikipedia
+fo:Leita við &Wikipedia
 fr:Rechercher avec &Wikipedia
+hu:Keresés a &Wikipédián
 id:Cari dengan &Wikipedia
+it:Cerca con &Wikipedia
 nl:Zoek met Wikipedia
 pl:Szukaj za pomocą &Wikipedii
 pt:Procurar com a &Wikipedia
@@ -18783,6 +18848,7 @@ ro:Caută pe &Wikipedia
 ru:Найти в &Wikipedia
 sat:&Wikipedia ᱥᱟᱶᱛᱮ ᱥᱮᱸᱫᱽᱨᱟᱭ ᱢᱮ
 sk:Vyhľadať na &Wikipedii
+tw:使用維基百科搜尋(&W)
 :Searching %d of %d...
 am:Փնտրվում է %d-ից %d
 ar:يتم البحث %d من %d...
@@ -19820,6 +19886,7 @@ fr:Ouvrir le &dossier
 ga:Taispeáin san &fillteán
 gl:Amosar no carta&fol
 he:פתח תיקייה מכילה...
+hi:&फोल्डर में दिखाएं
 hr:Prikaži u mapi
 hu:Megjelenítés &mappában
 id:Tampilkan dalam &folder
@@ -19871,6 +19938,7 @@ fr:Ouvrir le dossier
 ga:Taispeáin san fhillteán é
 gl:Amosar no cartafol
 he:הצג בתיקייה
+hi:फोल्डर में दिखाएं
 hr:Prikaži u mapi
 hu:Megjelenítés a mappában
 id:Perlihatkan Di Folder
@@ -20056,6 +20124,7 @@ fr:Ignorer cette version
 ga:Ná bac leis an leagan sin
 gl:Omitir esta versión
 he:דלג על גרסה זו
+hi:इस वर्ज़न को छोड़ें
 hr:Preskoči ovu verziju
 hu:Ezen verzió kihagyása
 id:Lewatkan versi ini
@@ -20610,7 +20679,7 @@ by:Абнаўленне SumatraPDF
 ca-xv:Actualització del SumatraPDF
 ca:Actualització del SumatraPDF
 cn:升级 SumatraPDF
-co:Rinnovu di SumatraPDF
+co:Messa à livellu di SumatraPDF
 cy:Diweddaru SumatraPDF
 cz:SumatraPDF - Aktualizace
 de:SumatraPDF-Update
@@ -21065,6 +21134,7 @@ fr:Couleur du texte :
 ga:Dath an téacs:
 gl:Cor do texto:
 he::צבע טקסט
+hi:लेख का रंग
 hr:Boja teksta:
 hu:Szöveg színe:
 id:Warna Teks:
@@ -21118,6 +21188,7 @@ fr:Taille du texte :
 ga:Méid an téacs:
 gl:Tamaño do texto:
 he::גודל טקסט
+hi:लेख का साइज़
 hr:Veličina teksta:
 hu:Szövegméret:
 id:Ukuran Teks:
@@ -21170,6 +21241,7 @@ fr:Taille du texte : %d
 ga:Méid an téacs: %d
 gl:Tamaño do texto: %d
 he:%d :גודל טקסט
+hi:लेख का साइज़: %d
 hr:Veličina teksta: %d
 hu:Szövegméret: %d
 id:Ukuran Teks: %d
@@ -22355,8 +22427,12 @@ co:Sì
 cz:Ano
 de:Ja
 es:Sí
+fo:Ja
 fr:Oui
 ga:Tá
+he:כן
+hi:हाँ
+hu:Igen
 id:Ya
 it:Sì
 nl:Ja
@@ -22366,6 +22442,7 @@ ro:Da
 ru:Да
 sat:ᱦᱚᱭ
 sk:Áno
+tw:是
 :You have the latest version.
 af:Jy Het Die Nuutste Uitgawe.
 am:Սա վերջին տարբերակն է։
@@ -22498,7 +22575,7 @@ by:У вас устаноўлена версія '%s'. Даступна верс
 ca-xv:Aquesta és la versió «%s». Està disponible la versió «%s».\nVoleu instal·lar la versió nova?
 ca:Aquesta és la versió «%s». Està disponible la versió «%s».\nVoleu instal·lar la versió nova?
 cn:您已安装 '%s' 版本，'%s' 版本已经发布.\n是否安装新版本？
-co:Impiegate a versione « %s » è a versione « %s » hè dispunibule.\nVulete installà a nova versione ?
+co:Impiegate a versione « %s » è a versione « %s » hè dispunibule.\nVulete installà a versione nova ?
 cy:Mae fersiwn '%s' gennych ac mae fersiwn '%s' ar gael.\nHoffech chi osod y fersiwn newydd?
 cz:Používáte verzi '%s' a verze '%s' je k dispozici.\nChcete nainstalovat novou verzi?
 de:Sie haben Version '%s' und Version '%s' ist verfügbar.\nMöchten Sie die neue Version installieren?
@@ -22584,7 +22661,7 @@ ta:நீங்கள் 32-பிட் சுமத்ராPDFஐ 64-பி�
 th:คุณกำลังติดตั้ง SumatraPDF รุ่น 32-บิต บนระบปฏิบัติการ 64-บิต.\nคุณต้องการดาวน์โหลดหรือไม่\nรุ่น 64-บิต
 tl:Nag-i-install ka ng 32-bit na SumatraPDF sa 64-bit na OS.\nGusto mo bang mag-download ng\n64-bit na bersyon?
 tr:64 bit işletim sistemine 32 bit SumatraPDF kuruyorsunuz.\n64 bit sürümü indirmek\nister misiniz?
-tw:您正在一台64位元的電腦上安裝32位元的SumatraPDF。\n您想下載\n64位元的版本嗎?
+tw:您正在一台64位元的電腦上安裝32位元的SumatraPDF。\n您想下載64位元的版本嗎?
 uk:Ви встановлюєте 32-розрядну версію SumatraPDF на 64-розрядну ОС.\nБажаєте завантажити\n64-розрядну версію?
 vn:Bạn đang cài đặt SumatraPDF 32-bit trên hệ điều hành 64-bit.\nBạn có muốn tả \nphiên bản 64-bit?
 :Zoom

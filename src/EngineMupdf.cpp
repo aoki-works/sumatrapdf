@@ -54,8 +54,7 @@ static float layoutFontEm = 11.f;
 constexpr i64 kMaxMemoryFileSize = 32 * 1024 * 1024;
 
 // in mupdf_load_system_font.c
-extern "C" void drop_cached_fonts_for_ctx(fz_context*);
-extern "C" void pdf_install_load_system_font_funcs(fz_context* ctx);
+extern "C" void install_load_windows_font_funcs(fz_context* ctx);
 
 static AnnotationType AnnotationTypeFromPdfAnnot(enum pdf_annot_type tp) {
     return (AnnotationType)tp;
@@ -1045,14 +1044,12 @@ NO_INLINE static IPageElement* FzGetElementAtPos(FzPageInfo* pageInfo, PointF pt
         }
     }
 
-    size_t imageIdx = 0;
     fz_point p = {(float)pt.x, (float)pt.y};
     for (auto& img : pageInfo->images) {
         fz_rect ir = img->rect;
         if (IsPointInRect(ir, p)) {
             res.Append(img->imageElement);
         }
-        imageIdx++;
     }
 
     if (false) {
@@ -1414,7 +1411,7 @@ static void EnsureLabelsUnique(StrVec* labels) {
     }
     // ensure that all page labels are unique (by appending a number to duplicates)
     StrVec dups(*labels);
-    Sort(dups);
+    Sort(&dups);
     int nDups = dups.Size();
     for (int i = 1; i < nDups; i++) {
         char* s = dups.At(i);
@@ -1579,7 +1576,7 @@ EngineMupdf::EngineMupdf() {
     _ctx = fz_new_context(nullptr, &fz_locks_ctx, FZ_STORE_DEFAULT);
     InstallFitzErrorCallbacks(_ctx);
 
-    pdf_install_load_system_font_funcs(_ctx);
+    install_load_windows_font_funcs(_ctx);
     fz_register_document_handlers(_ctx);
 }
 
@@ -1616,7 +1613,6 @@ EngineMupdf::~EngineMupdf() {
     }
 
     fz_drop_document(ctx, _doc);
-    drop_cached_fonts_for_ctx(ctx);
     fz_drop_context(ctx);
 
     delete pageLabels;
@@ -2539,7 +2535,6 @@ static IPageElement* NewFzComment(const char* comment, int pageNo, RectF rect) {
 // must be called inside fz_try
 static IPageElement* MakePdfCommentFromPdfAnnot(fz_context* ctx, int pageNo, pdf_annot* annot) {
     fz_rect rect = pdf_bound_annot(ctx, annot);
-    auto tp = pdf_annot_type(ctx, annot);
     const char* contents = pdf_annot_contents(ctx, annot);
     const char* label = pdf_annot_field_label(ctx, annot);
     const char* s = contents;
@@ -3373,14 +3368,14 @@ TempStr EngineMupdf::ExtractFontListTemp() {
             continue;
         }
         char* fontName = info.LendData();
-        AppendIfNotExists(fonts, fontName);
+        AppendIfNotExists(&fonts, fontName);
     }
     if (fonts.Size() == 0) {
         return nullptr;
     }
 
-    SortNatural(fonts);
-    return JoinTemp(fonts, "\n");
+    SortNatural(&fonts);
+    return JoinTemp(&fonts, "\n");
 }
 
 // clang-format off
@@ -3452,7 +3447,7 @@ TempStr EngineMupdf::GetPropertyTemp(const char* name) {
         if (fstruct.Size() == 0) {
             return nullptr;
         }
-        return JoinTemp(fstruct, ",");
+        return JoinTemp(&fstruct, ",");
     }
 
     if (str::Eq(kPropUnsupportedFeatures, name)) {
@@ -3560,7 +3555,7 @@ const pdf_write_options pdf_default_write_options2 = {
 // annotations).
 // if filePath is not given, we save under the same name
 // TODO: if the file is locked, this might fail.
-bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, std::function<void(const char*)> showErrorFunc) {
+bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, const ShowErrorCb& showErrorFunc) {
     ReportIf(!engine);
     if (!engine) {
         return false;
@@ -3604,8 +3599,8 @@ bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, std::function<
         fz_report_error(ctx);
         const char* mupdfErr = fz_caught_message(ctx);
         logf("Saving '%s' failed with: '%s'\n", path, mupdfErr);
-        if (showErrorFunc) {
-            showErrorFunc(mupdfErr);
+        if (showErrorFunc.IsValid()) {
+            showErrorFunc.Call(mupdfErr);
         }
     }
 

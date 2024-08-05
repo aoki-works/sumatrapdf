@@ -616,85 +616,96 @@ void ChmModel::GetDisplayState(FileState* fs) {
     fs->scrollPos = PointF();
 }
 
-class ChmThumbnailTask : public HtmlWindowCallback {
+struct ChmThumbnailTask : HtmlWindowCallback {
     ChmFile* doc = nullptr;
     HWND hwnd = nullptr;
     HtmlWindow* hw = nullptr;
     Size size;
-    onBitmapRenderedCb saveThumbnail;
+    const OnBitmapRendered* saveThumbnail;
     AutoFreeStr homeUrl;
     Vec<ByteSlice> data;
     CRITICAL_SECTION docAccess;
 
-  public:
-    ChmThumbnailTask(ChmFile* doc, HWND hwnd, Size size, const onBitmapRenderedCb& saveThumbnail) {
-        this->doc = doc;
-        this->hwnd = hwnd;
-        this->size = size;
-        this->saveThumbnail = saveThumbnail;
-        InitializeCriticalSection(&docAccess);
-    }
-
-    ~ChmThumbnailTask() override {
-        EnterCriticalSection(&docAccess);
-        delete hw;
-        DestroyWindow(hwnd);
-        delete doc;
-        for (auto&& d : data) {
-            str::Free(d.data());
-        }
-        LeaveCriticalSection(&docAccess);
-        DeleteCriticalSection(&docAccess);
-    }
-
-    void CreateThumbnail(HtmlWindow* hw) {
-        this->hw = hw;
-        homeUrl.Set(strconv::AnsiToUtf8(doc->GetHomePath()));
-        if (*homeUrl == '/') {
-            homeUrl.SetCopy(homeUrl + 1);
-        }
-        hw->NavigateToDataUrl(homeUrl);
-    }
-
-    bool OnBeforeNavigate(const char*, bool newWindow) override {
-        return !newWindow;
-    }
-
-    void OnDocumentComplete(const char* url) override {
-        if (url && *url == '/') {
-            url++;
-        }
-        if (str::Eq(url, homeUrl)) {
-            Rect area(0, 0, size.dx * 2, size.dy * 2);
-            HBITMAP hbmp = hw->TakeScreenshot(area, size);
-            if (hbmp) {
-                RenderedBitmap* bmp = new RenderedBitmap(hbmp, size);
-                saveThumbnail(bmp);
-            }
-            // TODO: why is destruction on the UI thread necessary?
-            uitask::Post(TaskChmModelOnDocumentComplete, [=] {
-                logf("TaskChmModelOnDocumentComplete: about to delete ChmThumbnailTask: 0x%p\n", (void*)this);
-                delete this;
-            });
-        }
-    }
-
-    void OnLButtonDown() override {
-    }
-
-    ByteSlice GetDataForUrl(const char* url) override {
-        ScopedCritSec scope(&docAccess);
-        char* plainUrl = url::GetFullPathTemp(url);
-        auto d = doc->GetData(plainUrl);
-        data.Append(d);
-        return d;
-    }
-
-    void DownloadData(const char*, const ByteSlice&) override {
-    }
+    ChmThumbnailTask(ChmFile* doc, HWND hwnd, Size size, const OnBitmapRendered* saveThumbnail);
+    ~ChmThumbnailTask() override;
+    void CreateThumbnail(HtmlWindow* hw);
+    bool OnBeforeNavigate(const char*, bool newWindow) override;
+    void OnDocumentComplete(const char* url) override;
+    ByteSlice GetDataForUrl(const char* url) override;
+    void OnLButtonDown() override;
+    void DownloadData(const char*, const ByteSlice&) override;
 };
 
-static void CreateChmThumbnail(const char* path, const Size& size, const onBitmapRenderedCb& saveThumbnail) {
+static void SafeDeleteChmThumbnailTask(ChmThumbnailTask* d) {
+    logf("SafeDeleteChmThumbnailTask: about to delete ChmThumbnailTask: 0x%p\n", (void*)d);
+    delete d;
+}
+
+ChmThumbnailTask::ChmThumbnailTask(ChmFile* doc, HWND hwnd, Size size, const OnBitmapRendered* saveThumbnail) {
+    this->doc = doc;
+    this->hwnd = hwnd;
+    this->size = size;
+    this->saveThumbnail = saveThumbnail;
+    InitializeCriticalSection(&docAccess);
+}
+
+ChmThumbnailTask::~ChmThumbnailTask() {
+    EnterCriticalSection(&docAccess);
+    delete hw;
+    DestroyWindow(hwnd);
+    delete doc;
+    for (auto&& d : data) {
+        str::Free(d.data());
+    }
+    LeaveCriticalSection(&docAccess);
+    DeleteCriticalSection(&docAccess);
+}
+
+bool ChmThumbnailTask::OnBeforeNavigate(const char*, bool newWindow) {
+    return !newWindow;
+}
+
+void ChmThumbnailTask::CreateThumbnail(HtmlWindow* hw) {
+    this->hw = hw;
+    homeUrl.Set(strconv::AnsiToUtf8(doc->GetHomePath()));
+    if (*homeUrl == '/') {
+        homeUrl.SetCopy(homeUrl + 1);
+    }
+    hw->NavigateToDataUrl(homeUrl);
+}
+
+ByteSlice ChmThumbnailTask::GetDataForUrl(const char* url) {
+    ScopedCritSec scope(&docAccess);
+    char* plainUrl = url::GetFullPathTemp(url);
+    auto d = doc->GetData(plainUrl);
+    data.Append(d);
+    return d;
+}
+
+void ChmThumbnailTask::OnDocumentComplete(const char* url) {
+    if (url && *url == '/') {
+        url++;
+    }
+    if (str::Eq(url, homeUrl)) {
+        Rect area(0, 0, size.dx * 2, size.dy * 2);
+        HBITMAP hbmp = hw->TakeScreenshot(area, size);
+        if (hbmp) {
+            RenderedBitmap* bmp = new RenderedBitmap(hbmp, size);
+            saveThumbnail->Call(bmp);
+        }
+        // TODO: why is destruction on the UI thread necessary?
+        auto fn = MkFunc0<ChmThumbnailTask>(SafeDeleteChmThumbnailTask, this);
+        uitask::Post(fn, "SafeDeleteChmThumbnailTask");
+    }
+}
+
+void ChmThumbnailTask::OnLButtonDown() {
+}
+
+void ChmThumbnailTask::DownloadData(const char*, const ByteSlice&) {
+}
+
+static void CreateChmThumbnail(const char* path, const Size& size, const OnBitmapRendered* saveThumbnail) {
     // doc and window will be destroyed by the callback once it's invoked
     ChmFile* doc = ChmFile::CreateFromFile(path);
     if (!doc) {
@@ -722,12 +733,13 @@ static void CreateChmThumbnail(const char* path, const Size& size, const onBitma
         delete thumbnailTask;
         return;
     }
+    // is deleted in ChmThumbnailTask::OnDocumentComplete
     thumbnailTask->CreateThumbnail(hw);
 }
 
 // Create a thumbnail of chm document by loading it again and rendering
 // its first page to a hwnd specially created for it.
-void ChmModel::CreateThumbnail(Size size, const onBitmapRenderedCb& saveThumbnail) {
+void ChmModel::CreateThumbnail(Size size, const OnBitmapRendered* saveThumbnail) {
     CreateChmThumbnail(fileName, size, saveThumbnail);
 }
 

@@ -74,14 +74,13 @@ func getSecrets() {
 
 func regenPremake() {
 	premakePath := filepath.Join("bin", "premake5.exe")
-	/*
-		{
-			cmd := exec.Command(premakePath, "vs2019")
-			runCmdLoggedMust(cmd)
-		}
-	*/
 	{
 		cmd := exec.Command(premakePath, "vs2022")
+		runCmdLoggedMust(cmd)
+	}
+
+	{
+		cmd := exec.Command(premakePath, "--with-clang", "vs2022")
 		runCmdLoggedMust(cmd)
 	}
 }
@@ -300,7 +299,8 @@ func main() {
 	}
 
 	if false {
-		genTranslationInfoCpp()
+		genHTMLDocsForApp()
+		// genTranslationInfoCpp()
 		return
 	}
 

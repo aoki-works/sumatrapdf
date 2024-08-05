@@ -57,6 +57,7 @@
 #include "EngineAll.h"
 #include "DisplayModel.h"
 #include "GlobalPrefs.h"
+#include "SumatraPDF.h"
 #include "PdfSync.h"
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
@@ -75,7 +76,10 @@ static int ColumnsFromDisplayMode(DisplayMode displayMode) {
     return 1;
 }
 
-ScrollState::ScrollState(int page, double x, double y) : page(page), x(x), y(y) {
+ScrollState::ScrollState(int page, double x, double y) {
+    this->page = page;
+    this->x = x;
+    this->y = y;
 }
 
 bool ScrollState::operator==(const ScrollState& other) const {
@@ -120,7 +124,7 @@ IPageDestination* DisplayModel::GetNamedDest(const char* name) {
     return engine->GetNamedDest(name);
 }
 
-void DisplayModel::CreateThumbnail(Size size, const onBitmapRenderedCb& saveThumbnail) {
+void DisplayModel::CreateThumbnail(Size size, const OnBitmapRendered* saveThumbnail) {
     cb->RenderThumbnail(this, size, saveThumbnail);
 }
 
@@ -715,7 +719,7 @@ RestartLayout:
         if (IsBookView(GetDisplayMode()) && pageNo == 1 && columns - pageInARow > 1) {
             pageInARow++;
         }
-        ReportIf(pageInARow >= dimof(columnMaxWidth));
+        ReportIf(pageInARow >= dimofi(columnMaxWidth));
         if (columnMaxWidth[pageInARow] < pos.dx) {
             columnMaxWidth[pageInARow] = pos.dx;
         }
@@ -794,11 +798,11 @@ RestartLayout:
         }
         // leave first spot empty in cover page mode
         if (IsBookView(GetDisplayMode()) && pageNo == 1) {
-            ReportIf(pageInARow >= dimof(columnMaxWidth));
+            ReportIf(pageInARow >= dimofi(columnMaxWidth));
             pageOffX += columnMaxWidth[pageInARow] + pageSpacing.dx;
             ++pageInARow;
         }
-        ReportIf(pageInARow >= dimof(columnMaxWidth));
+        ReportIf(pageInARow >= dimofi(columnMaxWidth));
         // center pages in a single column but right/left align them when using two columns
         if (1 == columns) {
             pageInfo->pos.x = pageOffX + (columnMaxWidth[0] - pageInfo->pos.dx) / 2;
@@ -817,7 +821,7 @@ RestartLayout:
             pageInfo->pos.x = canvasDx - pageInfo->pos.x - pageInfo->pos.dx;
         }
 
-        ReportIf(pageInARow >= dimof(columnMaxWidth));
+        ReportIf(pageInARow >= dimofi(columnMaxWidth));
         pageOffX += columnMaxWidth[pageInARow] + pageSpacing.dx;
         ++pageInARow;
         ReportIf(!(pageOffX >= 0 && pageInfo->pos.x >= 0));
@@ -1057,6 +1061,9 @@ IPageElement* DisplayModel::GetElementAtPos(Point pt, int* pageNoOut) {
 }
 
 Annotation* DisplayModel::GetAnnotationAtPos(Point pt, Annotation* annot) {
+    if (AnnotationsAreDisabled()) {
+        return nullptr;
+    }
     int pageNo = GetPageNoByPoint(pt);
     if (!ValidPageNo(pageNo)) {
         return nullptr;
@@ -1134,11 +1141,14 @@ void DisplayModel::RenderVisibleParts() {
         }
     }
 
+    // TODO: why the hell this is requesting pages again?
+#if 0
     // request the visible pages last so that the above requested
     // invisible pages are not rendered if the queue fills up
     for (int pageNo = lastVisiblePage; pageNo >= firstVisiblePage; pageNo--) {
         cb->RequestRendering(pageNo);
     }
+#endif
 }
 
 void DisplayModel::SetViewPortSize(Size newViewPortSize) {
@@ -1288,6 +1298,9 @@ void DisplayModel::SetDisplayMode(DisplayMode newDisplayMode, bool keepContinuou
                 break;
             case DisplayMode::BookView:
                 newDisplayMode = DisplayMode::ContinuousBookView;
+                break;
+            default:
+                // no-op
                 break;
         }
     }
@@ -1596,25 +1609,33 @@ float DisplayModel::GetNextZoomStep(float towardsLevel) const {
         return zoom;
     }
 
-#if 0
     // differences to Adobe Reader: starts at 8.33 (instead of 1 and 6.25)
     // and has four additional intermediary zoom levels ("added")
-    static float zoomLevels[] = {
+    // clang-format off
+    static float defaultZooms2[] = {
         8.33f, 12.5f, 18 /* added */, 25, 33.33f, 50, 66.67f, 75,
         100, 125, 150, 200, 300, 400, 600, 800, 1000 /* added */,
         1200, 1600, 2000 /* added */, 2400, 3200, 4800 /* added */, 6400
     };
-    ReportIf(zoomLevels[0] != kZoomMin || zoomLevels[dimof(zoomLevels)-1] != kZoomMax);
-#endif
-    Vec<float>* zoomLevels = gGlobalPrefs->zoomLevels;
-    int nZooms = zoomLevels->Size();
-    ReportIf(nZooms != 0 && (zoomLevels->at(0) < kZoomMin || zoomLevels->Last() > kZoomMax));
-    ReportIf(nZooms != 0 && zoomLevels->at(0) > zoomLevels->Last());
+    // clang-format on
+    // ReportIf(defaultZooms[0] != kZoomMin || defaultZooms[dimof(defaultZooms)-1] != kZoomMax);
+
+    float* zoomLevels = defaultZooms2;
+    int nZoomLevels = dimofi(defaultZooms2);
+
+    int nCustomZooms = gGlobalPrefs->zoomLevels->Size();
+    if (nCustomZooms > 0) {
+        // ReportIf((defaultZooms->at(0) < kZoomMin || defaultZooms->Last() > kZoomMax));
+        // ReportIf(defaultZooms->at(0) > defaultZooms->Last());
+        zoomLevels = gGlobalPrefs->zoomLevels->LendData();
+        nZoomLevels = nCustomZooms;
+    }
 
     float currZoom = GetZoomVirtual(true);
     if (currZoom == towardsLevel) {
         return towardsLevel;
     }
+
     float pageZoom = (float)HUGE_VAL, widthZoom = (float)HUGE_VAL;
     for (int pageNo = 1; pageNo <= PageCount(); pageNo++) {
         if (PageShown(pageNo)) {
@@ -1632,8 +1653,8 @@ float DisplayModel::GetNextZoomStep(float towardsLevel) const {
     const float FUZZ = 0.01f;
     float newZoom = towardsLevel;
     if (currZoom + FUZZ < towardsLevel) {
-        for (int i = 0; i < nZooms; i++) {
-            float zoom = zoomLevels->at(i);
+        for (int i = 0; i < nZoomLevels; i++) {
+            float zoom = zoomLevels[i];
             if (zoom - FUZZ > currZoom) {
                 newZoom = zoom;
                 break;
@@ -1645,8 +1666,8 @@ float DisplayModel::GetNextZoomStep(float towardsLevel) const {
             newZoom = kZoomFitWidth;
         }
     } else if (currZoom - FUZZ > towardsLevel) {
-        for (int i = nZooms - 1; i >= 0; i--) {
-            float zoom = zoomLevels->at(i);
+        for (int i = nZoomLevels - 1; i >= 0; i--) {
+            float zoom = zoomLevels[i];
             if (zoom + FUZZ < currZoom) {
                 newZoom = zoom;
                 break;
@@ -1915,7 +1936,7 @@ void DisplayModel::CopyNavHistory(DisplayModel& orig) {
     }
 }
 
-bool DisplayModel::ShouldCacheRendering(int pageNo) const {
+bool DisplayModel::ShouldCacheRendering(int) const {
     // recommend caching for all documents
     return true;
 }

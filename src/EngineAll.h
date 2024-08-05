@@ -5,6 +5,7 @@ struct Annotation;
 enum class AnnotationType;
 struct PasswordUI;
 struct FileArgs;
+struct AnnotCreateArgs;
 
 /* EngineDjVu.cpp */
 void CleanupEngineDjVu();
@@ -40,13 +41,9 @@ bool IsEngineCbxSupportedFileType(Kind kind);
 EngineBase* CreateEngineCbxFromFile(const char* path);
 EngineBase* CreateEngineCbxFromStream(IStream* stream);
 
-/* EngineMulti.cpp */
-
-bool IsEngineMultiSupportedFileType(Kind);
-EngineBase* CreateEngineMultiFromDirectory(const char* dir);
-TocItem* CreateWrapperItem(EngineBase* engine);
-
 /* EngineMupdf.cpp */
+
+using ShowErrorCb = Func1<const char*>;
 
 bool IsEngineMupdfSupportedFileType(Kind);
 EngineBase* CreateEngineMupdfFromFile(const char* path, Kind kind, int displayDPI, PasswordUI* pwdUI = nullptr);
@@ -54,11 +51,11 @@ EngineBase* CreateEngineMupdfFromStream(IStream* stream, const char* nameHint, P
 EngineBase* CreateEngineMupdfFromData(const ByteSlice& data, const char* nameHint, PasswordUI* pwdUI);
 ByteSlice LoadEmbeddedPDFFile(const char* path);
 const char* ParseEmbeddedStreamNumber(const char* path, int* streamNoOut);
-Annotation* EngineMupdfCreateAnnotation(EngineBase*, AnnotationType type, int pageNo, PointF pos);
+Annotation* EngineMupdfCreateAnnotation(EngineBase*, int pageNo, PointF pos, AnnotCreateArgs* args);
 void EngineMupdfGetAnnotations(EngineBase*, Vec<Annotation*>&);
 bool EngineMupdfHasUnsavedAnnotations(EngineBase*);
 bool EngineMupdfSupportsAnnotations(EngineBase*);
-bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, std::function<void(const char*)> showErrorFunc);
+bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, const ShowErrorCb& showErrorFunc);
 Annotation* EngineMupdfGetAnnotationAtPos(EngineBase*, int pageNo, PointF pos, Annotation*);
 ByteSlice EngineMupdfLoadAttachment(EngineBase*, int attachmentNo);
 

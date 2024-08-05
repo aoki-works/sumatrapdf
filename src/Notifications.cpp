@@ -13,6 +13,7 @@
 
 #include "Settings.h"
 #include "AppSettings.h"
+#include "Annotation.h"
 #include "SumatraPdf.h"
 #include "AppTools.h"
 
@@ -26,8 +27,8 @@ using Gdiplus::Graphics;
 using Gdiplus::Pen;
 using Gdiplus::SolidBrush;
 
-Kind kNotifGroupCursorPos = "cursorPosHelper";
-Kind kNotifGroupActionResponse = "responseToAction";
+Kind kNotifCursorPos = "cursorPosHelper";
+Kind kNotifActionResponse = "responseToAction";
 
 constexpr int kPadding = 6;
 constexpr int kTopLeftMargin = 8;
@@ -64,7 +65,7 @@ struct NotificationWnd : ProgressUpdateUI, Wnd {
 
     bool highlight = false; // TODO: should really be a color
 
-    NotificationWndRemovedCallback wndRemovedCb = nullptr;
+    NotificationWndRemoved wndRemovedCb;
 
     // there can only be a single notification of a given group
     Kind groupId = nullptr;
@@ -174,13 +175,13 @@ HWND NotificationWnd::Create(const NotificationCreateArgs& args) {
     }
 
     highlight = args.warning;
-    if (args.onRemoved) {
+    if (args.onRemoved.IsValid()) {
         wndRemovedCb = args.onRemoved;
     } else {
-        wndRemovedCb = [](NotificationWnd* wnd) { NotifsRemoveNotification(wnd); };
+        wndRemovedCb = MkFunc1Void(NotifsRemoveNotification);
     }
     // TODO: make shrinkLimit an arg
-    if (kNotifGroupCursorPos == args.groupId) {
+    if (kNotifCursorPos == args.groupId) {
         shrinkLimit = 0.7f;
     }
 
@@ -201,7 +202,7 @@ HWND NotificationWnd::Create(const NotificationCreateArgs& args) {
 
     CreateCustom(cargs);
 
-    SetRtl(IsUIRightToLeft());
+    HwndSetRtl(hwnd, IsUIRightToLeft());
     Layout(args.msg);
     ShowWindow(hwnd, SW_SHOW);
 
@@ -231,9 +232,9 @@ void NotificationWnd::UpdateMessage(const char* msg, int timeoutMs, bool highlig
     HwndSetText(hwnd, msg);
     this->highlight = highlight;
     this->timeoutMs = timeoutMs;
-    SetRtl(IsUIRightToLeft());
+    HwndSetRtl(hwnd, IsUIRightToLeft());
     Layout(msg);
-    InvalidateRect(hwnd, nullptr, FALSE);
+    HwndRepaintNow(hwnd);
     if (timeoutMs != 0) {
         SetTimer(hwnd, kNotifTimerTimeoutId, timeoutMs, nullptr);
     }
@@ -386,13 +387,23 @@ void NotificationWnd::OnPaint(HDC hdcIn, PAINTSTRUCT* ps) {
     buffer.Flush(hdcIn);
 }
 
+static void NotifRemove(NotificationWnd* wnd) {
+    wnd->wndRemovedCb.Call(wnd);
+}
+
+static void NotifDelete(NotificationWnd* wnd) {
+    delete wnd;
+}
+
 void NotificationWnd::OnTimer(UINT_PTR timerId) {
     ReportIf(kNotifTimerTimeoutId != timerId);
     // TODO a better way to delete myself
-    if (wndRemovedCb) {
-        uitask::Post(TaskNotifOnTimerRemove, [this] { wndRemovedCb(this); });
+    if (wndRemovedCb.IsValid()) {
+        auto fn = MkFunc0<NotificationWnd>(NotifRemove, this);
+        uitask::Post(fn, "TaskNotifOnTimerRemove");
     } else {
-        uitask::Post(TaskNotifOnTimerDelete, [this] { delete this; });
+        auto fn = MkFunc0<NotificationWnd>(NotifDelete, this);
+        uitask::Post(fn, "TaskNotifOnTimerDelete");
     }
 }
 
@@ -428,10 +439,12 @@ LRESULT NotificationWnd::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         Point pt = Point(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         if (rClose.Contains(pt)) {
             // TODO a better way to delete myself
-            if (wndRemovedCb) {
-                uitask::Post(TaskNotifWndProcRemove, [this] { wndRemovedCb(this); });
+            if (wndRemovedCb.IsValid()) {
+                auto fn = MkFunc0<NotificationWnd>(NotifRemove, this);
+                uitask::Post(fn, "TaskNotifWndProcRemove");
             } else {
-                uitask::Post(TaskNotifWndProcDelete, [this] { delete this; });
+                auto fn = MkFunc0<NotificationWnd>(NotifDelete, this);
+                uitask::Post(fn, "TaskNotifWndProcDelete");
             }
             return 0;
         }
@@ -441,7 +454,7 @@ DoDefault:
     return WndProcDefault(hwnd, msg, wp, lp);
 }
 
-static void NotifsRemoveForGroup(Vec<NotificationWnd*>& wnds, Kind groupId) {
+static int NotifsRemoveForGroup(Vec<NotificationWnd*>& wnds, Kind groupId) {
     ReportIf(groupId == nullptr);
     Vec<NotificationWnd*> toRemove;
     for (auto* wnd : wnds) {
@@ -452,6 +465,7 @@ static void NotifsRemoveForGroup(Vec<NotificationWnd*>& wnds, Kind groupId) {
     for (auto* wnd : toRemove) {
         NotifsRemoveNotification(wnds, wnd);
     }
+    return toRemove.Size();
 }
 
 static void NotifsAdd(Vec<NotificationWnd*>& wnds, NotificationWnd* wnd, Kind groupId) {
@@ -524,10 +538,11 @@ void RemoveNotification(NotificationWnd* wnd) {
     NotifsRemoveNotification(wnd);
 }
 
-void RemoveNotificationsForGroup(HWND hwnd, Kind kind) {
+bool RemoveNotificationsForGroup(HWND hwnd, Kind kind) {
     Vec<NotificationWnd*> wnds;
     GetForHwnd(hwnd, wnds);
-    NotifsRemoveForGroup(wnds, kind);
+    int n = NotifsRemoveForGroup(wnds, kind);
+    return n > 0;
 }
 
 NotificationWnd* GetNotificationForGroup(HWND hwnd, Kind kind) {

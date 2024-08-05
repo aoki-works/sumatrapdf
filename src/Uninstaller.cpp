@@ -8,6 +8,7 @@
 #include "utils/Dpi.h"
 #include "utils/FrameTimeoutCalculator.h"
 #include "utils/GdiPlusUtil.h"
+#include "utils/ThreadUtil.h"
 
 #include "wingui/UIModels.h"
 #include "wingui/Layout.h"
@@ -16,6 +17,7 @@
 #include "Settings.h"
 #include "SumatraConfig.h"
 #include "Flags.h"
+#include "Annotation.h"
 #include "SumatraPDF.h"
 #include "Installer.h"
 #include "AppTools.h"
@@ -86,7 +88,12 @@ static void RemoveInstalledFiles() {
     logf("RemoveInstalledFiles(): removed dir '%s', ok = %d\n", dir, (int)ok);
 }
 
-static DWORD WINAPI UninstallerThread(void*) {
+static TempStr GetInstalledExePathTemp() {
+    TempStr dir = gCli->installDir;
+    return path::JoinTemp(dir, kExeName);
+}
+
+static void UninstallerThread() {
     log("UninstallerThread started\n");
     // also kill the original uninstaller, if it's just spawned
     // a DELETE_ON_CLOSE copy from the temp directory
@@ -123,20 +130,20 @@ static DWORD WINAPI UninstallerThread(void*) {
     if (!gCli->silent) {
         PostMessageW(gHwndFrame, WM_APP_INSTALLATION_FINISHED, 0, 0);
     }
-    return 0;
 }
 
 static void OnButtonUninstall() {
-    if (!CheckInstallUninstallPossible()) {
+    if (!CheckInstallUninstallPossible(gHwndFrame)) {
         return;
     }
 
     // disable the button during uninstallation
     gButtonUninstaller->SetIsEnabled(false);
     SetMsg(_TRA("Uninstallation in progress..."), COLOR_MSG_INSTALLATION);
-    HwndInvalidate(gHwndFrame);
+    HwndRepaintNow(gHwndFrame);
 
-    hThread = CreateThread(nullptr, 0, UninstallerThread, nullptr, 0, nullptr);
+    auto fn = MkFunc0Void(UninstallerThread);
+    hThread = StartThread(fn, "UninstallerThread");
 }
 
 static void OnButtonExit() {
@@ -147,10 +154,10 @@ void OnUninstallationFinished() {
     delete gButtonUninstaller;
     gButtonUninstaller = nullptr;
     gButtonExit = CreateDefaultButton(gHwndFrame, _TRA("Close"));
-    gButtonExit->onClicked = OnButtonExit;
+    gButtonExit->onClicked = MkFunc0Void(OnButtonExit);
     SetMsg(_TRA("SumatraPDF has been uninstalled."), gMsgError ? COLOR_MSG_FAILED : COLOR_MSG_OK);
     gMsgError = gFirstError;
-    HwndInvalidate(gHwndFrame);
+    HwndRepaintNow(gHwndFrame);
 
     CloseHandle(hThread);
 }
@@ -184,7 +191,7 @@ static void CreateUninstallerWindow() {
     HwndResizeClientSize(gHwndFrame, dx, dy);
 
     gButtonUninstaller = CreateDefaultButton(gHwndFrame, _TRA("Uninstall SumatraPDF"));
-    gButtonUninstaller->onClicked = OnButtonUninstall;
+    gButtonUninstaller->onClicked = MkFunc0Void(OnButtonUninstall);
 }
 
 static void ShowUsage() {
@@ -241,7 +248,7 @@ static LRESULT CALLBACK WndProcUninstallerFrame(HWND hwnd, UINT msg, WPARAM wp, 
         case WM_APP_INSTALLATION_FINISHED: {
             OnUninstallationFinished();
             if (gButtonExit) {
-                gButtonExit->SetFocus();
+                HwndSetFocus(gButtonExit->hwnd);
             }
             SetForegroundWindow(hwnd);
             break;
@@ -312,7 +319,7 @@ static int RunApp() {
         // only before (un)installation starts.
         auto dur = TimeSinceInMs(t);
         if (dur > 10000 && gButtonUninstaller && gButtonUninstaller->IsEnabled()) {
-            CheckInstallUninstallPossible(true);
+            CheckInstallUninstallPossible(gHwndFrame, true);
             t = TimeGet();
         }
     }
@@ -368,11 +375,25 @@ static void RelaunchMaybeElevatedFromTempDirectory(Flags* cli) {
     if (cli->allUsers) {
         cmdLine.Append(" -all-users");
     }
-    logf("  re-launching '%s' with args '%s' as elevated\n", installerTempPath, cmdLine.Get());
+    char* cl = cmdLine.CStr();
     if (cli->allUsers) {
-        LaunchElevated(installerTempPath, cmdLine.Get());
+        logf("LaunchElevated('%s', '%s')\n", installerTempPath, cl);
+        ok = LaunchElevated(installerTempPath, cl);
+        if (!ok) {
+            logf("LaunchElevated() failed to launch '%s' '%s'\n", installerTempPath, cl);
+            LogLastError();
+        } else {
+            logf("LaunchElevated() launched '%s' '%s' ok!\n", installerTempPath, cl);
+        }
     } else {
-        LaunchProcess(installerTempPath, cmdLine.Get());
+        logf("LaunchProcessWithCmdLine('%s' '%s')\n", installerTempPath, cl);
+        HANDLE h = LaunchProcessWithCmdLine(installerTempPath, cl);
+        if (!h) {
+            logf("LaunchProcessWithCmdLine() failed to launch '%s' '%s'\n", installerTempPath, cl);
+            LogLastError();
+        } else {
+            logf("LaunchProcessWithCmdLine() launched '%s' '%s' ok!\n", installerTempPath, cl);
+        }
     }
     ::ExitProcess(0);
 }
@@ -409,8 +430,7 @@ static void InitSelfDelete() {
     }
     logf("Created self-delete batch script '%s'\n", scriptPath);
     TempStr cmdLine = str::FormatTemp("cmd.exe /C \"%s\"", scriptPath);
-    DWORD flags = CREATE_NO_WINDOW;
-    LaunchProcess(cmdLine, nullptr, flags);
+    LaunchProcessInDir(cmdLine, nullptr, CREATE_NO_WINDOW);
 }
 
 int RunUninstaller() {
@@ -432,6 +452,19 @@ int RunUninstaller() {
     TempStr cmdLine = ToUtf8Temp(GetCommandLineW());
     TempStr exePath = GetExePathTemp();
     logf("Running uninstaller '%s' with args '%s' for '%s'\n", exePath, cmdLine, instDir);
+
+    if (false) {
+        const char* path = "C:\\Users\\kjk\\AppData\\Local\\Temp\\Sumatra-Uninstaller.exe";
+        const char* cl = "-uninstall";
+        logf("LaunchProcessWithCmdLine('%s' '%s')\n", path, cl);
+        HANDLE h = LaunchProcessWithCmdLine(path, cl);
+        if (!h) {
+            logf("LaunchProcessWithCmdLine() failed to launch '%s' '%s'\n", path, cl);
+            LogLastError();
+        } else {
+            logf("LaunchProcessWithCmdLine() launched '%s' '%s' ok!\n", path, cl);
+        }
+    }
 
     int ret = 1;
     auto installerExists = file::Exists(exePath);
@@ -472,7 +505,7 @@ int RunUninstaller() {
     }
 
     if (gCli->silent) {
-        UninstallerThread(nullptr);
+        UninstallerThread();
         ret = success ? 0 : 1;
         goto Exit;
     }

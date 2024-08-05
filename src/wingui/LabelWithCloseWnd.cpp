@@ -36,7 +36,7 @@ static void PaintHDC(LabelWithCloseWnd* w, HDC hdc, const PAINTSTRUCT& ps) {
     SetBkColor(hdc, w->bgCol);
 
     uint format = DT_SINGLELINE | DT_TOP | DT_LEFT;
-    if (IsRtl(w->hwnd)) {
+    if (HwndIsRtl(w->hwnd)) {
         format |= DT_RTLREADING;
     }
     char* s = HwndGetTextTemp(w->hwnd);
@@ -164,7 +164,7 @@ HWND LabelWithCloseWnd::Create(const LabelWithCloseCreateArgs& args) {
     return hwnd;
 }
 
-Size LabelWithCloseWnd::GetIdealSize() const {
+Size LabelWithCloseWnd::GetIdealSize() {
     char* s = HwndGetTextTemp(this->hwnd);
     Size size = HwndMeasureText(this->hwnd, s);
     int btnDx = DpiScale(this->hwnd, kCloseBtnDx);

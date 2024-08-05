@@ -28,6 +28,7 @@
 #include "AppColors.h"
 #include "SumatraConfig.h"
 #include "SumatraPDF.h"
+#include "SumatraDialogs.h"
 #include "MainWindow.h"
 #include "WindowTab.h"
 #include "resource.h"
@@ -44,9 +45,6 @@
 #include "Menu.h"
 
 #include "utils/Log.h"
-
-// SumatraPDF.cpp
-extern Annotation* MakeAnnotationsFromSelection(WindowTab* tab, AnnotationType annotType);
 
 struct BuildMenuCtx {
     WindowTab* tab = nullptr;
@@ -100,8 +98,6 @@ static MenuDef menuDefFile[] = {
         _TRN("&Open..."),
         CmdOpenFile,
     },
-    // TODO: should make it available for everyone?
-    //{ "Open Folder",                        CmdOpenFolder,             },
     {
         _TRN("&Close"),
         CmdClose,
@@ -109,6 +105,14 @@ static MenuDef menuDefFile[] = {
     {
         _TRN("Show in &folder"),
         CmdShowInFolder,
+    },
+    {
+        _TRN("Open Next File In Folder"),
+        CmdOpenNextFileInFolder,
+    },
+    {
+        _TRN("Open Previous File In Folder"),
+        CmdOpenPrevFileInFolder,
     },
     {
         _TRN("&Save As..."),
@@ -335,6 +339,37 @@ static MenuDef menuDefGoTo[] = {
 };
 //] ACCESSKEY_GROUP GoTo Menu
 
+static MenuDef menuDefZoomShort[] = {
+    {
+        _TRN("Fit &Page"),
+        CmdZoomFitPage,
+    },
+    {
+        _TRN("&Actual Size"),
+        CmdZoomActualSize,
+    },
+    {
+        _TRN("Fit &Width"),
+        CmdZoomFitWidth,
+    },
+    {
+        _TRN("Fit &Content"),
+        CmdZoomFitContent,
+    },
+    {
+        _TRN("Custom &Zoom..."),
+        CmdZoomCustom,
+    },
+    {
+        kMenuSeparator,
+        0,
+    },
+    {
+        nullptr,
+        0,
+    },
+};
+
 //[ ACCESSKEY_GROUP Zoom Menu
 static MenuDef menuDefZoom[] = {
     {
@@ -420,27 +455,13 @@ static MenuDef menuDefZoom[] = {
 };
 //] ACCESSKEY_GROUP Zoom Menu
 
-// TODO: build this dynamically
-//[ ACCESSKEY_GROUP Themes Menu
+// TODO: replace with CmdetTheme
 MenuDef menuDefThemes[] = {
-    {
-        _TRN("Light"),
-        CmdThemeFirst,
-    },
-    {
-        _TRN("Dark"),
-        CmdThemeFirst+1,
-    },
-    {
-        _TRN("Darker"),
-        CmdThemeFirst+2,
-    },
     {
         nullptr,
         0,
     },
 };
-//] ACCESSKEY_GROUP Favorites Menu
 
 //[ ACCESSKEY_GROUP Settings Menu
 static MenuDef menuDefSettings[] = {
@@ -743,6 +764,10 @@ static MenuDef menuDefContext[] = {
         CmdCopySelection,
     },
     {
+        _TRN("Create Annotation From Selection"),
+        (UINT_PTR)menuDefCreateAnnotFromSelection,
+    },
+    {
         _TRN("S&election"),
         (UINT_PTR)menuDefSelection,
     },
@@ -791,10 +816,10 @@ static MenuDef menuDefContext[] = {
         _TRN("Edit Annotations"),
         CmdEditAnnotations,
     },
-    {
-        _TRN("Create Annotation From Selection"),
-        (UINT_PTR)menuDefCreateAnnotFromSelection,
-    },
+//    {
+//        _TRN("Create Annotation From Selection"),
+//        (UINT_PTR)menuDefCreateAnnotFromSelection,
+//    },
     {
         _TRN("Create Annotation &Under Cursor"),
         (UINT_PTR)menuDefCreateAnnotUnderCursor,
@@ -871,6 +896,8 @@ static UINT_PTR disableIfNoDocument[] = {
     CmdRenameFile,
     CmdDeleteFile,
     CmdShowInFolder,
+    CmdOpenNextFileInFolder,
+    CmdOpenPrevFileInFolder,
     CmdInvokeInverseSearch,
     // IDM_VIEW_WITH_XPS_VIEWER and IDM_VIEW_WITH_HTML_HELP
     // are removed instead of disabled (and can remain enabled
@@ -974,7 +1001,8 @@ UINT_PTR removeIfNoCopyPerms[] = {
 UINT_PTR removeIfNoDiskAccessPerm[] = {
     CmdNewWindow, // ???
     CmdOpenFile,
-    CmdOpenFolder,
+    CmdOpenNextFileInFolder,
+    CmdOpenPrevFileInFolder,
     CmdClose, // ???
     CmdShowInFolder,
     CmdSaveAs,
@@ -1040,7 +1068,7 @@ static bool __cmdIdInList(UINT_PTR cmdId, UINT_PTR* idsList, int n) {
     return false;
 }
 
-#define cmdIdInList(name) __cmdIdInList(md.idOrSubmenu, name, dimof(name))
+#define cmdIdInList(name) __cmdIdInList(cmdId, name, dimof(name))
 
 // shorten a string to maxLen characters, adding ellipsis in the middle
 // ascii version that doesn't handle UTF-8
@@ -1131,7 +1159,7 @@ static void AddFileMenuItem(HMENU menuFile, const char* filePath, int index) {
 }
 
 static void AppendRecentFilesToMenu(HMENU m) {
-    if (!HasPermission(Perm::DiskAccess)) {
+    if (!CanAccessDisk()) {
         return;
     }
 
@@ -1163,9 +1191,10 @@ static void AppendRecentFilesToMenu(HMENU m) {
     }
 }
 
-void FillBuildMenuCtx(WindowTab* tab, BuildMenuCtx* ctx, Point pt) {
+BuildMenuCtx* NewBuildMenuCtx(WindowTab* tab, Point pt) {
+    auto ctx = new BuildMenuCtx;
     if (!tab) {
-        return;
+        return ctx;
     }
     ctx->tab = tab;
     EngineBase* engine = tab->GetEngine();
@@ -1185,80 +1214,80 @@ void FillBuildMenuCtx(WindowTab* tab, BuildMenuCtx* ctx, Point pt) {
         ctx->annotationUnderCursor = dm->GetAnnotationAtPos(pt, nullptr);
     }
     ctx->hasSelection = tab->win->showSelection && tab->selectionOnPage;
+    return ctx;
+}
+
+void DeleteBuildMenuCtx(BuildMenuCtx* ctx) {
+    delete ctx;
+}
+
+static void AppendCommandsToMenu(HMENU m, const Vec<CustomCommand*>& cmds, bool isEnabled) {
+    for (CustomCommand* cmd : cmds) {
+        if (!cmd->name) {
+            continue;
+        }
+        TempStr menuString = (TempStr)cmd->name;
+        int cmdId = cmd->id;
+        menuString = AppendAccelKeyToMenuStringTemp(menuString, cmdId);
+        UINT flags = MF_STRING;
+        flags |= isEnabled ? MF_ENABLED : MF_DISABLED;
+        WCHAR* ws = ToWStrTemp(menuString);
+        AppendMenuW(m, flags, (UINT_PTR)cmd->id, ws);
+    }
+}
+
+static void AppendThemesToMenu(HMENU m) {
+    Vec<CustomCommand*> cmds;
+    GetCommandsWithOrigId(cmds, CmdSetTheme);
+    AppendCommandsToMenu(m, cmds, true);
 }
 
 static void AppendSelectionHandlersToMenu(HMENU m, bool isEnabled) {
-    if (!HasPermission(Perm::InternetAccess) || !HasPermission(Perm::CopySelection)) {
-        // TODO: when we add exe handlers, only filter the URL ones
-        return;
-    }
-    int maxEntries = CmdSelectionHandlerLast - CmdSelectionHandlerFirst;
-    int n = 0;
-    for (auto& sh : *gGlobalPrefs->selectionHandlers) {
-        if (!sh || !sh->url || !sh->name) {
-            // can happen for bad selection handler definition
-            continue;
-        }
-        if (str::EmptyOrWhiteSpaceOnly(sh->url) || str::EmptyOrWhiteSpaceOnly(sh->name)) {
-            continue;
-        }
-        if (n >= maxEntries) {
-            break;
-        }
-        WCHAR* name = ToWStrTemp(sh->name);
-        sh->cmdID = (int)CmdSelectionHandlerFirst + n;
-        UINT flags = MF_STRING;
-        flags |= isEnabled ? MF_ENABLED : MF_DISABLED;
-        AppendMenuW(m, flags, (UINT_PTR)sh->cmdID, name);
-        n++;
-    }
+    Vec<CustomCommand*> cmds;
+    GetCommandsWithOrigId(cmds, CmdSelectionHandler);
+    AppendCommandsToMenu(m, cmds, isEnabled);
 }
 
 static void AppendExternalViewersToMenu(HMENU menuFile, const char* filePath) {
-    if (0 == gGlobalPrefs->externalViewers->size()) {
+    if (!CanAccessDisk() || (filePath && !file::Exists(filePath))) {
         return;
     }
-    if (!HasPermission(Perm::DiskAccess) || (filePath && !file::Exists(filePath))) {
-        return;
-    }
-
-    int maxEntries = CmdOpenWithExternalLast - CmdOpenWithExternalFirst;
-    int count = 0;
-
-    for (ExternalViewer* ev : *gGlobalPrefs->externalViewers) {
-        if (count >= maxEntries) {
-            break;
-        }
-        if (str::EmptyOrWhiteSpaceOnly(ev->commandLine)) {
+    Vec<CustomCommand*> cmds;
+    GetCommandsWithOrigId(cmds, CmdViewWithExternalViewer);
+    for (CustomCommand* cmd : cmds) {
+        const char* commandLine = GetCommandStringArg(cmd, kCmdArgCommandLine, nullptr);
+        const char* filter = GetCommandStringArg(cmd, kCmdArgFilter, nullptr);
+        if (str::IsEmptyOrWhiteSpace(commandLine)) {
             continue;
         }
-        if (ev->filter && !(filePath && PathMatchFilter(filePath, ev->filter))) {
+        if (filter && !(filePath && PathMatchFilter(filePath, filter))) {
             continue;
         }
-
-        char* name = ev->name;
-        if (str::EmptyOrWhiteSpaceOnly(name)) {
-            CmdLineArgsIter args(ToWStrTemp(ev->commandLine));
-            int nArgs = args.nArgs - 2;
-            if (nArgs <= 0) {
-                continue;
-            }
-            char* arg0 = args.at(2 + 0);
-            name = str::DupTemp(path::GetBaseNameTemp(arg0));
-            char* pos = str::FindChar(name, '.');
-            if (pos) {
-                *pos = 0;
+        char* name = (char*)cmd->name;
+        if (str::IsEmptyOrWhiteSpace(cmd->name)) {
+            if (str::IsEmptyOrWhiteSpace(name)) {
+                CmdLineArgsIter args(ToWStrTemp(commandLine));
+                int nArgs = args.nArgs - 2;
+                if (nArgs <= 0) {
+                    continue;
+                }
+                char* arg0 = args.at(2 + 0);
+                name = str::DupTemp(path::GetBaseNameTemp(arg0));
+                char* pos = str::FindChar(name, '.');
+                if (pos) {
+                    *pos = 0;
+                }
             }
         }
-
-        TempStr menuString = str::FormatTemp(_TRA("Open in %s"), name);
-        uint menuId = CmdOpenWithExternalFirst + count;
+        // TempStr menuString = str::FormatTemp(_TRA("Open in %s"), name);
+        TempStr menuString = name;
+        int cmdId = cmd->id;
+        menuString = AppendAccelKeyToMenuStringTemp(menuString, cmdId);
         TempWStr ws = ToWStrTemp(menuString);
-        InsertMenuW(menuFile, menuId, MF_BYCOMMAND | MF_ENABLED | MF_STRING, menuId, ws);
+        InsertMenuW(menuFile, cmdId, MF_BYCOMMAND | MF_ENABLED | MF_STRING, (UINT_PTR)cmdId, ws);
         if (!filePath) {
-            MenuSetEnabled(menuFile, menuId, false);
+            MenuSetEnabled(menuFile, cmdId, false);
         }
-        count++;
     }
 }
 
@@ -1271,9 +1300,13 @@ static void DynamicPartOfFileMenu(HMENU menu, BuildMenuCtx* ctx) {
     // Don't hide items here that won't always be hidden
     // (MenuUpdateStateForWindow() is for that)
     WindowTab* tab = ctx->tab;
-    for (int cmd = CmdOpenWithFirst + 1; cmd < CmdOpenWithLast; cmd++) {
-        if (!CanViewWithKnownExternalViewer(tab, cmd)) {
-            MenuRemove(menu, cmd);
+
+    int idFirst = CmdOpenWithKnownExternalViewerFirst + 1;
+    int idLast = CmdOpenWithKnownExternalViewerLast;
+    for (int cmdId = idFirst; cmdId < idLast; cmdId++) {
+        auto [remove, disable] = GetCommandIdState(ctx, cmdId);
+        if (remove || disable) {
+            MenuRemove(menu, cmdId);
         }
     }
 }
@@ -1315,16 +1348,63 @@ again3:
     }
 }
 
-static void RebuildFileMenu(WindowTab* tab, HMENU menu) {
-    MenuEmpty(menu);
-    BuildMenuCtx buildCtx;
-    FillBuildMenuCtx(tab, &buildCtx, Point{0, 0});
-    BuildMenuFromMenuDef(menuDefFile, menu, &buildCtx);
-    DynamicPartOfFileMenu(menu, &buildCtx);
-    RemoveBadMenuSeparators(menu);
+// returns [remove, disable] state of the command
+std::pair<bool, bool> GetCommandIdState(BuildMenuCtx* ctx, int cmdId) {
+    bool remove = false;
+    bool disable = false;
+    if (!HasPermission(Perm::InternetAccess)) {
+        remove |= cmdIdInList(removeIfNoInternetPerms);
+    }
+    if (!HasPermission(Perm::FullscreenAccess)) {
+        remove |= cmdIdInList(removeIfNoFullscreenPerms);
+    }
+    if (!HasPermission(Perm::SavePreferences)) {
+        remove |= cmdIdInList(removeIfNoPrefsPerms);
+    }
+    if (!HasPermission(Perm::PrinterAccess)) {
+        remove |= (cmdId == CmdPrint);
+    }
+    if (!CanAccessDisk()) {
+        remove |= cmdIdInList(removeIfNoDiskAccessPerm);
+        // editing annotations also requires disk access
+        remove |= cmdIdInList(removeIfAnnotsNotSupported);
+        if (cmdId >= CmdOpenWithKnownExternalViewerFirst && cmdId <= CmdOpenWithKnownExternalViewerLast) {
+            remove = true;
+        }
+    }
+    if (!HasPermission(Perm::CopySelection)) {
+        remove |= cmdIdInList(removeIfNoCopyPerms);
+    }
+    if ((cmdId == CmdCheckUpdate) && gIsStoreBuild) {
+        remove = true;
+    }
+
+    if (!ctx) {
+        return {remove, disable};
+    }
+
+    {
+        int idFirst = CmdOpenWithKnownExternalViewerFirst + 1;
+        int idLast = CmdOpenWithKnownExternalViewerLast;
+        if (cmdId >= idFirst && cmdId <= idLast) {
+            remove = !CanViewWithKnownExternalViewer(ctx->tab, cmdId);
+            return {remove, disable};
+        }
+    }
+
+    remove |= (ctx->tab && ctx->tab->AsChm() && cmdIdInList(removeIfChm));
+    remove |= (!ctx->isCbx && (cmdId == CmdToggleMangaMode));
+    remove |= (!ctx->supportsAnnotations && cmdIdInList(removeIfAnnotsNotSupported));
+    remove |= !ctx->canSendEmail && (cmdId == CmdSendByEmail);
+
+    disable |= (!ctx->hasSelection && cmdIdInList(disableIfNoSelection));
+    // disableMenu |= (!ctx->annotationUnderCursor && (cmdId == CmdSelectAnnotation));
+    disable |= (!ctx->annotationUnderCursor && (cmdId == CmdDeleteAnnotation));
+    disable |= !ctx->hasUnsavedAnnotations && (cmdId == CmdSaveAnnotations);
+    return {remove, disable};
 }
 
-HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
+HMENU BuildMenuFromDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
     ReportIf(!menu);
 
     bool isDebugMenu = menuDef == menuDefDebug;
@@ -1335,7 +1415,10 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
         AppendSelectionHandlersToMenu(menu, ctx ? ctx->hasSelection : false);
     }
 
-    ACCEL accel;
+    if (menuDef == menuDefThemes) {
+        AppendThemesToMenu(menu);
+    }
+
     while (true) {
         MenuDef md = menuDef[i];
         if (md.title == nullptr) { // sentinel
@@ -1352,46 +1435,8 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
         // hacky but works: small number is command id, large is submenu (a pointer)
         bool isSubMenu = md.idOrSubmenu > CmdLast + 10000;
 
-        bool disableMenu = false;
-        bool removeMenu = false;
-        if (!HasPermission(Perm::InternetAccess)) {
-            removeMenu |= cmdIdInList(removeIfNoInternetPerms);
-        }
-        if (!HasPermission(Perm::FullscreenAccess)) {
-            removeMenu |= cmdIdInList(removeIfNoFullscreenPerms);
-        }
-        if (!HasPermission(Perm::SavePreferences)) {
-            removeMenu |= cmdIdInList(removeIfNoPrefsPerms);
-        }
-        if (!HasPermission(Perm::PrinterAccess)) {
-            removeMenu |= (cmdId == CmdPrint);
-        }
-        if (!HasPermission(Perm::DiskAccess)) {
-            removeMenu |= cmdIdInList(removeIfNoDiskAccessPerm);
-            // editing annotations also requires disk access
-            removeMenu |= cmdIdInList(removeIfAnnotsNotSupported);
-            if (cmdId >= CmdOpenWithFirst && cmdId <= CmdOpenWithLast) {
-                removeMenu = true;
-            }
-        }
-        if (!HasPermission(Perm::CopySelection)) {
-            removeMenu |= cmdIdInList(removeIfNoCopyPerms);
-        }
-        if ((cmdId == CmdCheckUpdate) && gIsStoreBuild) {
-            removeMenu = true;
-        }
-
+        auto [removeMenu, disableMenu] = GetCommandIdState(ctx, cmdId);
         if (ctx) {
-            removeMenu |= (ctx->tab && ctx->tab->AsChm() && cmdIdInList(removeIfChm));
-            removeMenu |= (!ctx->isCbx && (cmdId == CmdToggleMangaMode));
-            removeMenu |= (!ctx->supportsAnnotations && cmdIdInList(removeIfAnnotsNotSupported));
-            removeMenu |= !ctx->canSendEmail && (cmdId == CmdSendByEmail);
-
-            disableMenu |= (!ctx->hasSelection && cmdIdInList(disableIfNoSelection));
-            // disableMenu |= (!ctx->annotationUnderCursor && (cmdId == CmdSelectAnnotation));
-            disableMenu |= (!ctx->annotationUnderCursor && (cmdId == CmdDeleteAnnotation));
-            disableMenu |= !ctx->hasUnsavedAnnotations && (cmdId == CmdSaveAnnotations);
-
             removeMenu |= !ctx->isCursorOnPage && (subMenuDef == menuDefCreateAnnotUnderCursor);
             removeMenu |= !ctx->hasSelection && (subMenuDef == menuDefCreateAnnotFromSelection);
         }
@@ -1414,7 +1459,7 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
         }
 
         if (isSubMenu) {
-            HMENU subMenu = BuildMenuFromMenuDef(subMenuDef, CreatePopupMenu(), ctx);
+            HMENU subMenu = BuildMenuFromDef(subMenuDef, CreatePopupMenu(), ctx);
             UINT flags = MF_POPUP | (disableMenu ? MF_DISABLED : MF_ENABLED);
             if (subMenuDef == menuDefFile) {
                 DynamicPartOfFileMenu(subMenu, ctx);
@@ -1422,21 +1467,16 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
             TempWStr ws = ToWStrTemp(title);
             AppendMenuW(menu, flags, (UINT_PTR)subMenu, ws);
         } else {
-            str::Str title2 = title;
-            if (GetAccelByCmd(cmdId, accel)) {
-                // if this is an accelerator, append it to menu
-                if (!str::Find(title, "\t")) {
-                    AppendAccelKeyToMenuString(title2, accel);
-                }
-            }
+            title = (TempStr)AppendAccelKeyToMenuStringTemp((TempStr)title, cmdId);
             UINT flags = MF_STRING | (disableMenu ? MF_DISABLED : MF_ENABLED);
-            TempWStr ws = ToWStrTemp(title2.Get());
+            TempWStr ws = ToWStrTemp(title);
             AppendMenuW(menu, flags, md.idOrSubmenu, ws);
         }
 
+        // append user external viewers after menu item with CmdOpenWithHtmlHelp
         if (cmdId == CmdOpenWithHtmlHelp && ctx) {
             WindowTab* tab = ctx->tab;
-            char* path = tab ? tab->filePath : nullptr;
+            const char* path = tab ? tab->filePath : nullptr;
             AppendExternalViewersToMenu(menu, path);
         }
     }
@@ -1446,7 +1486,7 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
 
 // clang-format off
 static struct {
-    int itemId;
+    int cmdId;
     float zoom;
 } gZoomMenuIds[] = {
     { CmdZoom6400,        6400.0 },
@@ -1470,18 +1510,41 @@ static struct {
 };
 // clang-format on
 
-int MenuIdFromVirtualZoom(float virtualZoom) {
+static void BuildMenuZoom(HMENU m) {
+    auto prefs = gGlobalPrefs;
+    auto customZoomLevels = prefs->zoomLevels;
+    int n = customZoomLevels->Size();
+    if (n <= 0) {
+        return;
+    }
+    MenuEmpty(m);
+    TempStr title;
+    int cmdId;
+    BuildMenuFromDef(menuDefZoomShort, m, nullptr);
+    for (int i = 0; i < n; i++) {
+        int idx = n - i - 1; // largest first
+        float zl = customZoomLevels->At(idx);
+        cmdId = prefs->zoomLevelsCmdIds->At(idx);
+        title = ZoomLevelStr(zl);
+        title = (TempStr)AppendAccelKeyToMenuStringTemp((TempStr)title, cmdId);
+        UINT flags = MF_STRING | MF_ENABLED;
+        TempWStr ws = ToWStrTemp(title);
+        AppendMenuW(m, flags, cmdId, ws);
+    }
+}
+
+int CmdIdFromVirtualZoom(float virtualZoom) {
     for (auto&& it : gZoomMenuIds) {
         if (virtualZoom == it.zoom) {
-            return it.itemId;
+            return it.cmdId;
         }
     }
     return CmdZoomCustom;
 }
 
-float ZoomMenuItemToZoom(int menuItemId) {
+float ZoomMenuItemToZoom(int cmdId) {
     for (auto&& it : gZoomMenuIds) {
-        if (menuItemId == it.itemId) {
+        if (cmdId == it.cmdId) {
             return it.zoom;
         }
     }
@@ -1489,18 +1552,18 @@ float ZoomMenuItemToZoom(int menuItemId) {
     return 100.0;
 }
 
-static void ZoomMenuItemCheck(HMENU m, int menuItemId, bool canZoom) {
-    ReportIf((CmdZoomFirst > menuItemId) || (menuItemId > CmdZoomLast));
+static void ZoomMenuItemCheck(HMENU m, int cmdId, bool canZoom) {
+    ReportIf((CmdZoomFirst > cmdId) || (cmdId > CmdZoomLast));
 
     for (auto&& it : gZoomMenuIds) {
-        MenuSetEnabled(m, it.itemId, canZoom);
+        MenuSetEnabled(m, it.cmdId, canZoom);
     }
 
-    if (CmdZoom100 == menuItemId) {
-        menuItemId = CmdZoomActualSize;
+    if (CmdZoom100 == cmdId) {
+        cmdId = CmdZoomActualSize;
     }
-    CheckMenuRadioItem(m, CmdZoomFirst, CmdZoomLast, menuItemId, MF_BYCOMMAND);
-    if (CmdZoomActualSize == menuItemId) {
+    CheckMenuRadioItem(m, CmdZoomFirst, CmdZoomLast, cmdId, MF_BYCOMMAND);
+    if (CmdZoomActualSize == cmdId) {
         CheckMenuRadioItem(m, CmdZoom100, CmdZoom100, CmdZoom100, MF_BYCOMMAND);
     }
 }
@@ -1510,7 +1573,7 @@ void MenuUpdateZoom(MainWindow* win) {
     if (win->IsDocLoaded()) {
         zoomVirtual = win->ctrl->GetZoomVirtual();
     }
-    int menuId = MenuIdFromVirtualZoom(zoomVirtual);
+    int menuId = CmdIdFromVirtualZoom(zoomVirtual);
     ZoomMenuItemCheck(win->menu, menuId, win->IsDocLoaded());
 }
 
@@ -1526,21 +1589,27 @@ void MenuUpdatePrintItem(MainWindow* win, HMENU menu, bool disableOnly = false) 
         if (def.idOrSubmenu != CmdPrint) {
             continue;
         }
-        str::Str printItem = trans::GetTranslation(def.title);
+        TempStr printItem = (TempStr)trans::GetTranslation(def.title);
         if (!filePrintAllowed) {
-            printItem = _TRA("&Print... (denied)");
+            printItem = (TempStr)_TRA("&Print... (denied)");
         } else {
-            ACCEL accel;
-            if (GetAccelByCmd(CmdPrint, accel)) {
-                AppendAccelKeyToMenuString(printItem, accel);
-            }
+            printItem = AppendAccelKeyToMenuStringTemp(printItem, CmdPrint);
         }
         if (!filePrintAllowed || !disableOnly) {
-            TempWStr ws = ToWStrTemp(printItem.Get());
+            TempWStr ws = ToWStrTemp(printItem);
             ModifyMenuW(menu, CmdPrint, MF_BYCOMMAND | MF_STRING, (UINT_PTR)CmdPrint, ws);
         }
         MenuSetEnabled(menu, CmdPrint, filePrintEnabled && filePrintAllowed);
     }
+}
+
+static void RebuildFileMenu(WindowTab* tab, HMENU menu) {
+    MenuEmpty(menu);
+    auto ctx = NewBuildMenuCtx(tab, Point{0, 0});
+    AutoDelete delCtx(ctx);
+    BuildMenuFromDef(menuDefFile, menu, ctx);
+    DynamicPartOfFileMenu(menu, ctx);
+    RemoveBadMenuSeparators(menu);
 }
 
 static bool IsFileCloseMenuEnabled() {
@@ -1557,8 +1626,12 @@ static void SetMenuStateForSelection(WindowTab* tab, HMENU menu) {
     for (int id : disableIfNoSelection) {
         MenuSetEnabled(menu, id, isTextSelected);
     }
-    for (int id = CmdSelectionHandlerFirst; id < CmdSelectionHandlerLast; id++) {
-        MenuSetEnabled(menu, id, isTextSelected);
+    auto curr = gFirstCustomCommand;
+    while (curr) {
+        if (curr->origId == CmdSelectionHandler) {
+            MenuSetEnabled(menu, curr->id, isTextSelected);
+        }
+        curr = curr->next;
     }
 }
 
@@ -1597,7 +1670,7 @@ static void MenuUpdateStateForWindow(MainWindow* win) {
     WindowTab* tab = win->CurrentTab();
 
     bool hasDocument = tab && tab->IsDocLoaded();
-    for (UINT_PTR id = CmdOpenWithFirst; id < CmdOpenWithLast; id++) {
+    for (UINT_PTR id = CmdOpenWithKnownExternalViewerFirst; id < CmdOpenWithKnownExternalViewerLast; id++) {
         MenuSetEnabled(win->menu, id, hasDocument);
     }
     for (int id : disableIfNoDocument) {
@@ -1651,8 +1724,7 @@ static void MenuUpdateStateForWindow(MainWindow* win) {
         MenuSetEnabled(win->menu, CmdDeleteFile, false);
     }
 
-    int themeCmdId = CmdThemeFirst + GetCurrentThemeIndex();
-    CheckMenuRadioItem(win->menu, CmdThemeFirst, CmdThemeLast, themeCmdId, MF_BYCOMMAND);
+    CheckMenuRadioItem(win->menu, gFirstSetThemeCmdId, gLastSetThemeCmdId, gCurrSetThemeCmdId, MF_BYCOMMAND);
 
     MenuSetChecked(win->menu, CmdToggleLinks, gGlobalPrefs->showLinks);
 }
@@ -1674,7 +1746,7 @@ void OnAboutContextMenu(MainWindow* win, int x, int y) {
         return;
     }
 
-    HMENU popup = BuildMenuFromMenuDef(menuDefContextStart, CreatePopupMenu(), nullptr);
+    HMENU popup = BuildMenuFromDef(menuDefContextStart, CreatePopupMenu(), nullptr);
     MenuSetChecked(popup, CmdPinSelectedDocument, fs->isPinned);
     POINT pt = {x, y};
     MapWindowPoints(win->hwndCanvas, HWND_DESKTOP, &pt, 1);
@@ -1743,9 +1815,9 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         value = pageEl->GetValue();
     }
 
-    BuildMenuCtx buildCtx;
-    FillBuildMenuCtx(tab, &buildCtx, cursorPos);
-    HMENU popup = BuildMenuFromMenuDef(menuDefContext, CreatePopupMenu(), &buildCtx);
+    auto ctx = NewBuildMenuCtx(tab, cursorPos);
+    AutoDelete delCtx(ctx);
+    HMENU popup = BuildMenuFromDef(menuDefContext, CreatePopupMenu(), ctx);
 
     int pageNoUnderCursor = dm->GetPageNoByPoint(cursorPos);
     PointF ptOnPage = dm->CvtFromScreen(cursorPos, pageNoUnderCursor);
@@ -1776,20 +1848,20 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
     MenuSetEnabled(popup, CmdFavoriteToggle, HasFavorites());
     MenuSetChecked(popup, CmdFavoriteToggle, gGlobalPrefs->showFavorites);
 
-    if (buildCtx.annotationUnderCursor) {
+    if (ctx->annotationUnderCursor) {
         // change from generic "Edit Annotations" to more specific
         // "Edit ${annotType} Annotation"
-        TempStr t = AnnotationReadableNameTemp(buildCtx.annotationUnderCursor->type);
+        TempStr t = AnnotationReadableNameTemp(ctx->annotationUnderCursor->type);
         TempStr s = str::FormatTemp(_TRN("Edit %s Annotation"), t);
         MenuSetText(popup, CmdEditAnnotations, s);
     }
 
     const char* filePath = win->ctrl->GetFilePath();
-    bool favsSupported = HasPermission(Perm::SavePreferences) && HasPermission(Perm::DiskAccess);
+    bool favsSupported = HasPermission(Perm::SavePreferences) && CanAccessDisk();
     if (favsSupported) {
         if (pageNoUnderCursor > 0) {
             TempStr pageLabel = win->ctrl->GetPageLabeTemp(pageNoUnderCursor);
-            bool isBookmarked = gFavorites.IsPageInFavorites(filePath, pageNoUnderCursor);
+            bool isBookmarked = IsPageInFavorites(filePath, pageNoUnderCursor);
             if (isBookmarked) {
                 MenuRemove(popup, CmdFavoriteAdd);
 
@@ -1801,13 +1873,8 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
                 MenuRemove(popup, CmdFavoriteDel);
 
                 // %s and not %d because re-using translation from RebuildFavMenu()
-                str::Str str = _TRA("Add page %s to favorites");
-                ACCEL a;
-                bool ok = GetAccelByCmd(CmdFavoriteAdd, a);
-                if (ok) {
-                    AppendAccelKeyToMenuString(str, a);
-                }
-                TempStr s = str::FormatTemp(str.Get(), pageLabel);
+                TempStr s = str::FormatTemp(_TRA("Add page %s to favorites"), pageLabel);
+                s = AppendAccelKeyToMenuStringTemp(s, CmdFavoriteAdd);
                 MenuSetText(popup, CmdFavoriteAdd, s);
             }
         } else {
@@ -1826,18 +1893,19 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
     MapWindowPoints(win->hwndCanvas, HWND_DESKTOP, &pt, 1);
     MarkMenuOwnerDraw(popup);
     UINT flags = TPM_RETURNCMD | TPM_RIGHTBUTTON;
-    int cmd = TrackPopupMenu(popup, flags, pt.x, pt.y, 0, win->hwndFrame, nullptr);
+    int cmdId = TrackPopupMenu(popup, flags, pt.x, pt.y, 0, win->hwndFrame, nullptr);
     FreeMenuOwnerDrawInfoData(popup);
     DestroyMenu(popup);
 
-    if (cmd >= CmdSelectionHandlerFirst && cmd < CmdSelectionHandlerLast) {
-        HwndSendCommand(win->hwndFrame, cmd);
+    auto cmd = FindCustomCommand(cmdId);
+    if (cmd && cmd->origId == CmdSelectionHandler) {
+        HwndSendCommand(win->hwndFrame, cmd->id);
         return;
     }
 
-    AnnotationType annotType = (AnnotationType)(cmd - CmdCreateAnnotText);
+    AnnotationType annotType = (AnnotationType)(cmdId - CmdCreateAnnotText);
     Annotation* annot = nullptr;
-    switch (cmd) {
+    switch (cmdId) {
         case CmdCopySelection:
         case CmdTranslateSelectionWithGoogle:
         case CmdTranslateSelectionWithDeepL:
@@ -1859,22 +1927,22 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         case CmdFavoriteAdd:
         case CmdToggleFullscreen:
             // handle in FrameOnCommand() in SumatraPDF.cpp
-            HwndSendCommand(win->hwndFrame, cmd);
+            HwndSendCommand(win->hwndFrame, cmdId);
             break;
 
             // note: those are duplicated in SumatraPDF.cpp to enable keyboard shortcuts for them
 #if 0
         case CmdSelectAnnotation:
-            ReportIf(!buildCtx.annotationUnderCursor);
+            ReportIf(!ctx->annotationUnderCursor);
             [[fallthrough]];
 #endif
 
         case CmdEditAnnotations:
             ShowEditAnnotationsWindow(tab);
-            SetSelectedAnnotation(tab, buildCtx.annotationUnderCursor);
+            SetSelectedAnnotation(tab, ctx->annotationUnderCursor);
             break;
         case CmdDeleteAnnotation: {
-            DeleteAnnotationAndUpdateUI(tab, buildCtx.annotationUnderCursor);
+            DeleteAnnotationAndUpdateUI(tab, ctx->annotationUnderCursor);
             break;
         }
         case CmdCopyLinkTarget: {
@@ -1908,24 +1976,29 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         case CmdCreateAnnotSquare:
         case CmdCreateAnnotLine:
         case CmdCreateAnnotCircle: {
-            annot = EngineMupdfCreateAnnotation(engine, annotType, pageNoUnderCursor, ptOnPage);
+            AnnotCreateArgs args{annotType, {}};
+            annot = EngineMupdfCreateAnnotation(engine, pageNoUnderCursor, ptOnPage, &args);
             UpdateAnnotationsList(tab->editAnnotsWindow);
             break;
         }
         case CmdCreateAnnotHighlight: {
-            annot = MakeAnnotationsFromSelection(tab, AnnotationType::Highlight);
+            AnnotCreateArgs args{AnnotationType::Highlight};
+            annot = MakeAnnotationsFromSelection(tab, &args);
             break;
         }
         case CmdCreateAnnotSquiggly: {
-            annot = MakeAnnotationsFromSelection(tab, AnnotationType::Squiggly);
+            AnnotCreateArgs args{AnnotationType::Squiggly};
+            annot = MakeAnnotationsFromSelection(tab, &args);
             break;
         }
         case CmdCreateAnnotStrikeOut: {
-            annot = MakeAnnotationsFromSelection(tab, AnnotationType::StrikeOut);
+            AnnotCreateArgs args{AnnotationType::StrikeOut};
+            annot = MakeAnnotationsFromSelection(tab, &args);
             break;
         }
         case CmdCreateAnnotUnderline: {
-            annot = MakeAnnotationsFromSelection(tab, AnnotationType::Underline);
+            AnnotCreateArgs args{AnnotationType::Underline};
+            annot = MakeAnnotationsFromSelection(tab, &args);
             break;
         }
         case CmdCreateAnnotInk:
@@ -2029,7 +2102,7 @@ void MarkMenuOwnerDraw(HMENU hmenu) {
         }
     }
 
-    MENUINFO mi = {0};
+    MENUINFO mi{};
     mi.cbSize = sizeof(MENUINFO);
     GetMenuInfo(hmenu, &mi);
     mi.hbrBack = hbrBrush;
@@ -2281,10 +2354,9 @@ void MenuCustomDrawItem(HWND hwnd, DRAWITEMSTRUCT* dis) {
 HMENU BuildMenu(MainWindow* win) {
     WindowTab* tab = win->CurrentTab();
 
-    BuildMenuCtx buildCtx;
-    FillBuildMenuCtx(tab, &buildCtx, Point{0, 0});
-
-    HMENU mainMenu = BuildMenuFromMenuDef(menuDefMenubar, CreateMenu(), &buildCtx);
+    auto ctx = NewBuildMenuCtx(tab, Point{0, 0});
+    AutoDelete delCtx(ctx);
+    HMENU mainMenu = BuildMenuFromDef(menuDefMenubar, CreateMenu(), ctx);
 
     MarkMenuOwnerDraw(mainMenu);
     return mainMenu;
@@ -2300,8 +2372,10 @@ void UpdateAppMenu(MainWindow* win, HMENU m) {
         RebuildFileMenu(win->CurrentTab(), m);
     } else if (id == menuDefFavorites[0].idOrSubmenu) {
         MenuEmpty(m);
-        BuildMenuFromMenuDef(menuDefFavorites, m, nullptr);
+        BuildMenuFromDef(menuDefFavorites, m, nullptr);
         RebuildFavMenu(win, m);
+    } else if (id == menuDefZoom[0].idOrSubmenu) {
+        BuildMenuZoom(m);
     }
     MenuUpdateStateForWindow(win);
     MarkMenuOwnerDraw(win->menu);
