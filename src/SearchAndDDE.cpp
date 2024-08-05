@@ -11,6 +11,7 @@
 #include "utils/FileUtil.h"
 #include "utils/UITask.h"
 #include "utils/WinUtil.h"
+#include "utils/ThreadUtil.h"
 
 #include "wingui/UIModels.h"
 
@@ -45,7 +46,7 @@
 
 bool gIsStartup = false;
 StrVec gDdeOpenOnStartup;
-Kind kNotifGroupFindProgress = "findProgress";
+Kind kNotifFindProgress = "findProgress";
 
 
 
@@ -193,21 +194,35 @@ static void ShowSearchResult(MainWindow* win, TextSel* result, bool addNavPt) {
     dm->textSelection->CopySelection(dm->textSearch);
     UpdateTextSelection(win, false);
     dm->ShowResultRectToScreen(result);
-    RepaintAsync(win, 0);
+    ScheduleRepaint(win, 0);
 }
 
 void ClearSearchResult(MainWindow* win) {
     DeleteOldSelectionInfo(win, true);
-    RepaintAsync(win, 0);
+    ScheduleRepaint(win, 0);
 }
 
-static void UpdateFindStatusTask(MainWindow* win, NotificationWnd* wnd, int current, int total) {
-    if (!MainWindowStillValid(win) || win->findCanceled) {
+struct UpdateFindStatusData {
+    MainWindow* win;
+    int current;
+    int total;
+};
+
+static void UpdateFindStatus(UpdateFindStatusData* d) {
+    AutoDelete delData(d);
+
+    auto win = d->win;
+    if (!IsMainWindowValid(win) || win->findCancelled) {
         return;
     }
-    if (!UpdateNotificationProgress(wnd, current, total)) {
+    auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifFindProgress);
+    if (!wnd) {
+        win->findCancelled = true;
+        return;
+    }
+    if (!UpdateNotificationProgress(wnd, d->current, d->total)) {
         // the search has been canceled by closing the notification
-        win->findCanceled = true;
+        win->findCancelled = true;
     }
 }
 
@@ -231,16 +246,16 @@ struct FindThreadData : public ProgressUpdateUI {
     void ShowUI(bool showProgress) {
         const LPARAM disable = (LPARAM)MAKELONG(0, 0);
 
-        auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifGroupFindProgress);
+        auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifFindProgress);
 
         if (showProgress && wnd == nullptr) {
             NotificationCreateArgs args;
             args.hwndParent = win->hwndCanvas;
             args.timeoutMs = 0;
-            args.onRemoved = [](NotificationWnd* wnd) { RemoveNotification(wnd); };
+            args.onRemoved = MkFunc1Void(RemoveNotification);
 
             args.progressMsg = _TRA("Searching %d of %d...");
-            args.groupId = kNotifGroupFindProgress;
+            args.groupId = kNotifFindProgress;
             ShowNotification(args);
         }
 
@@ -256,7 +271,7 @@ struct FindThreadData : public ProgressUpdateUI {
         SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindNext, enable);
         SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindMatch, enable);
 
-        auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifGroupFindProgress);
+        auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifFindProgress);
 
         if (!wnd) {
             /* our notification has been replaced or closed (or never created) */;
@@ -277,32 +292,45 @@ struct FindThreadData : public ProgressUpdateUI {
         }
     }
 
-    void UpdateProgress(int current, int total) override {
-        uitask::Post(TaskFindUpdateStatus, [this, current, total] {
-            auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifGroupFindProgress);
-            if (!wnd || WasCanceled()) {
-                return;
-            }
-            UpdateFindStatusTask(win, wnd, current, total);
-        });
+    bool WasCanceled() override {
+        return !IsMainWindowValid(win) || win->findCancelled;
     }
 
-    bool WasCanceled() override {
-        return !MainWindowStillValid(win) || win->findCanceled;
+    void UpdateProgress(int current, int total) override {
+        auto data = new UpdateFindStatusData;
+        data->win = this->win;
+        data->current = current;
+        data->total = total;
+        auto fn = MkFunc0<UpdateFindStatusData>(UpdateFindStatus, data);
+        uitask::Post(fn, "UpdateFindStatus");
     }
 };
 
-static void FindEndTask(MainWindow* win, FindThreadData* ftd, TextSel* textSel, bool wasModifiedCanceled,
-                        bool loopedAround) {
-    if (!MainWindowStillValid(win)) {
-        delete ftd;
+struct FindEndTaskData {
+    MainWindow* win;
+    FindThreadData* ftd;
+    TextSel* textSel;
+    bool wasModifiedCanceled;
+    bool loopedAround;
+};
+
+static void FindEndTask(FindEndTaskData* d) {
+    auto win = d->win;
+    auto ftd = d->ftd;
+    auto textSel = d->textSel;
+    auto wasModifiedCanceled = d->wasModifiedCanceled;
+    auto loopedAround = d->loopedAround;
+
+    AutoDelete delData(d);
+    AutoDelete delFtd(ftd);
+
+    if (!IsMainWindowValid(win)) {
         return;
     }
     if (win->findThread != ftd->thread) {
         // Race condition: FindTextOnThread/AbortFinding was
         // called after the previous find thread ended but
         // before this FindEndTask could be executed
-        delete ftd;
         return;
     }
     if (!win->IsDocLoaded()) {
@@ -316,12 +344,13 @@ static void FindEndTask(MainWindow* win, FindThreadData* ftd, TextSel* textSel, 
         ftd->HideUI(false, !wasModifiedCanceled);
     }
     win->findThread = nullptr;
-    delete ftd;
 }
 
-static DWORD WINAPI FindThread(LPVOID data) {
-    FindThreadData* ftd = (FindThreadData*)data;
+static void FindThread(FindThreadData* ftd) {
     ReportIf(!(ftd && ftd->win && ftd->win->ctrl && ftd->win->ctrl->AsFixed()));
+
+    AutoDelete delThreadData(ftd);
+
     MainWindow* win = ftd->win;
     DisplayModel* dm = win->AsFixed();
     auto textSearch = dm->textSearch;
@@ -343,7 +372,7 @@ static DWORD WINAPI FindThread(LPVOID data) {
     }
 
     bool loopedAround = false;
-    if (!win->findCanceled && !rect) {
+    if (!win->findCancelled && !rect) {
         // With no further findings, start over (unless this was a new search from the beginning)
         int startPage = (TextSearchDirection::Forward == ftd->direction) ? 1 : ctrl->PageCount();
         if (!ftd->wasModified || ctrl->CurrentPageNo() != startPage) {
@@ -359,25 +388,41 @@ static DWORD WINAPI FindThread(LPVOID data) {
         Sleep(1);
     }
 
-    if (!win->findCanceled && rect) {
-        uitask::Post(TaskFindEnd1, [=] { FindEndTask(win, ftd, rect, ftd->wasModified, loopedAround); });
+    auto data = new FindEndTaskData;
+    data->win = win;
+    data->ftd = ftd;
+    data->textSel = nullptr;
+    data->loopedAround = false;
+
+    if (!win->findCancelled && rect) {
+        data->textSel = rect;
+        data->wasModifiedCanceled = ftd->wasModified;
+        data->loopedAround = loopedAround;
     } else {
-        uitask::Post(TaskFindEnd2, [=] { FindEndTask(win, ftd, nullptr, win->findCanceled, false); });
+        data->wasModifiedCanceled = win->findCancelled;
     }
+    auto fn = MkFunc0<FindEndTaskData>(FindEndTask, data);
+    uitask::Post(fn, "TaskFindEnd");
     DestroyTempAllocator();
-    return 0;
 }
 
-void AbortFinding(MainWindow* win, bool hideMessage) {
+// returns true if did abort a thread or hidden the notification
+bool AbortFinding(MainWindow* win, bool hideMessage) {
+    bool res = false;
     if (win->findThread) {
-        win->findCanceled = true;
+        res = true;
+        win->findCancelled = true;
         WaitForSingleObject(win->findThread, INFINITE);
     }
-    win->findCanceled = false;
+    win->findCancelled = false;
 
     if (hideMessage) {
-        RemoveNotificationsForGroup(win->hwndCanvas, kNotifGroupFindProgress);
+        bool didRemove = RemoveNotificationsForGroup(win->hwndCanvas, kNotifFindProgress);
+        if (didRemove) {
+            res = true;
+        }
     }
+    return res;
 }
 
 // wasModified
@@ -393,7 +438,8 @@ void FindTextOnThread(MainWindow* win, TextSearchDirection direction, const char
     FindThreadData* ftd = new FindThreadData(win, direction, text, wasModified);
     ftd->ShowUI(showProgress);
     win->findThread = nullptr;
-    win->findThread = CreateThread(nullptr, 0, FindThread, ftd, 0, nullptr);
+    auto fn = MkFunc0(FindThread, ftd);
+    win->findThread = StartThread(fn, "FindThread");
     ftd->thread = win->findThread; // safe because only accesssed on ui thread
 }
 
@@ -453,7 +499,7 @@ void PaintForwardSearchMark(MainWindow* win, HDC hdc) {
 
 // returns true if inverse search was performed
 bool OnInverseSearch(MainWindow* win, int x, int y) {
-    if (!HasPermission(Perm::DiskAccess) || gPluginMode) {
+    if (!CanAccessDisk() || gPluginMode) {
         return false;
     }
     WindowTab* tab = win->CurrentTab();
@@ -469,7 +515,7 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
     // On double-clicking error message will be shown to the user
     // if the PDF does not have a synchronization file
     if (!dm->pdfSync) {
-        char* path = tab->filePath;
+        const char* path = tab->filePath;
         int err = Synchronizer::Create(path, dm->GetEngine(), &dm->pdfSync);
         if (err == PDFSYNCERR_SYNCFILE_NOTFOUND) {
             // We used to warn that "No synchronization file found" at this
@@ -535,7 +581,7 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
     if (!str::IsEmpty(cmdLine.Get())) {
         // resolve relative paths with relation to SumatraPDF.exe's directory
         char* appDir = GetExeDirTemp();
-        AutoCloseHandle process(LaunchProcess(cmdLine, appDir));
+        AutoCloseHandle process(LaunchProcessInDir(cmdLine, appDir));
         if (!process) {
             ShowNotification(args);
         }
@@ -574,7 +620,7 @@ void ShowForwardSearchResult(MainWindow* win, const char* fileName, int line, in
             win->ctrl->GoToPage(page, true);
         }
         if (!dm->ShowResultRectToScreen(&res)) {
-            RepaintAsync(win, 0);
+            ScheduleRepaint(win, 0);
         }
         if (IsIconic(win->hwndFrame)) {
             ShowWindowAsync(win->hwndFrame, SW_RESTORE);
@@ -1330,7 +1376,7 @@ static const char* HandleSelectCmd(const char* cmd, bool* ack)
             Rect rc = dm->CvtToScreen(pageNo, ToRectF(Rect(x, y, dx, dy)));
             win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
             win->showSelection = (win->CurrentTab()->selectionOnPage != nullptr);
-            RepaintAsync(win, 0);
+            ScheduleRepaint(win, 0);
         } else {
             cpslab::GetTextInRegion(dm, pageNo, Rect(x, y, dx, dy));
             UpdateTextSelection(win, false);

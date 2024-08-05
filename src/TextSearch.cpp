@@ -111,7 +111,7 @@ void TextSearch::SetText(const WCHAR* text) {
     if (this->findText) {
         char* tmpFindText = strconv::WStrToUtf8(this->findText);
         StrVec wTmp;
-        Split(wTmp, tmpFindText, " ", true);
+        Split(&wTmp, tmpFindText, " ", true);
         for (int k = 0; k < wTmp.Size(); k++) {
             char* w = wTmp.At(k);
             const WCHAR* wd = strconv::Utf8ToWStr(w, (size_t)-1);

@@ -220,8 +220,9 @@ TempStr FormatFloatWithThousandSepTemp(double number, LCID locale = LOCALE_USER_
 TempStr FormatNumWithThousandSepTemp(i64 num, LCID locale = LOCALE_USER_DEFAULT);
 TempStr FormatRomanNumeralTemp(int number);
 
-bool EmptyOrWhiteSpaceOnly(const char*);
+bool IsEmptyOrWhiteSpace(const char*);
 bool Skip(const char*& s, const char* toSkip);
+const char* SkipChar(const char* s, char toSkip);
 
 WCHAR* Dup(Allocator*, const WCHAR* str, size_t cch = (size_t)-1);
 WCHAR* Dup(const WCHAR* s, size_t cch = (size_t)-1);
@@ -239,7 +240,6 @@ WCHAR* ToLower(const WCHAR*);
 WCHAR* ToLowerInPlace(WCHAR*);
 int CmpNatural(const WCHAR*, const WCHAR*);
 const WCHAR* Parse(const WCHAR* str, const WCHAR* format, ...);
-int BufAppend(WCHAR* dst, int dstCchSize, const WCHAR* s);
 int BufSet(WCHAR* dst, int dstCchSize, const WCHAR* src);
 int BufSet(WCHAR* dst, int dstCchSize, const char* src);
 size_t NormalizeWSInPlace(WCHAR* str);
@@ -271,7 +271,7 @@ using SeqStrings = const char*;
 namespace seqstrings {
 
 void Next(const char*& s);
-void Next(const char*& s, int& idx);
+void Next(const char*& s, int* idxInOut);
 int StrToIdx(SeqStrings strs, const char* toFind);
 int StrToIdxIS(SeqStrings strs, const char* toFind);
 const char* IdxToStr(SeqStrings strs, int idx);
@@ -389,8 +389,6 @@ struct WStr {
     int Find(const WCHAR& el, size_t startAt = 0) const;
     bool Contains(const WCHAR& el) const;
     int Remove(const WCHAR& el);
-    void Reverse() const;
-    WCHAR& FindEl(const std::function<bool(WCHAR&)>& check) const;
     bool IsEmpty() const;
     void AppendFmt(const WCHAR* fmt, ...);
     void Set(const WCHAR*);
@@ -412,3 +410,5 @@ struct WStr {
 bool Replace(WStr& s, const WCHAR* toReplace, const WCHAR* replaceWith);
 
 } // namespace str
+
+int ParseInt(const char* bytes);

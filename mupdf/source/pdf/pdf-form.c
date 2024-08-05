@@ -1170,7 +1170,7 @@ int pdf_set_text_field_value(fz_context *ctx, pdf_annot *widget, const char *upd
 		{
 			rc = pdf_set_annot_field_value(ctx, doc, widget, update, 1);
 		}
-		pdf_end_operation(ctx, doc);
+		end_annot_op(ctx, widget);
 	}
 	fz_always(ctx)
 	{
@@ -1179,11 +1179,10 @@ int pdf_set_text_field_value(fz_context *ctx, pdf_annot *widget, const char *upd
 		fz_free(ctx, new_change);
 		fz_free(ctx, evt.newChange);
 		fz_free(ctx, merged_value);
-		end_annot_op(ctx, widget);
 	}
 	fz_catch(ctx)
 	{
-		pdf_abandon_operation(ctx, doc);
+		abandon_annot_op(ctx, widget);
 		fz_warn(ctx, "could not set widget text");
 		rc = 0;
 	}
@@ -1532,7 +1531,7 @@ int pdf_signature_incremental_change_since_signing(fz_context *ctx, pdf_document
 	int byte_range_len;
 	int changed = 0;
 
-	if (pdf_dict_get(ctx, signature, PDF_NAME(FT)) != PDF_NAME(Sig))
+	if (pdf_dict_get_inheritable(ctx, signature, PDF_NAME(FT)) != PDF_NAME(Sig))
 		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation is not a signature widget");
 	if (!pdf_signature_is_signed(ctx, doc, signature))
 		return 0;
@@ -2420,14 +2419,17 @@ static void pdf_bake_page(fz_context *ctx, pdf_document *doc, pdf_obj *page, int
 		contents = pdf_dict_get(ctx, page, PDF_NAME(Contents));
 		pdf_count_q_balance(ctx, doc, res, contents, &prepend, &append);
 
-		// Prepend enough 'q' to ensure we can get back to initial state.
-		buf = fz_new_buffer(ctx, 1024);
-		while (prepend-- > 0)
-			fz_append_string(ctx, buf, "q\n");
+		if (prepend)
+		{
+			// Prepend enough 'q' to ensure we can get back to initial state.
+			buf = fz_new_buffer(ctx, 1024);
+			while (prepend-- > 0)
+				fz_append_string(ctx, buf, "q\n");
 
-		prologue = pdf_add_stream(ctx, doc, buf, NULL, 0);
-		fz_drop_buffer(ctx, buf);
-		buf = NULL;
+			prologue = pdf_add_stream(ctx, doc, buf, NULL, 0);
+			fz_drop_buffer(ctx, buf);
+			buf = NULL;
+		}
 
 		// Append enough 'Q' to get back to initial state.
 		buf = fz_new_buffer(ctx, 1024);
@@ -2471,14 +2473,16 @@ static void pdf_bake_page(fz_context *ctx, pdf_document *doc, pdf_obj *page, int
 		if (!pdf_is_array(ctx, contents))
 		{
 			new_contents = pdf_new_array(ctx, doc, 10);
-			pdf_array_push(ctx, new_contents, prologue);
-			pdf_array_push(ctx, new_contents, contents);
+			if (prologue)
+				pdf_array_push(ctx, new_contents, prologue);
+			if (contents)
+				pdf_array_push(ctx, new_contents, contents);
 			pdf_dict_put(ctx, page, PDF_NAME(Contents), new_contents);
 			pdf_drop_obj(ctx, new_contents);
 			contents = new_contents;
 			new_contents = NULL;
 		}
-		else
+		else if (prologue)
 		{
 			pdf_array_insert(ctx, contents, prologue, 0);
 		}

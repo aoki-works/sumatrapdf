@@ -52,9 +52,14 @@ Reference for warnings:
 
 Prefast:
  28125 - function X must be called in try/except (InitializeCriticalSection)
- 28252 - Inconsistent annotaion
- 28253 - Inconsistent annotaion
+ 28252 - Inconsistent annotation
+ 28253 - Inconsistent annotation
 --]]
+
+newoption {
+   trigger = "with-clang",
+   description = "use clang-cl.exe instead of cl.exe"
+}
 
 include("premake5.files.lua")
 
@@ -62,7 +67,7 @@ include("premake5.files.lua")
 -- project mupdf-libs, to make solution smaller
 
 -- setup WebView2 paths
-function webviewconf()
+function webview_conf()
   includedirs { "packages/Microsoft.Web.WebView2.1.0.992.28/build/native/include" }
   filter "platforms:x32"
     libdirs { "packages/Microsoft.Web.WebView2.1.0.992.28/build/native/x86" }
@@ -76,10 +81,10 @@ end
 
 -- to make debug builds faster, we compile stable libraries (freetype, libjpeg etc.)
 -- in release mode even in debug builds
-function regconf()
+function mixed_dbg_rel_conf()
   editandcontinue "Off"
 
-  -- same as in optconf()
+  -- same as in optimized_conf()
   runtime "Release"
   defines { "_HAS_ITERATOR_DEBUGGING=0" }
 
@@ -104,7 +109,7 @@ function regconf()
 end
 
 -- config for stable libraries where debug build is done with optimization
-function optconf()
+function optimized_conf()
   editandcontinue "Off"
   optimize "Size"
 
@@ -131,6 +136,29 @@ function optconf()
   filter {}
 end
 
+-- per-workspace setting that differ in clang-cl.exe vs cl.exe builds
+function clang_conf()
+  filter "options:with-clang"
+    location "vs2022-clang"
+    toolset "clang"
+    buildoptions {"-fms-compatibility", "-fms-extensions", "-Wno-microsoft-include", "-march=x86-64-v3", "-maes"}
+
+    warnings "Off"
+    exceptionhandling "On"
+  filter {}
+
+  filter {'options:not with-clang'}
+    warnings "Extra"
+    exceptionhandling "Off"
+  filter {}
+end
+
+
+function warnings_as_errors()
+  filter {"configurations:not ReleaseAnalyze" and "options:not with-clang"}
+    flags { "FatalCompileWarnings" }
+  filter {}
+end
 
 function zlib_defines()
   includedirs {
@@ -176,13 +204,14 @@ workspace "SumatraPDF"
   filter {}
 
   disablewarnings { "4127", "4189", "4324", "4458", "4522", "4611", "4702", "4800", "6319" }
-  warnings "Extra"
 
   location "this_is_invalid_location"
 
   filter "action:vs2022"
     location "vs2022"
   filter {}
+
+  clang_conf()
 
   filter {"platforms:x32", "configurations:Release"}
     targetdir "out/rel32"
@@ -239,12 +268,6 @@ workspace "SumatraPDF"
     "Maps", -- generate map file
     -- "Unicode", TODO: breaks libdjuv?
   }
-
-  filter {"configurations:not ReleaseAnalyze"}
-    flags { "FatalCompileWarnings" }
-  filter {}
-
-  exceptionhandling "Off"
   rtti "Off"
 
   defines {
@@ -258,7 +281,7 @@ workspace "SumatraPDF"
   project "unrar"
     kind "StaticLib"
     language "C++"
-    optconf()
+    optimized_conf()
     defines { "UNRAR", "RARDLL", "SILENT" }
     -- os.hpp redefines WINVER, is there a better way?
     disablewarnings { "4005" }
@@ -276,7 +299,7 @@ workspace "SumatraPDF"
     kind "StaticLib"
     characterset ("MBCS")
     language "C++"
-    optconf()
+    optimized_conf()
     defines {
       "_CRT_SECURE_NO_WARNINGS",
       "NEED_JPEG_DECODER",
@@ -296,30 +319,15 @@ workspace "SumatraPDF"
   project "chm"
     kind "StaticLib"
     language "C"
-    optconf()
+    optimized_conf()
     defines { "_CRT_SECURE_NO_WARNINGS" }
     disablewarnings { "4018", "4244", "4267", "4996" }
     files { "ext/CHMLib/*.c", "ext/CHMLib/*.h" }
 
-  project "engines"
-    kind "StaticLib"
-    language "C++"
-    cppdialect "C++latest"
-    optconf()
-    disablewarnings {
-      "4018", "4057", "4100", "4189", "4244", "4267", "4295", "4457",
-      "4701", "4706", "4819", "4838"
-    }
-    includedirs { "src", "src/wingui" }
-    uses_zlib()
-    includedirs { "ext/synctex", "ext/libdjvu", "ext/CHMLib", "mupdf/include" }
-    engines_files()
-    links { "chm" }
-
   project "unarrlib"
     kind "StaticLib"
     language "C"
-    optconf()
+    optimized_conf()
     -- TODO: for bzip2, need BZ_NO_STDIO and BZ_DEBUG=0
     -- TODO: for lzma, need _7ZIP_PPMD_SUPPPORT
     defines { "HAVE_ZLIB", "HAVE_BZIP2", "HAVE_7Z", "BZ_NO_STDIO", "_7ZIP_PPMD_SUPPPORT" }
@@ -332,7 +340,7 @@ workspace "SumatraPDF"
   project "libwebp"
     kind "StaticLib"
     language "C"
-    optconf()
+    optimized_conf()
     disablewarnings { "4204", "4244", "4057", "4245", "4310", "4701" }
     includedirs { "ext/libwebp" }
     libwebp_files()
@@ -346,7 +354,7 @@ workspace "SumatraPDF"
   project "libheif"
     kind "StaticLib"
     language "C++"
-    optconf()
+    optimized_conf()
     defines { "_CRT_SECURE_NO_WARNINGS", "HAVE_DAV1D", "LIBHEIF_STATIC_BUILD" }
     includedirs { "ext/libheif", "ext/dav1d/include" }
     disablewarnings {  "4018", "4100", "4101","4146", "4244", "4245", "4267", "4273", "4456", "4701", "4703" }
@@ -358,7 +366,7 @@ workspace "SumatraPDF"
   project "dav1d"
     kind "StaticLib"
     language "C"
-    optconf()
+    optimized_conf()
     defines { "_CRT_SECURE_NO_WARNINGS" }
     filter {'platforms:x32'}
       defines { "ARCH_X86_32=1", "ARCH_X86_64=0", "__SSE2__" }
@@ -394,7 +402,7 @@ workspace "SumatraPDF"
   project "zlib"
     kind "StaticLib"
     language "C"
-    optconf()
+    optimized_conf()
     disablewarnings { "4131", "4244", "4245", "4267", "4996" }
     zlib_files()
 
@@ -405,7 +413,7 @@ workspace "SumatraPDF"
   project "mupdf-libs"
     kind "StaticLib"
     language "C"
-    optconf()
+    optimized_conf()
 
     -- zlib
     -- disablewarnings { "4131", "4244", "4245", "4267", "4996" }
@@ -525,6 +533,7 @@ workspace "SumatraPDF"
       "mupdf/resources/fonts/sil/CharisSIL-Bold.cff",
       "mupdf/resources/fonts/sil/CharisSIL-Italic.cff",
       "mupdf/resources/fonts/sil/CharisSIL-BoldItalic.cff",
+
       "mupdf/resources/fonts/noto/NotoSans-Regular.otf",
       "mupdf/resources/fonts/noto/NotoSansMath-Regular.otf",
       "mupdf/resources/fonts/noto/NotoSansSymbols-Regular.otf",
@@ -532,8 +541,6 @@ workspace "SumatraPDF"
       "mupdf/resources/fonts/noto/NotoEmoji-Regular.ttf",
       "mupdf/resources/fonts/noto/NotoMusic-Regular.otf",
       "mupdf/resources/fonts/noto/NotoSerif-Regular.otf",
-      "mupdf/resources/fonts/noto/NotoSerifDevanagari-Regular.otf",
-      "mupdf/resources/fonts/noto/NotoSerifGeorgian-Regular.otf",
     }
 
     filter {'files:**.cff'}
@@ -564,7 +571,7 @@ workspace "SumatraPDF"
   project "mupdf"
     kind "StaticLib"
     language "C"
-    regconf()
+    mixed_dbg_rel_conf()
     -- for openjpeg, OPJ_STATIC is alrady defined in load-jpx.c
     -- so we can't double-define it
     defines { "USE_JPIP", "OPJ_EXPORTS", "HAVE_LCMS2MT=1" }
@@ -608,7 +615,7 @@ workspace "SumatraPDF"
   project "libmupdf"
     kind "SharedLib"
     language "C"
-    optconf()
+    optimized_conf()
     disablewarnings { "4206", "4702" }
     defines { "FZ_ENABLE_SVG" }
 
@@ -636,7 +643,8 @@ workspace "SumatraPDF"
     kind "StaticLib"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
+    warnings_as_errors()
     filter "configurations:ReleaseAnalyze"
       -- TODO: somehow /analyze- is default which creates warning about
       -- over-ride from cl.exe. Don't know how to disable the warning
@@ -658,7 +666,7 @@ workspace "SumatraPDF"
     kind "ConsoleApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
     includedirs { "src", "mupdf/include"}
     files { "src/tools/signfile.cpp", "src/CrashHandlerNoOp.cpp" }
     links { "utils", "mupdf" }
@@ -669,33 +677,18 @@ workspace "SumatraPDF"
     kind "WindowedApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
     entrypoint "WinMainCRTStartup"
     includedirs { "src" }
     plugin_test_files()
     links { "utils", "mupdf" }
     links { "shlwapi", "version", "comctl32", "wininet" }
 
-  project "enginedump"
-    kind "ConsoleApp"
-    language "C++"
-    cppdialect "C++latest"
-    regconf()
-    includedirs { "src", "src/wingui", "mupdf/include" }
-    disablewarnings { "4100", "4267", "4457" }
-    engine_dump_files()
-    links_zlib()
-    links { "engines", "utils", "unrar", "mupdf", "unarrlib", "libwebp", "libdjvu", "dav1d", "libheif" }
-    links {
-      "comctl32", "gdiplus", "msimg32", "shlwapi",
-      "version", "windowscodecs", "wininet"
-    }
-
   project "test_util"
     kind "ConsoleApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
     disablewarnings { "4838" }
     includedirs { "src" }
     test_util_files()
@@ -705,7 +698,7 @@ workspace "SumatraPDF"
     kind "ConsoleApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
     disablewarnings { "4996", "4706", "4100", "4505" }
     includedirs { "tools/sizer" }
     sizer_files()
@@ -715,7 +708,7 @@ workspace "SumatraPDF"
     kind "ConsoleApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
     disablewarnings { "4200", "4838" }
     includedirs { "src" }
     bin2coff_files()
@@ -725,7 +718,7 @@ workspace "SumatraPDF"
     kind "SharedLib"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
     disablewarnings { "4100", "4838" }
     filter {"configurations:Debug"}
       defines { "BUILD_TEX_IFILTER", "BUILD_EPUB_IFILTER" }
@@ -739,7 +732,7 @@ workspace "SumatraPDF"
     kind "SharedLib"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
     disablewarnings { "4100", "4838" }
     includedirs {
       "src", "src/wingui", "mupdf/include",
@@ -763,7 +756,7 @@ workspace "SumatraPDF"
       kind "ConsoleApp"
       language "C++"
       cppdialect "C++latest"
-      regconf()
+      mixed_dbg_rel_conf()
       disablewarnings { "4838" }
       includedirs { "src" }
       preview_test_files()
@@ -775,17 +768,20 @@ workspace "SumatraPDF"
     kind "WindowedApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
+    warnings_as_errors()
     entrypoint "WinMainCRTStartup"
     flags { "NoManifest" }
     includedirs { "src", "mupdf/include" }
+    includedirs { "ext/synctex", "ext/libdjvu", "ext/CHMLib" }
 
-    webviewconf()
+    webview_conf()
 
     synctex_files()
     mui_files()
     wingui_files()
     uia_files()
+    engines_files()
     sumatrapdf_files()
 
     defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -808,7 +804,7 @@ workspace "SumatraPDF"
 
     links_zlib()
     links {
-      "engines", "libdjvu",  "libwebp", "dav1d", "libheif", "mupdf", "unarrlib", "utils", "unrar"
+      "libdjvu",  "libwebp", "dav1d", "libheif", "mupdf", "unarrlib", "utils", "unrar", "chm"
     }
     links {
       "comctl32", "delayimp", "gdiplus", "msimg32", "shlwapi", "urlmon",
@@ -828,18 +824,21 @@ workspace "SumatraPDF"
     kind "WindowedApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
+    warnings_as_errors()
     entrypoint "WinMainCRTStartup"
     flags { "NoManifest" }
     includedirs { "src", "mupdf/include" }
+    includedirs { "ext/synctex", "ext/libdjvu", "ext/CHMLib" }
 
     synctex_files()
     mui_files()
     wingui_files()
     uia_files()
+    engines_files()
     sumatrapdf_files()
 
-    webviewconf()
+    webview_conf()
 
     defines { "_CRT_SECURE_NO_WARNINGS" }
     defines { "DISABLE_DOCUMENT_RESTRICTIONS" }
@@ -866,7 +865,7 @@ workspace "SumatraPDF"
     files { "src/MuPDF_Exports.cpp" }
 
     links {
-      "libmupdf", "unrar", "unarrlib", "utils", "engines"
+      "libmupdf", "unrar", "unarrlib", "utils", "chm"
     }
     links {
       "comctl32", "delayimp", "gdiplus", "msimg32", "shlwapi", "urlmon",
@@ -896,13 +895,14 @@ workspace "MakeLZSA"
   filter {}
 
   disablewarnings { "4127", "4189", "4324", "4458", "4522", "4611", "4702", "4800", "6319" }
-  warnings "Extra"
 
   location "this_is_invalid_location"
 
   filter "action:vs2022"
     location "vs2022"
   filter {}
+  
+  clang_conf()
 
   filter {"platforms:x32", "configurations:Release"}
     targetdir "out/rel32"
@@ -929,8 +929,6 @@ workspace "MakeLZSA"
     --"Unicode",
     "FatalCompileWarnings"
   }
-  exceptionhandling "Off"
-  rtti "Off"
 
   defines {
     "WIN32",
@@ -944,7 +942,7 @@ workspace "MakeLZSA"
     kind "ConsoleApp"
     language "C++"
     cppdialect "C++latest"
-    regconf()
+    mixed_dbg_rel_conf()
 
     makelzsa_files()
     disablewarnings { "4131", "4244", "4245", "4267", "4996" }

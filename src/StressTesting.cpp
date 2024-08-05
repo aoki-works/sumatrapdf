@@ -38,8 +38,8 @@
 
 static bool gIsStressTesting = false;
 static int gCurrStressTimerId = FIRST_STRESS_TIMER_ID;
-static Kind kNotifGroupStressTestBenchmark = "stressTestBenchmark";
-static Kind kNotifGroupStressTestSummary = "stressTestSummary";
+static Kind kNotifStressTestBenchmark = "stressTestBenchmark";
+static Kind kNotifStressTestSummary = "stressTestSummary";
 
 bool IsStressTesting() {
     return gIsStressTesting;
@@ -174,13 +174,16 @@ static bool IsFileToBench(const char* path) {
     return false;
 }
 
+static void CollectFilesToBenchCb(StrVec* files, VisitDirData* d) {
+    auto path = d->filePath;
+    if (IsFileToBench(path)) {
+        files->Append(path);
+    }
+}
+
 static void CollectFilesToBench(char* dir, StrVec& files) {
-    DirTraverse(dir, true, [&files](WIN32_FIND_DATAW*, const char* path) -> bool {
-        if (IsFileToBench(path)) {
-            files.Append(path);
-        }
-        return true;
-    });
+    auto fn = MkFunc1<StrVec, VisitDirData*>(CollectFilesToBenchCb, &files);
+    DirTraverse(dir, true, fn);
 }
 
 static void BenchDir(char* dir) {
@@ -371,6 +374,12 @@ struct DirFileProviderAsync : TestFileProvider {
     }
 };
 
+static void GetNextFileCb(char* path, StrQueue* q) {
+    int n = q->strings.Size();
+    int idx = rand() % n;
+    path = q->strings.RemoveAtFast(idx);
+}
+
 TempStr DirFileProviderAsync::NextFile() {
     if (max > 0 && nFiles.Get() >= max) {
         return nullptr;
@@ -378,11 +387,8 @@ TempStr DirFileProviderAsync::NextFile() {
 again:
     char* path = nullptr;
     if (random) {
-        bool isFinished = queue.Access([&path](StrQueue* q) {
-            int n = q->strings.Size();
-            int idx = rand() % n;
-            path = q->strings.RemoveAtFast(idx);
-        });
+        auto fn = MkFunc1(GetNextFileCb, path);
+        bool isFinished = queue.Access(fn);
         if (isFinished) {
             ReportIf(path);
             return nullptr;
@@ -486,7 +492,7 @@ static void Finished(StressTest* st, bool success) {
         args.hwndParent = st->win->hwndCanvas;
         args.msg = s;
         args.timeoutMs = 0;
-        args.groupId = kNotifGroupStressTestSummary;
+        args.groupId = kNotifStressTestSummary;
         ShowNotification(args);
     }
 
@@ -510,7 +516,7 @@ static void Start(StressTest* st, const char* path, const char* filter, const ch
         args.msg = s;
         args.warning = true;
         args.timeoutMs = 0;
-        args.groupId = kNotifGroupStressTestSummary;
+        args.groupId = kNotifStressTestSummary;
         ShowNotification(args);
         Finished(st, false);
     }
@@ -553,7 +559,7 @@ static bool OpenFile(StressTest* st, const char* fileName) {
             if (st->win->AsFixed()) {
                 st->win->cbHandler->RequestRendering(1);
             }
-            RepaintAsync(st->win, 0);
+            ScheduleRepaint(st->win, 0);
         }
 
         MainWindow* toClose = st->win;
@@ -627,7 +633,7 @@ static bool OpenFile(StressTest* st, const char* fileName) {
     nargs.hwndParent = st->win->hwndCanvas;
     nargs.msg = s;
     nargs.timeoutMs = 0;
-    nargs.groupId = kNotifGroupStressTestSummary;
+    nargs.groupId = kNotifStressTestSummary;
     ShowNotification(nargs);
     return true;
 }
@@ -709,7 +715,7 @@ static bool GoToNextPage(StressTest* st) {
     NotificationCreateArgs args;
     args.hwndParent = st->win->hwndCanvas;
     args.msg = s;
-    args.groupId = kNotifGroupStressTestBenchmark;
+    args.groupId = kNotifStressTestBenchmark;
     ShowNotification(args);
     if (pageRenderTime > 700) {
         st->nSlowPages += 1;
@@ -847,7 +853,7 @@ void GetStressTestInfo(str::Str* s) {
         }
 
         s->Append("File: ");
-        char* filePath = w->CurrentTab()->filePath;
+        const char* filePath = w->CurrentTab()->filePath;
         s->Append(filePath);
         GetLogInfo(w->stressTest, s);
         s->Append("\r\n");

@@ -4,16 +4,17 @@
 bool CouldBeArg(const char*);
 
 void ParseCmdLine(const WCHAR* cmdLine, StrVec& argsOut);
+void ParseCmdLine(const char* cmdLine, StrVec& argsOut);
 TempStr QuoteCmdLineArgTemp(char* arg);
 
 struct CmdLineArgsIter {
     StrVec args;
-    int curr = 1; // first argument is exe path, which we skip
+    int curr = 0;
     int nArgs = 0;
     const char* currArg = nullptr;
 
     explicit CmdLineArgsIter(const WCHAR* cmdLine);
-    ~CmdLineArgsIter();
+    ~CmdLineArgsIter() = default;
 
     const char* NextArg();
     const char* EatParam();

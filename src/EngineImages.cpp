@@ -168,7 +168,9 @@ RenderedBitmap* EngineImages::RenderPage(RenderPageArgs& args) {
     auto timeStart = TimeGet();
     defer {
         auto dur = TimeSinceInMs(timeStart);
-        logf("EngineImages::RenderPage() in %.2f ms\n", dur);
+        if (dur > 300.f) {
+            logf("EngineImages::RenderPage() in %.2f ms\n", dur);
+        }
     };
 
     RectF pageRc = pageRect ? *pageRect : PageMediabox(pageNo);
@@ -836,23 +838,26 @@ class EngineImageDir : public EngineImages {
     TocTree* tocTree = nullptr;
 };
 
+static void LoadImageDirCb(EngineImageDir* e, VisitDirData* d) {
+    auto path = d->filePath;
+    Kind kind = GuessFileTypeFromName(path);
+    if (IsEngineImageSupportedFileType(e->kind)) {
+        e->pageFileNames.Append(path);
+    }
+}
+
 static bool LoadImageDir(EngineImageDir* e, const char* dir) {
     e->SetFilePath(dir);
 
-    DirTraverse(dir, false, [e](WIN32_FIND_DATAW*, const char* path) -> bool {
-        Kind kind = GuessFileTypeFromName(path);
-        if (IsEngineImageSupportedFileType(kind)) {
-            e->pageFileNames.Append(path);
-        }
-        return true;
-    });
+    auto fn = MkFunc1(LoadImageDirCb, e);
+    DirTraverse(dir, false, fn);
 
     int nFiles = e->pageFileNames.Size();
     if (nFiles == 0) {
         return false;
     }
 
-    SortNatural(e->pageFileNames);
+    SortNatural(&e->pageFileNames);
 
     for (int i = 0; i < nFiles; i++) {
         ImagePageInfo* pi = new ImagePageInfo();
@@ -1301,7 +1306,7 @@ TempStr EngineCbx::GetPropertyTemp(const char* name) {
         if (cip.propAuthors.Size() == 0) {
             return nullptr;
         }
-        return JoinTemp(cip.propAuthors, ", ");
+        return JoinTemp(&cip.propAuthors, ", ");
     }
 
     if (str::Eq(name, kPropCreationDate)) {

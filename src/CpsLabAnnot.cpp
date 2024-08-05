@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 #include <map>
+#include <vector>
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
@@ -560,9 +561,9 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
         str::Str cmd;
         if (is_pin) {
             if (conti) {
-                cmd.AppendFmt("[CPinSelect(\"%s\"", tab_->filePath.Get());
+                cmd.AppendFmt("[CPinSelect(\"%s\"", tab_->filePath);
             } else {
-                cmd.AppendFmt("[PinSelect(\"%s\"", tab_->filePath.Get());
+                cmd.AppendFmt("[PinSelect(\"%s\"", tab_->filePath);
             }
             for (int i = 0; i < selected_words.Size(); i++) {
                 auto s = selected_words.At(i);
@@ -572,10 +573,10 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
         } else {
             if (conti) {
                 // Continue selection
-                cmd.AppendFmt("[CSelect(\"%s\"", tab_->filePath.Get());
+                cmd.AppendFmt("[CSelect(\"%s\"", tab_->filePath);
             } else {
                 // Newly selection
-                cmd.AppendFmt("[Select(\"%s\"", tab_->filePath.Get());
+                cmd.AppendFmt("[Select(\"%s\"", tab_->filePath);
             }
             for (int i = 0; i < selected_words.Size(); i++) {
                 auto s = selected_words.At(i);
@@ -588,7 +589,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
 }
 
 static void SetSelectedWordToFindEdit(MainWindow*win,  StrVec& words) {
-    const char* line = Join(words, " ");
+    const char* line = Join(&words, " ");
     bool prev = gGlobalPrefs->showToolbar;
     gGlobalPrefs->showToolbar = false;      // to avoid calling find-function.
     HwndSetText(win->hwndFindEdit, line);
@@ -597,7 +598,7 @@ static void SetSelectedWordToFindEdit(MainWindow*win,  StrVec& words) {
 
 void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
     DeleteOldSelectionInfo(win, true);
-    RepaintAsync(win, 0);
+    ScheduleRepaint(win, 0);
     bool conti = false;
     MarkerNode* node = getMarker(keyword);
     if (node != nullptr) {
@@ -611,7 +612,7 @@ void Markers::selectWords(MainWindow* win, const char* keyword, StrVec& words) {
 
 void Markers::selectWords(MainWindow* win, StrVec& words) {
     DeleteOldSelectionInfo(win, true);
-    RepaintAsync(win, 0);
+    ScheduleRepaint(win, 0);
     MarkerNode* cn = getMarker("Cell");
     MarkerNode* pn = getMarker("Pin");
     bool conti = false;
@@ -860,7 +861,7 @@ void CloseEvent(WindowTab* tab) {
     if (USERAPP_DDE_SERVICE == nullptr || USERAPP_DDE_TOPIC == nullptr) {
         return;
     }
-    char* path = tab->filePath;
+    const char* path = tab->filePath;
     if (path != nullptr) {
         str::Str cmd;
         cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
@@ -874,7 +875,7 @@ void CloseEvent(MainWindow* win) {
         return;
     }
     for (auto& tab : win->Tabs()) {
-        char* path = tab->filePath;
+        const char* path = tab->filePath;
         if (path != nullptr) {
             str::Str cmd;
             cmd.AppendFmt("[PDFClosed(\"%s\")]", path);
@@ -1098,7 +1099,7 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
             src = end;
         }
     }
-    Sort(word_vec);
+    Sort(&word_vec);
     //
     StrVec words;
     char* prev = nullptr;
@@ -1171,7 +1172,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
         annot_key_content.AppendChar('@');
         // -- ClearSearchResult ------------
         DeleteOldSelectionInfo(win, true);
-        RepaintAsync(win, 0);
+        ScheduleRepaint(win, 0);
         // - Select all words in PDF file -----------------------
         dm->textSearch->SetDirection(TextSearchDirection::Forward);
         bool conti = false;
@@ -1271,7 +1272,8 @@ loop_break:
                     rects.Append(sel.rect);
                     marker_node->rects.Append(sel.rect.Round());
                 }
-                Annotation* annot = EngineMupdfCreateAnnotation(engine, AnnotationType::Highlight, pageno, PointF{});
+                AnnotCreateArgs args{AnnotationType::Highlight};
+                Annotation* annot = EngineMupdfCreateAnnotation(engine, pageno, PointF{}, &args);
                 SetQuadPointsAsRect(annot, rects);
                 SetColor(annot, marker_node->mark_color); // Acua
                 SetContents(annot, annot_key_content.Get());
@@ -1554,8 +1556,8 @@ void sendClickPoint(MainWindow* win, int x, int y) {
     //PointF pos = dm->CvtFromScreen(mousePos, pageNo);
     //Point pt = ToPoint(pos);
     str::Str cmd;
-    //cmd.AppendFmt("[Clicked(\"%s\", %d, %d, %d)]", tab->filePath.Get(), pageNo, pt.x, pt.y);
-    cmd.AppendFmt("[Clicked(\"%s\", %d, %d, %d)]", tab->filePath.Get(), pageNo, x, y);
+    //cmd.AppendFmt("[Clicked(\"%s\", %d, %d, %d)]", tab->filePath, pageNo, pt.x, pt.y);
+    cmd.AppendFmt("[Clicked(\"%s\", %d, %d, %d)]", tab->filePath, pageNo, x, y);
     DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
 }
 
@@ -1633,7 +1635,7 @@ void sendSelectText(MainWindow* win, bool conti) {
     if (0 < text.size()) {
         str::Str cmd;
         cmd.AppendFmt("[Select(\"%s\", \"%s\", %d, %d, %d, %d, %d)]",
-            tab->filePath.Get(), text.Get(),
+            tab->filePath, text.Get(),
             pageNo,
             rect.x, rect.y, rect.dx, rect.dy
         );
@@ -1669,7 +1671,7 @@ void sendSelectImage(MainWindow* win, int x, int y, bool conti) {
         CopyImageToClipboard(bmp->GetBitmap(), false);
         Rect r = pageEl->rect.Round();
         cmd.AppendFmt("[PasteFromClipBoard(\"%s\", %d, %d, %d, %d, %d)]",
-            tab->filePath.Get(),
+            tab->filePath,
             pageEl->pageNo, r.x, r.y, r.dx, r.dy);
         DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
     }

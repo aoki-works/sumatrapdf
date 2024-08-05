@@ -18,6 +18,7 @@
 #include "FileHistory.h"
 #include "AppColors.h"
 #include "GlobalPrefs.h"
+#include "Annotation.h"
 #include "SumatraPDF.h"
 #include "MainWindow.h"
 #include "resource.h"
@@ -269,7 +270,7 @@ static void DrawAbout(HWND hwnd, HDC hdc, Rect rect, Vec<StaticLinkInfo*>& stati
     SelectObject(hdc, penLinkLine);
     DeleteVecMembers(staticLinks);
     for (AboutLayoutInfoEl* el = gAboutLayoutInfo; el->leftTxt; el++) {
-        bool hasUrl = HasPermission(Perm::DiskAccess) && el->url;
+        bool hasUrl = CanAccessDisk() && el->url;
         if (hasUrl) {
             col = ThemeWindowLinkColor();
         } else {
@@ -412,7 +413,7 @@ static void CopyAboutInfoToClipboard() {
 }
 
 char* GetStaticLinkTemp(Vec<StaticLinkInfo*>& staticLinks, int x, int y, StaticLinkInfo** linkOut) {
-    if (!HasPermission(Perm::DiskAccess)) {
+    if (!CanAccessDisk()) {
         return nullptr;
     }
 
@@ -436,7 +437,7 @@ static void CreateInfotipForLink(StaticLinkInfo* linkInfo) {
     }
 
     gAboutTooltip = new Tooltip();
-    TooltipCreateArgs args;
+    Tooltip::CreateArgs args;
     args.parent = gHwndAbout;
     gAboutTooltip->Create(args);
     gAboutTooltip->SetSingle(linkInfo->infotip, linkInfo->rect, false);
@@ -548,7 +549,7 @@ void ShowAboutWindow(MainWindow* win) {
         return;
     }
 
-    SetRtl(gHwndAbout, IsUIRightToLeft());
+    HwndSetRtl(gHwndAbout, IsUIRightToLeft());
 
     // get the dimensions required for the about box's content
     Rect rc;
@@ -762,7 +763,7 @@ void DrawHomePage(MainWindow* win, HDC hdc, const FileHistory& fileHistory, COLO
             UINT fmt = DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX | (isRtl ? DT_RIGHT : DT_LEFT);
             HdcDrawText(hdc, fileName, rect, fmt, fontText);
 
-            SHFILEINFO sfi = {nullptr};
+            SHFILEINFO sfi{};
             uint flags = SHGFI_SYSICONINDEX | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES;
             WCHAR* filePathW = ToWStrTemp(path);
             HIMAGELIST himl = (HIMAGELIST)SHGetFileInfoW(filePathW, 0, &sfi, sizeof(sfi), flags);

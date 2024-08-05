@@ -66,6 +66,15 @@ struct Annotation {
     ~Annotation();
 };
 
+struct AnnotCreateArgs {
+    AnnotationType annotType = AnnotationType::Unknown;
+    // the following are set depending on type of the annotation
+    ParsedColor col;
+    bool copyToClipboard = false;
+    bool setContent = false;
+    TempStr content = nullptr;
+};
+
 int PageNo(Annotation*);
 RectF GetBounds(Annotation*);
 RectF GetRect(Annotation*);
@@ -92,8 +101,8 @@ int BorderWidth(Annotation*);
 void SetBorderWidth(Annotation*, int);
 void GetLineEndingStyles(Annotation*, int* start, int* end);
 const char* IconName(Annotation*);   // empty() if no icon
-PdfColor GetColor(Annotation*);      // ColorUnset if no color
-PdfColor InteriorColor(Annotation*); // ColorUnset if no color
+PdfColor GetColor(Annotation*);      // kColorUnset if no color
+PdfColor InteriorColor(Annotation*); // kColorUnset if no color
 bool SetInteriorColor(Annotation*, PdfColor);
 int Opacity(Annotation*);
 void SetOpacity(Annotation*, int);

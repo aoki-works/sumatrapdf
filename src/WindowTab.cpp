@@ -31,7 +31,7 @@ WindowTab::WindowTab(MainWindow* win) {
 
 void WindowTab::SetFilePath(const char* path) {
     type = Type::Document;
-    this->filePath.SetCopy(path);
+    str::ReplaceWithCopy(&filePath, path);
 }
 
 bool WindowTab::IsAboutTab() const {
@@ -52,6 +52,8 @@ WindowTab::~WindowTab() {
     // so doesn't need to be kept for long
     gMostRecentlyOpenedDoc = nullptr;
     delete ctrl;
+    str::FreePtr(&filePath);
+    str::FreePtr(&frameTitle);
 }
 
 bool WindowTab::IsDocLoaded() const {
@@ -78,11 +80,6 @@ EngineBase* WindowTab::GetEngine() const {
         return ctrl->AsFixed()->GetEngine();
     }
     return nullptr;
-}
-
-// can be null for About tab
-const char* WindowTab::GetPath() const {
-    return this->filePath;
 }
 
 const char* WindowTab::GetTabTitle() const {
@@ -139,7 +136,7 @@ LinkSaver::LinkSaver(WindowTab* tab, HWND parentHwnd, const WCHAR* fileName) {
 #endif
 
 bool SaveDataToFile(HWND hwndParent, char* fileNameA, ByteSlice data) {
-    if (!HasPermission(Perm::DiskAccess)) {
+    if (!CanAccessDisk()) {
         return false;
     }
 

@@ -10,6 +10,9 @@
     <Filter Include="docs\md">
       <UniqueIdentifier>{6E56AB1F-DA35-2ABB-E34D-B5914FAC901C}</UniqueIdentifier>
     </Filter>
+    <Filter Include="docs\www">
+      <UniqueIdentifier>{A2511615-8E1E-7120-B737-5FC8A363A6AE}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ext">
       <UniqueIdentifier>{7670880B-E279-887C-6BF5-9E7CD7FD937C}</UniqueIdentifier>
     </Filter>
@@ -48,6 +51,9 @@
     <ClInclude Include="..\src\Accelerators.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\Annotation.h">
+      <Filter>src</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\AppColors.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -61,6 +67,9 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\Caption.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\ChmFile.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\ChmModel.h">
@@ -90,7 +99,22 @@
     <ClInclude Include="..\src\DocProperties.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\EbookDoc.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\EbookFormatter.h">
+      <Filter>src</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\EditAnnotations.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\EngineAll.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\EngineBase.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\EngineMupdf.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\ExternalViewers.h">
@@ -117,6 +141,9 @@
     <ClInclude Include="..\src\HomePage.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\HtmlFormatter.h">
+      <Filter>src</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\Installer.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -126,7 +153,16 @@
     <ClInclude Include="..\src\Menu.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\MobiDoc.h">
+      <Filter>src</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\Notifications.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\PalmDbReader.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\PdfCreator.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\PdfSync.h">
@@ -145,9 +181,6 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\RenderCache.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\SaveAsPdf.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\Scratch.h">
@@ -281,6 +314,9 @@
     <ClCompile Include="..\src\Accelerators.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\Annotation.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\AppColors.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -297,6 +333,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Caption.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\ChmFile.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\ChmModel.cpp">
@@ -323,7 +362,37 @@
     <ClCompile Include="..\src\DocProperties.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\EbookDoc.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EbookFormatter.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\EditAnnotations.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EngineBase.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EngineCreate.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EngineDjVu.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EngineDump.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EngineEbook.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EngineImages.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EngineMupdf.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\EnginePs.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\ExternalViewers.cpp">
@@ -350,6 +419,9 @@
     <ClCompile Include="..\src\HomePage.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\HtmlFormatter.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\Installer.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -362,7 +434,16 @@
     <ClCompile Include="..\src\Menu.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\MobiDoc.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\Notifications.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\PalmDbReader.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\PdfCreator.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\PdfSync.cpp">
@@ -381,9 +462,6 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\RenderCache.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\SaveAsPdf.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Scratch.cpp">
@@ -611,10 +689,10 @@
     <None Include="..\do\main.go">
       <Filter>do</Filter>
     </None>
-    <None Include="..\do\settings_def.go">
+    <None Include="..\do\settings_gen_code.go">
       <Filter>do</Filter>
     </None>
-    <None Include="..\do\settings_gen_code.go">
+    <None Include="..\do\settings_gen_def.go">
       <Filter>do</Filter>
     </None>
     <None Include="..\do\settings_gen_html.go">
@@ -693,6 +771,9 @@
       <Filter>docs\md</Filter>
     </None>
     <None Include="..\docs\md\Customize-search-translation-services.md">
+      <Filter>docs\md</Filter>
+    </None>
+    <None Include="..\docs\md\Customize-toolbar.md">
       <Filter>docs\md</Filter>
     </None>
     <None Include="..\docs\md\Customizing-eBook-UI.md">
@@ -781,6 +862,12 @@
     </None>
     <None Include="..\docs\wishlist.txt">
       <Filter>docs</Filter>
+    </None>
+    <None Include="..\docs\www\notion.css">
+      <Filter>docs\www</Filter>
+    </None>
+    <None Include="..\docs\www\sumatra.css">
+      <Filter>docs\www</Filter>
     </None>
     <None Include="..\premake5.files.lua" />
     <None Include="..\premake5.lua" />

@@ -81,13 +81,14 @@ bool CreateShortcut(const char* shortcutPath, const char* exePath, const char* a
                     const char* description = nullptr, int iconIndex = 0);
 IDataObject* GetDataObjectForFile(const char* filePath, HWND hwnd = nullptr);
 
-HANDLE LaunchProces(const char* exe, const char* cmdLine);
-HANDLE LaunchProcess(const char* cmdLine, const char* currDir = nullptr, DWORD flags = 0);
+HANDLE LaunchProcessWithCmdLine(const char* exe, const char* cmdLine);
+HANDLE LaunchProcessInDir(const char* cmdLine, const char* currDir = nullptr, DWORD flags = 0);
 bool CreateProcessHelper(const char* exe, const char* args);
 bool LaunchFileShell(const char* path, const char* params = nullptr, const char* verb = nullptr, bool hidden = false);
 bool LaunchBrowser(const char* url);
 void OpenPathInExplorer(const char* path);
 
+void RunNonElevated(const char* exePath);
 bool LaunchElevated(const char* path, const char* cmdline);
 bool IsProcessRunningElevated();
 bool CanTalkToProcess(DWORD procId);
@@ -125,6 +126,7 @@ int HdcDrawText(HDC hdc, const char* s, const Point& pos, uint fmt, HFONT font =
 Size HdcMeasureText(HDC hdc, const char* s, uint format, HFONT font);
 Size HdcMeasureText(HDC hdc, const char* s, HFONT font = nullptr);
 
+HWND HwndSetFocus(HWND hwnd);
 bool HwndIsFocused(HWND);
 bool IsCursorOverWindow(HWND);
 
@@ -150,8 +152,8 @@ bool IsWindowStyleExSet(HWND hwnd, DWORD flags);
 void SetWindowStyle(HWND hwnd, DWORD flags, bool enable);
 void SetWindowExStyle(HWND hwnd, DWORD flags, bool enable);
 
-bool IsRtl(HWND hwnd);
-void SetRtl(HWND hwnd, bool isRtl);
+bool HwndIsRtl(HWND hwnd);
+void HwndSetRtl(HWND hwnd, bool isRtl);
 
 Rect ChildPosWithinParent(HWND);
 
@@ -174,12 +176,6 @@ void ResizeWindow(HWND, int dx, int dy);
 
 void MessageBoxWarningSimple(HWND hwnd, const WCHAR* msg, const WCHAR* title = nullptr);
 void MessageBoxNYI(HWND hwnd);
-
-// schedule WM_PAINT at window's leasure
-void HwndScheduleRepaint(HWND hwnd);
-
-// do WM_PAINT immediately
-void RepaintNow(HWND hwnd);
 
 bool RegisterServerDLL(const char* dllPath, const char* args = nullptr);
 bool UnRegisterServerDLL(const char* dllPath, const char* args = nullptr);
@@ -285,7 +281,6 @@ HBITMAP CreateMemoryBitmap(Size size, HANDLE* hDataMapping = nullptr);
 bool BlitHBITMAP(HBITMAP hbmp, HDC hdc, Rect target);
 double GetProcessRunningTime();
 
-void RunNonElevated(const char* exePath);
 void VariantInitBstr(VARIANT& urlVar, const WCHAR* s);
 StrSpan LoadDataResource(int resId);
 bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command);
@@ -328,7 +323,8 @@ void CbSetCurrentSelection(HWND, int);
 HICON HwndGetIcon(HWND);
 HICON HwndSetIcon(HWND, HICON);
 
-void HwndInvalidate(HWND);
+void HwndRepaintNow(HWND);
+void HwndScheduleRepaint(HWND hwnd);
 
 HFONT HwndGetFont(HWND);
 void HwndSetFont(HWND, HFONT);
@@ -358,3 +354,18 @@ HGLOBAL MemToHGLOBAL(void* src, int n, UINT flags = GMEM_MOVEABLE);
 HGLOBAL StrToHGLOBAL(const char* s, UINT flags = GMEM_MOVEABLE);
 TempStr AtomToStrTemp(ATOM a);
 int MsgBox(HWND, const char*, const char*, UINT);
+
+constexpr u32 kCpuMMX = 1 << 1;
+constexpr u32 kCpuSSE = 1 << 2;
+constexpr u32 kCpuSSE2 = 1 << 2;
+constexpr u32 kCpuSSE3 = 1 << 3;
+constexpr u32 kCpuSSE41 = 1 << 4;
+constexpr u32 kCpuSSE42 = 1 << 5;
+constexpr u32 kCpuAVX = 1 << 6;
+constexpr u32 kCpuAVX2 = 1 << 7;
+
+u32 CpuID();
+
+LARGE_INTEGER TimeNow();
+double TimeDiffSecs(const LARGE_INTEGER& start, const LARGE_INTEGER& end);
+double TimeDiffMs(const LARGE_INTEGER& start, const LARGE_INTEGER& end);

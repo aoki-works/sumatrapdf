@@ -8,6 +8,8 @@
 #include "utils/Dpi.h"
 #include "utils/WinUtil.h"
 
+#include "utils/Log.h"
+
 #include "wingui/UIModels.h"
 
 #include "Settings.h"
@@ -209,6 +211,7 @@ void UpdateTextSelection(MainWindow* win, bool select) {
         return;
     }
 
+    logf("UpdateTextSelection: select: %d\n", (int)select);
     DisplayModel* dm = win->AsFixed();
     if (select) {
         int pageNo = dm->GetPageNoByPoint(win->selectionRect.BR());
@@ -225,6 +228,7 @@ void UpdateTextSelection(MainWindow* win, bool select) {
     if (win->uiaProvider) {
         win->uiaProvider->OnSelectionChanged();
     }
+    ToolbarUpdateStateForWindow(win, false);
 }
 
 // isTextSelectionOut is set to true if this is text-only selection (as opposed to
@@ -264,7 +268,7 @@ TempStr GetSelectedTextTemp(WindowTab* tab, const char* lineSep, bool& isTextOnl
     if (selections.Size() == 0) {
         return nullptr;
     }
-    TempStr s = JoinTemp(selections, lineSep);
+    TempStr s = JoinTemp(&selections, lineSep);
     return s;
 }
 
@@ -354,7 +358,7 @@ void OnSelectAll(MainWindow* win, bool textOnly) {
     }
 
     win->showSelection = win->CurrentTab()->selectionOnPage != nullptr;
-    RepaintAsync(win, 0);
+    ScheduleRepaint(win, 0);
 }
 
 #define SELECT_AUTOSCROLL_AREA_WIDTH DpiScale(win->hwndFrame, 15)
@@ -419,7 +423,7 @@ void OnSelectionStart(MainWindow* win, int x, int y, WPARAM) {
 
     SetCapture(win->hwndCanvas);
     SetTimer(win->hwndCanvas, SMOOTHSCROLL_TIMER_ID, SMOOTHSCROLL_DELAY_IN_MS, nullptr);
-    RepaintAsync(win, 0);
+    ScheduleRepaint(win, 0);
     return;
 }
 
@@ -454,5 +458,5 @@ void OnSelectionStop(MainWindow* win, int x, int y, bool aborted) {
         win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(win->AsFixed(), win->selectionRect);
         win->showSelection = win->CurrentTab()->selectionOnPage != nullptr;
     }
-    RepaintAsync(win, 0);
+    ScheduleRepaint(win, 0);
 }

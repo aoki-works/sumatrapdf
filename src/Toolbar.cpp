@@ -91,13 +91,15 @@ static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::RotateRight, CmdRotateRight, _TRN("Rotate &Right")},
     {TbIcon::ZoomOut, CmdZoomOut, _TRN("Zoom Out")},
     {TbIcon::ZoomIn, CmdZoomIn, _TRN("Zoom In")},
-    {TbIcon::None, CmdInfoText, nullptr}, // info text
 };
+// unicode chars: https://www.compart.com/en/unicode/U+25BC
 
 constexpr int kButtonsCount = dimof(gToolbarButtons);
 
-static bool TbIsSeparator(ToolbarButtonInfo& tbi) {
-    return (int)tbi.bmpIndex < 0;
+static Vec<ToolbarButtonInfo>* gCustomToolbarButtons = nullptr;
+
+static bool TbIsSeparator(const ToolbarButtonInfo& tbi) {
+    return (int)tbi.bmpIndex == (int)TbIcon::None;
 }
 
 static void TbSetButtonDx(HWND hwndToolbar, int cmd, int dx) {
@@ -122,8 +124,8 @@ static bool NeedsInfo(MainWindow* win) {
     return show;
 }
 
-static bool IsVisibleToolbarButton(MainWindow* win, int buttonNo) {
-    switch (gToolbarButtons[buttonNo].cmdId) {
+static bool IsVisibleToolbarButton(MainWindow* win, int cmdId) {
+    switch (cmdId) {
         case CmdZoomFitWidthAndContinuous:
         case CmdZoomFitPageAndSinglePage:
             return !win->AsChm();
@@ -151,13 +153,26 @@ static bool IsVisibleToolbarButton(MainWindow* win, int buttonNo) {
     }
 }
 
-static bool IsToolbarButtonEnabled(MainWindow* win, int buttonNo) {
-    int cmdId = gToolbarButtons[buttonNo].cmdId;
+static bool IsToolbarButtonEnabled(MainWindow* win, int cmdId) {
+    auto ctx = NewBuildMenuCtx(win->CurrentTab(), Point{0, 0});
+    AutoRun delCtx(DeleteBuildMenuCtx, ctx);
 
+    switch (cmdId) {
+        case CmdNextTab:
+        case CmdPrevTab:
+        case CmdNextTabSmart:
+        case CmdPrevTabSmart:
+            return gGlobalPrefs->useTabs;
+    }
+
+    auto [remove, disable] = GetCommandIdState(ctx, cmdId);
+    if (remove || disable) {
+        return false;
+    }
     bool isAllowed = true;
     switch (cmdId) {
         case CmdOpenFile:
-            isAllowed = HasPermission(Perm::DiskAccess);
+            isAllowed = CanAccessDisk();
             break;
         case CmdPrint:
             isAllowed = HasPermission(Perm::PrinterAccess);
@@ -197,58 +212,79 @@ static bool IsToolbarButtonEnabled(MainWindow* win, int buttonNo) {
     }
 }
 
-static TBBUTTON TbButtonFromButtonInfo(int i) {
-    auto& btInfo = gToolbarButtons[i];
-    TBBUTTON info{};
-    info.idCommand = btInfo.cmdId;
-    if (TbIsSeparator(btInfo)) {
-        info.fsStyle = TBSTYLE_SEP;
-    } else {
-        info.iBitmap = (int)btInfo.bmpIndex;
-        info.fsState = TBSTATE_ENABLED;
-        if (btInfo.cmdId == CmdSelectNets || btInfo.cmdId == CmdSelectCells || btInfo.cmdId == CmdSelectPins) {
-            info.fsStyle = TBSTYLE_CHECK;   // CPS Lab
-        } else {
-            info.fsStyle = TBSTYLE_BUTTON;
-        }
-        auto s = trans::GetTranslation(btInfo.toolTip);
-        info.iString = (INT_PTR)ToWStrTemp(s);
+static TBBUTTON TbButtonFromButtonInfo(const ToolbarButtonInfo& bi) {
+    TBBUTTON b{};
+    b.idCommand = bi.cmdId;
+    if (TbIsSeparator(bi)) {
+        b.fsStyle = BTNS_SEP;
+        return b;
     }
-    return info;
+    b.iBitmap = (int)bi.bmpIndex;
+    b.fsState = TBSTATE_ENABLED;
+    if (bi.cmdId == CmdSelectNets || bi.cmdId == CmdSelectCells || bi.cmdId == CmdSelectPins) {
+        b.fsStyle = TBSTYLE_CHECK;   // CPS Lab
+    } else {
+        b.fsStyle = BTNS_BUTTON;
+    }
+    if (bi.cmdId == CmdFindMatch) {
+        b.fsStyle = BTNS_CHECK;
+    }
+    if (bi.bmpIndex == TbIcon::Text) {
+        // b.fsStyle = BTNS_DROPDOWN;
+        b.fsStyle |= BTNS_SHOWTEXT;
+        b.fsStyle |= BTNS_AUTOSIZE;
+    }
+    auto s = trans::GetTranslation(bi.toolTip);
+    b.iString = (INT_PTR)ToWStrTemp(s);
+    return b;
 }
 
 // Set toolbar button tooltips taking current language into account.
 void UpdateToolbarButtonsToolTipsForWindow(MainWindow* win) {
     TBBUTTONINFO binfo{};
     HWND hwnd = win->hwndToolbar;
-    ACCEL accel;
     for (int i = 0; i < kButtonsCount; i++) {
-        auto& tb = gToolbarButtons[i];
-
-        if (!tb.toolTip) {
+        const ToolbarButtonInfo& bi = gToolbarButtons[i];
+        if (!bi.toolTip) {
             continue;
         }
-
-        str::Str accelStr;
-        if (GetAccelByCmd(tb.cmdId, accel)) {
-            AppendAccelKeyToMenuString(accelStr, accel);
+        if (bi.bmpIndex == TbIcon::Text) {
+            continue;
         }
-
-        const char* s = trans::GetTranslation(tb.toolTip);
-        if (accelStr.size() > 0) {
-            accelStr[0] = '(';
-            accelStr.Append(")");
-            s = str::JoinTemp(s, "  ", accelStr.Get());
+        const char* accelStr = AppendAccelKeyToMenuStringTemp(nullptr, bi.cmdId);
+        TempStr s = (TempStr)trans::GetTranslation(bi.toolTip);
+        if (accelStr) {
+            TempStr s2 = str::FormatTemp(" (%s)", accelStr + 1); // +1 to skip \t
+            s = str::JoinTemp(s, s2);
         }
-
-        WCHAR* tmp = ToWStrTemp(s);
 
         binfo.cbSize = sizeof(TBBUTTONINFO);
         binfo.dwMask = TBIF_TEXT | TBIF_BYINDEX;
-        binfo.pszText = tmp;
+        binfo.pszText = ToWStrTemp(s);
         WPARAM buttonId = (WPARAM)i;
         TbSetButtonInfo(hwnd, buttonId, &binfo);
     }
+    // TODO: need an explicit tooltip window https://chatgpt.com/c/18fb77c8-761c-4314-a1ac-e55b93edfeef
+#if 0
+    if (gCustomToolbarButtons) {
+        int n = gCustomToolbarButtons->Size();
+        for (int i = 0; i < n; i++) {
+            const ToolbarButtonInfo& bi = gCustomToolbarButtons->At(i);
+            const char* accelStr = AppendAccelKeyToMenuStringTemp(nullptr, bi.cmdId);
+            TempStr s = (TempStr)bi.toolTip;
+            if (accelStr) {
+                TempStr s2 = str::FormatTemp(" (%s)", accelStr + 1); // +1 to skip \t
+                s = str::JoinTemp(s, s2);
+            }
+
+            binfo.cbSize = sizeof(TBBUTTONINFO);
+            binfo.dwMask = TBIF_TEXT | TBIF_BYINDEX;
+            binfo.pszText = ToWStrTemp(s);
+            WPARAM buttonId = (WPARAM)(kButtonsCount + i);
+            TbSetButtonInfo(hwnd, buttonId, &binfo);
+        }
+    }
+#endif
 }
 
 static void SetToolbarInfoText(MainWindow* win, const char* s) {
@@ -262,10 +298,15 @@ static void SetToolbarInfoText(MainWindow* win, const char* s) {
         MoveWindow(hwnd, 0, 0, 0, 0, TRUE);
         return;
     }
-
     TbSetButtonDx(win->hwndToolbar, CmdInfoText, size.dx);
+    int lastButtonCmdId = (int)CmdFindMatch;
+    if (gCustomToolbarButtons) {
+        int n = gCustomToolbarButtons->Size();
+        ToolbarButtonInfo& last = gCustomToolbarButtons->At(n - 1);
+        lastButtonCmdId = last.cmdId;
+    }
     RECT r{};
-    TbGetRect(win->hwndToolbar, CmdFindMatch, &r);
+    TbGetRect(win->hwndToolbar, lastButtonCmdId, &r);
     int x = r.right + DpiScale(win->hwndToolbar, 10);
     int y = (r.bottom - size.dy) / 2;
     MoveWindow(hwnd, x, y, size.dx, size.dy, TRUE);
@@ -279,15 +320,33 @@ void ToolbarUpdateStateForWindow(MainWindow* win, bool setButtonsVisibility) {
     HWND hwnd = win->hwndToolbar;
     for (int i = 0; i < kButtonsCount; i++) {
         auto& tb = gToolbarButtons[i];
+        int cmdId = tb.cmdId;
         if (setButtonsVisibility) {
-            bool hide = !IsVisibleToolbarButton(win, i);
-            SendMessageW(hwnd, TB_HIDEBUTTON, tb.cmdId, hide);
+            bool hide = !IsVisibleToolbarButton(win, cmdId);
+            SendMessageW(hwnd, TB_HIDEBUTTON, cmdId, hide);
         }
         if (TbIsSeparator(tb)) {
             continue;
         }
-        LPARAM buttonState = IsToolbarButtonEnabled(win, i) ? kStateEnabled : kStateDisabled;
-        SendMessageW(hwnd, TB_ENABLEBUTTON, tb.cmdId, buttonState);
+        bool isEnabled = IsToolbarButtonEnabled(win, cmdId);
+        LPARAM buttonState = isEnabled ? kStateEnabled : kStateDisabled;
+        SendMessageW(hwnd, TB_ENABLEBUTTON, cmdId, buttonState);
+    }
+
+    if (gCustomToolbarButtons) {
+        int n = gCustomToolbarButtons->Size();
+        for (int i = 0; i < n; i++) {
+            auto& tb = gCustomToolbarButtons->At(i);
+            int cmdId = tb.cmdId;
+            int origCmdId = cmdId;
+            auto cmd = FindCustomCommand(cmdId);
+            if (cmd) {
+                origCmdId = cmd->origId;
+            }
+            bool isEnabled = IsToolbarButtonEnabled(win, origCmdId);
+            LPARAM buttonState = isEnabled ? kStateEnabled : kStateDisabled;
+            SendMessageW(hwnd, TB_ENABLEBUTTON, cmdId, buttonState);
+        }
     }
 
     // Find labels may have to be repositioned if some
@@ -898,7 +957,6 @@ constexpr int kDefaultIconSize = 18;
 
 static int SetToolbarIconsImageList(MainWindow* win) {
     HWND hwndToolbar = win->hwndToolbar;
-    ReportIf(!hwndToolbar);
     HWND hwndParent = GetParent(hwndToolbar);
 
     // we call it ToolbarSize for users, but it's really size of the icon
@@ -964,13 +1022,46 @@ void CreateToolbar(MainWindow* win) {
 
     TBBUTTON tbButtons[kButtonsCount];
     for (int i = 0; i < kButtonsCount; i++) {
-        tbButtons[i] = TbButtonFromButtonInfo(i);
-        if (gToolbarButtons[i].cmdId == CmdFindMatch) {
-            tbButtons[i].fsStyle = BTNS_CHECK;
-        }
+        const ToolbarButtonInfo& bi = gToolbarButtons[i];
+        tbButtons[i] = TbButtonFromButtonInfo(bi);
     }
-    BOOL ok = SendMessageW(hwndToolbar, TB_ADDBUTTONS, kButtonsCount, (LPARAM)tbButtons);
-    ReportIf(!ok);
+    SendMessageW(hwndToolbar, TB_ADDBUTTONS, kButtonsCount, (LPARAM)tbButtons);
+
+    delete gCustomToolbarButtons;
+    gCustomToolbarButtons = nullptr;
+
+    char* text;
+    for (Shortcut* shortcut : *gGlobalPrefs->shortcuts) {
+        text = shortcut->toolbarText;
+        if (str::IsEmptyOrWhiteSpace(text)) {
+            continue;
+        }
+        ToolbarButtonInfo tbi;
+        tbi.bmpIndex = TbIcon::Text;
+        tbi.cmdId = shortcut->cmdId;
+        tbi.toolTip = text;
+        if (!gCustomToolbarButtons) {
+            gCustomToolbarButtons = new Vec<ToolbarButtonInfo>();
+        }
+        gCustomToolbarButtons->Append(tbi);
+    }
+    if (gCustomToolbarButtons) {
+        int n = gCustomToolbarButtons->Size();
+        TBBUTTON* buttons = AllocArray<TBBUTTON>(n);
+        for (int i = 0; i < n; i++) {
+            ToolbarButtonInfo tbi = gCustomToolbarButtons->At(i);
+            buttons[i] = TbButtonFromButtonInfo(tbi);
+        }
+        SendMessageW(hwndToolbar, TB_ADDBUTTONS, n, (LPARAM)buttons);
+        free((void*)buttons);
+    }
+
+    {
+        // info text for showing "unsaved annotations" text
+        ToolbarButtonInfo tbi{TbIcon::None, CmdInfoText, nullptr};
+        TBBUTTON tb = TbButtonFromButtonInfo(tbi);
+        SendMessageW(hwndToolbar, TB_ADDBUTTONS, 1, (LPARAM)&tb);
+    }
 
     SendMessageW(hwndToolbar, TB_SETBUTTONSIZE, 0, MAKELONG(iconSize, iconSize));
 
@@ -1029,4 +1120,27 @@ void CreateToolbar(MainWindow* win) {
 
     UpdateToolbarPageText(win, -1);
     UpdateToolbarFindText(win);
+}
+
+static void ReCreateToolbar(MainWindow* win) {
+    if (win->hwndReBar) {
+        HwndDestroyWindowSafe(&win->hwndPageLabel);
+        HwndDestroyWindowSafe(&win->hwndPageEdit);
+        HwndDestroyWindowSafe(&win->hwndPageBg);
+        HwndDestroyWindowSafe(&win->hwndPageTotal);
+        HwndDestroyWindowSafe(&win->hwndFindLabel);
+        HwndDestroyWindowSafe(&win->hwndFindEdit);
+        HwndDestroyWindowSafe(&win->hwndFindBg);
+        HwndDestroyWindowSafe(&win->hwndTbInfoText);
+        HwndDestroyWindowSafe(&win->hwndToolbar);
+        HwndDestroyWindowSafe(&win->hwndReBar);
+    }
+    CreateToolbar(win);
+    RelayoutWindow(win);
+}
+
+void ReCreateToolbars() {
+    for (MainWindow* win : gWindows) {
+        ReCreateToolbar(win);
+    }
 }
