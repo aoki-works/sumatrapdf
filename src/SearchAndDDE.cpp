@@ -670,7 +670,7 @@ if focus = 1 then the focus is set to the window
 */
 static const char* HandleSyncCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, srcFile;
-    BOOL line = 0, col = 0, newWindow = 0, setFocus = 0;
+    BOOL line = 0, col = 0, newWindow = 0, setFocus = 1;
     const char* next = str::Parse(cmd, "[ForwardSearch(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &srcFile, &line, &col);
     if (!next) {
         next = str::Parse(cmd, "[ForwardSearch(\"%s\",%? \"%s\",%u,%u,%u,%u)]", &pdfFile, &srcFile, &line, &col,
@@ -739,7 +739,7 @@ Search DDE command
 static const char* HandleSearchCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, srcFile;
     AutoFreeStr term;
-    BOOL newWindow = 0, setFocus = 0;
+    BOOL newWindow = 0, setFocus = 1;
     const char* next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &pdfFile, &term);
     if (!next) {
         next = str::Parse(cmd, "[Search(\"%s\",\"%s\",%u,%u)]", &pdfFile, &term, &newWindow, &setFocus);
@@ -822,7 +822,7 @@ valid formats:
 static const char* HandleOpenCmd(const char* cmd, bool* ack) {
     AutoFreeStr filePath;
     int newWindow = 0;
-    int setFocus = 0;
+    int setFocus = 1;
     int forceRefresh = 0;
     int inCurrentTab = 0;
     const char* next = str::Parse(cmd, "[Open(\"%s\")]", &filePath);
@@ -953,7 +953,7 @@ e.g.:
 */
 static const char* HandleGotoCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, destName, srcFile;
-    BOOL newWindow = 0, setFocus = 0;
+    BOOL newWindow = 0, setFocus = 1;
     const char* next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &pdfFile, &destName);
     if (!next) {
         next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &destName, &newWindow, &setFocus);
@@ -1014,7 +1014,7 @@ eg: [GoToPage("c:\file.pdf",37)]
 */
 static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, srcFile;
-    BOOL newWindow = 0, setFocus = 0;
+    BOOL newWindow = 0, setFocus = 1;
     uint page = 0;
     const char* next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &pdfFile, &page);
     if (!next) {
@@ -1206,6 +1206,7 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
     Point scroll(-1, -1);
     bool get_word = false;
     bool get_block = false;
+    BOOL setFocus = 0;
     const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
     if (!next) {
         next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
@@ -1240,6 +1241,9 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
         cpslab::SaveWordsToFile(win, txtFile.Get());
     } else {
         cpslab::SaveTextToFile(win, txtFile.Get());
+    }
+    if (setFocus) {
+        win->Focus();
     }
     *ack = true;
     return next;
