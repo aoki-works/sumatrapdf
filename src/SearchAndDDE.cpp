@@ -1337,6 +1337,7 @@ static const char* HandleSelectCmd(const char* cmd, bool* ack)
     Point scroll(-1, -1);
     boolean select_block = false;
     boolean select_image = false;
+    BOOL setFocus = 1;
     // ---------------------------------------------
     const char* next = str::Parse(cmd, "[Select(\"%s\",%? ", &pdfFile);
     if (!next) {
@@ -1404,6 +1405,9 @@ static const char* HandleSelectCmd(const char* cmd, bool* ack)
     }
     // ---------------------------------------------
     MainWindowRerender(win);
+    if (setFocus) {
+        win->Focus();
+    }
     *ack = true;
     return next;
 }
