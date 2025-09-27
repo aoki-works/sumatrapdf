@@ -1223,6 +1223,7 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
         return nullptr;
     }
 
+    logf("HandleGetTextCmd: '%s'\n", cmd);
     MainWindow* win = FindMainWindowByFile(pdfFile, true);
     if (!win) {
         return next;
@@ -1235,16 +1236,20 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
     }
 
     if (get_block) {
+        logf("  ... SaveBlocksToFile : '%s'\n", txtFile.Get());
         cpslab::SaveBlocksToFile(win, txtFile.Get());
     }
     else if (get_word) {
+        logf("  ... SaveWordsToFile : '%s'\n", txtFile.Get());
         cpslab::SaveWordsToFile(win, txtFile.Get());
     } else {
+        logf("  ... SaveTextToFile : '%s'\n", txtFile.Get());
         cpslab::SaveTextToFile(win, txtFile.Get());
     }
     if (setFocus) {
         win->Focus();
     }
+    logf("  ... done\n");
     *ack = true;
     return next;
 }
@@ -1271,6 +1276,7 @@ static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
     if (!next) {
         return nullptr;
     }
+    logf("HandleMarkWordCmd: '%s'\n", cmd);
     // ---------------------------------------------
     MainWindow* win = FindMainWindowByFile(pdfFile, true);
     if (!win) {
@@ -1321,6 +1327,7 @@ static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
     */
     // ---------------------------------------------
     MainWindowRerender(win);
+    logf("                eond.'\n");
     *ack = true;
     return next;
 }

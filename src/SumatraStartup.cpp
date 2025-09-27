@@ -1152,6 +1152,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     UpdateGlobalPrefs(flags);
     SetCurrentLang(flags.lang ? flags.lang : gGlobalPrefs->uiLanguage);
 
+    // RedirectIOToConsole();  //CPS Lab DEBUG
     if (flags.showConsole) {
         RedirectIOToConsole();
     }

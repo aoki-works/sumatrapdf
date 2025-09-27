@@ -4,12 +4,15 @@
 #include <iomanip>
 #include <sstream>
 #include <map>
+#include <unordered_map>
+#include <set>
 #include <vector>
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 #include "utils/FileUtil.h"
 #include "utils/JsonParser.h"
+#include "utils/Log.h"
 #include "wingui/UIModels.h"
 #include "Settings.h"
 #include "DocController.h"
@@ -40,6 +43,8 @@ WCHAR* PDFSYNC_DDE_TOPIC = nullptr;
 CpsMode MODE = CpsMode::MarkerXref;
 const char* EXPORT_TEXT_BLOCKS = nullptr;
 
+std::unordered_map<std::wstring, std::set<int> >* GetWordPagePool = nullptr;
+
 // =============================================================
 //
 // =============================================================
@@ -67,6 +72,10 @@ void MarkFileParser::Parse(const char* path) {
     ByteSlice data = file::ReadFile(path);
     json::Parse(data, this);
     data.Free();
+    if (GetWordPagePool != nullptr) {
+        delete GetWordPagePool;
+        GetWordPagePool = nullptr;
+    }
 }
 
 MarkerNode* MarkFileParser::getMark(const char* keyword) {
@@ -118,6 +127,25 @@ bool MarkFileParser::words(const char* path, const char* value) {
     }
     MarkerNode* mark = getMark(keyword.Get());
     mark->words.Append(value);
+    if (GetWordPagePool != nullptr) {
+        WCHAR* wsep = strconv::Utf8ToWStr(value);
+        std::wstring name = wsep;
+        str::Free(wsep);
+        if (GetWordPagePool->contains(name)) {
+            auto word_pages = static_cast<std::map<std::wstring, std::vector<int> >*>(mark->userArea());
+            if (word_pages == nullptr) {
+                word_pages = new std::map<std::wstring, std::vector<int> >;
+                mark->setUserArea((void*)word_pages);
+            }
+            for (auto page : (*GetWordPagePool)[name]) {
+                //logf(" %s : %d \n", value, page);
+                (*word_pages)[name].push_back(page);
+            }
+        }
+        //else {
+        //    logf(" not match :%s  \n", value);
+        //}
+    }
     return true;
 }
 
@@ -1058,6 +1086,9 @@ void SaveBlocksToFile(MainWindow* win, const char* fname) {
 //
 // =============================================================
 void SaveWordsToFile(MainWindow* win, const char* fname) {
+
+    GetWordPagePool = new std::unordered_map<std::wstring, std::set<int> >;
+
     StrVec word_vec;
     DisplayModel* dm = win->AsFixed();
     int pageCount = dm->PageCount();
@@ -1095,6 +1126,8 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
             char* w = strconv::WStrToUtf8(begin, end - begin, &alloc);
             //char* w = ToUtf8(begin, end - begin);
             word_vec.Append(w);
+            auto ws = std::wstring(begin, end-begin);
+            (*GetWordPagePool)[ws].insert(pageNo);
             //str::Free(w);
             src = end;
         }
@@ -1162,6 +1195,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
     bool have_page_numbers = false;
     dm->textSearch->wordSearch = true;
     char* first_word = nullptr;
+    logf("base_MarkWords : 1  %s\n", save_as);
     for (auto marker_node : tab->markers->markerTable) {
         str::Str annot_key_content("@CPSLabMark:");
         const char* keyword = marker_node->keyword.Get();
@@ -1184,6 +1218,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
                 auto pages = word_block->add(wsep);
                 auto word_pages = (*wp)[std::wstring(wsep)];
                 for (auto pg = word_pages.begin(); pg != word_pages.end(); ++pg) {
+                    //logf("::  %s   %d\n", word, *pg);
                     TextSel* sel = dm->textSearch->FindFirst((*pg), wsep, nullptr, conti);
                     if (!sel) {
                         continue;
@@ -1214,6 +1249,7 @@ loop_break:
             delete wp;
         } else {
             for (auto word : marker_node->words) {
+                //logf("::  %s\n", word);
                 const WCHAR* wsep = strconv::Utf8ToWStr(word);
                 // TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWStr(word), nullptr, conti);
                 TextSel* sel = dm->textSearch->FindFirst(1, wsep, nullptr, conti);
@@ -1283,11 +1319,13 @@ loop_break:
             DeleteOldSelectionInfo(win, true);
         }
     }
+    logf("               : done\n");
     // ---------------------------------------------
     if (save_as != nullptr and have_page_numbers == false) {
         // { "Net": { "netname" : [page_no, ...],... 
         WCHAR* tmpFileW = ToWStrTemp(save_as);
         FILE* outFile = nullptr;
+        logf("base_MarkWords : 2 : \n");
         errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
         if (err == 0) {
             std::fputs("{\n", outFile);
@@ -1340,6 +1378,7 @@ loop_break:
             std::fputs("n}\n", outFile);
         }
         std::fclose(outFile);
+        logf("               : done\n");
     }
     // ---------------------------------------------
     for (auto wb : word_blocks) { delete wb; }
@@ -1360,8 +1399,9 @@ const char* MarkWords(MainWindow* win) {
 // =============================================================
 const char* MarkWords(MainWindow* win, const char* json_file) {
     WindowTab* tab = win->CurrentTab();
+    logf("MarkWords : deleteAnnotations\n");
     tab->markers->deleteAnnotations();
-    tab->markers->parse(json_file); //  read setup-file.
+    logf("          : done\n");
     if (json_file != nullptr) {
         char drive[_MAX_DRIVE];
         char dir[_MAX_DIR];
@@ -1369,6 +1409,9 @@ const char* MarkWords(MainWindow* win, const char* json_file) {
         char ext[_MAX_EXT];
         _splitpath(json_file, drive, dir, fname, ext);
         std::string save_as = std::string(drive) + std::string(dir) + "reply_" + std::string(fname) + std::string(ext);
+        logf("MarkWords : parse\n");
+        tab->markers->parse(json_file); //  read setup-file.
+        logf("          : done\n");
         return base_MarkWords(win, save_as.c_str());
         //return base_MarkWords(win);
     } else {
