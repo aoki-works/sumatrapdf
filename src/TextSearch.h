@@ -10,6 +10,7 @@ class TextSearch : public TextSelection {
     TextSearch(EngineBase* engine, DocumentTextCache* textCache);
     ~TextSearch();
 
+    bool GetSensitive(void) const;
     void SetSensitive(bool sensitive);
     void SetDirection(TextSearchDirection direction);
     void SetLastResult(TextSelection* sel);

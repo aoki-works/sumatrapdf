@@ -52,7 +52,7 @@ struct Flags {
     DisplayMode startView = DisplayMode::Automatic;
     float startZoom = kInvalidZoom;
     Point startScroll = {-1, -1};
-    bool showConsole = false;
+    bool showConsole = true;   // CPSLab debug
     HWND hwndPluginParent = nullptr;
     char* pluginURL = nullptr;
     bool exitImmediately = false;

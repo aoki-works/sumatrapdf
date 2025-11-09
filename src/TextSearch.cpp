@@ -127,6 +127,10 @@ void TextSearch::SetText(const WCHAR* text) {
     markAllPagesNonSkip(pagesToSkip);
 }
 
+bool TextSearch::GetSensitive(void) const {
+    return this->caseSensitive;
+}
+
 void TextSearch::SetSensitive(bool sensitive) {
     if (caseSensitive == sensitive) {
         return;

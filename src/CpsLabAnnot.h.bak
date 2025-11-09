@@ -23,6 +23,7 @@ extern WCHAR* PDFSYNC_DDE_SERVICE;
 extern WCHAR* PDFSYNC_DDE_TOPIC;
 extern const char* EXPORT_TEXT_BLOCKS;
 
+extern void CreateDebugConsole();
 extern void SaveWordsToFile(MainWindow* win, const char* fname);
 extern void SaveTextToFile(MainWindow* win, const char* fname);
 extern void SaveBlocksToFile(MainWindow* win, const char* fname);
@@ -86,8 +87,8 @@ class MarkerNode
     const char* selectWord(MainWindow* win, const int pageNo, char* word, bool conti=false);
     const char* selectWords(MainWindow* win, StrVec& words, bool conti=false);
     size_t getMarkWordsByPageNo(const int pageNo, StrVec& result);
-    int getPage(const char* word, const int pageNo=-1, const bool sens=false);
-    bool tExist(const int pageNo, const char* word, const bool sens=false);
+    int getPage(const char* word, const int pageNo=-1);
+    bool tExist(const int pageNo, const char* word);
 
   public:
     void* userArea();
@@ -106,7 +107,6 @@ class Markers
     WindowTab*  tab_;
     uint select_;
     Vec<PageInCell> page_in_cell_;
-    bool sense_;
 
   public:
     Vec<MarkerNode*> markerTable;
