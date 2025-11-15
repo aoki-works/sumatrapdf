@@ -1196,8 +1196,9 @@ static const char* HandleGetFileStateCmd(HWND hwnd, const char* cmd, bool* ack, 
 
 /*
  CPS Lab.
-[GetText("<pdffilepath>", "<textFileName>", "<pageNo>")]
-[GetText("<pdffilepath>", "<textFileName>)]
+ (1) [GetText("<pdffilepath>", "<textFileName>)]
+     [GeWord("<pdffilepath>", "<textFileName>)]
+     [GetBlock("<pdffilepath>", "<textFileName>)]
 */
 static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile ;
@@ -1211,16 +1212,21 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
     if (!next) {
         next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
         if (next) {
+            logf("GetWord : ");
             get_word = true;
         } else {
             next = str::Parse(cmd, "[GetBlock(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
             if (next) {
+                logf("GetBlock : ");
                 get_block = true;
             }
         }
     }
     if (!next) {
         return nullptr;
+    }
+    if ((!get_block) && (!get_block)) {
+        logf("GetText : ");
     }
 
     logf("HandleGetTextCmd: '%s'\n", cmd);
@@ -1258,9 +1264,8 @@ static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
 
 /*
  CPS Lab.
-[MarkWord("<pdffilepath>", "<SetupFile>")]
-[MarkWord("<pdffilepath>", "<pageNo>", "<Text>", "<Text>", ...)]
-[MarkWord("<pdffilepath>", "<Text>", "<Text>", ...)]
+ (2) [MarkWord("<pdffilepath>", "<SetupFile>")]
+     [MarkWord("<pdffilepath>", "<Text>", "<Text>", ...)]
 */
 static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
 {
@@ -1276,6 +1281,7 @@ static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
     if (!next) {
         return nullptr;
     }
+    logf("MarkWord : ");
     logf("HandleMarkWordCmd: '%s'\n", cmd);
     // ---------------------------------------------
     MainWindow* win = FindMainWindowByFile(pdfFile, true);
@@ -1327,7 +1333,7 @@ static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
     */
     // ---------------------------------------------
     MainWindowRerender(win);
-    logf("                eond.'\n");
+    logf("                done.'\n");
     *ack = true;
     return next;
 }

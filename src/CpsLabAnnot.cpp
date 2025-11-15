@@ -44,6 +44,41 @@ CpsMode MODE = CpsMode::MarkerXref;
 const char* EXPORT_TEXT_BLOCKS = nullptr;
 
 std::unordered_map<std::wstring, std::set<int> >* GetWordPagePool = nullptr;
+TmpAllocator GLOBAL_CACHE_ALLOCATOR;
+
+// =============================================================
+//
+// =============================================================
+/*
+struct CacheAllocator : Allocator {
+    void* p;
+    size_t size;
+
+    explicit CacheAllocator(size_t initialSize = 128 * 1024) : p(NULL), size(initialSize) {
+        this->p = malloc(this->size * sizeof(char));
+    }
+    ~CacheAllocator() override {
+        if (this->p) { free(this->p); }
+    }
+    void* Alloc(size_t len) override {
+        if (this->size <= len) { this->Realloc(this->p, len + 100); }
+        return this->p;
+    }
+    void* Realloc(void* mem, size_t len) override {
+        if (this->size <= len) {
+            void* tmp = realloc(men, len);
+            this->size = len;
+            free(this->p);
+            this->p = tmp;
+        }
+        return this->p;
+    }
+    void Free(const void* mem) override {
+    }
+    CacheAllocator(const CacheAllocator&) = delete;
+    CacheAllocator& operator=(const CacheAllocator&) = delete;
+};
+*/
 
 // =============================================================
 //
@@ -58,6 +93,7 @@ struct MarkFileParser : json::ValueVisitor {
     WindowTab* tab;
     Vec<MarkerNode*> markerTable;
     bool sensitive = false;
+    TmpAllocator allocator;
 
     MarkerNode* getMark(const char* keyword);
     bool mark_color(const char* path, const char* value) ;
@@ -132,9 +168,9 @@ bool MarkFileParser::words(const char* path, const char* value) {
     MarkerNode* mark = getMark(keyword.Get());
     mark->words.Append(value);
     if (GetWordPagePool != nullptr) {
-        WCHAR* wsep = strconv::Utf8ToWStr(value);
+        WCHAR* wsep = strconv::Utf8ToWStr(value, (size_t)-1, &this->allocator);
         std::wstring name = wsep;
-        str::Free(wsep);
+        // str::Free(wsep);
         if (GetWordPagePool->contains(name)) {
             auto word_pages = static_cast<std::map<std::wstring, std::vector<int> >*>(mark->userArea());
             if (word_pages == nullptr) {
@@ -162,9 +198,9 @@ bool MarkFileParser::pages(const char* path, const char* value) {
         return false;
     }
     MarkerNode* mark = getMark(keyword.Get());
-    WCHAR* wsep = strconv::Utf8ToWStr(word.Get());
+    WCHAR* wsep = strconv::Utf8ToWStr(word.Get(), (size_t)-1, &this->allocator);
     std::wstring name = wsep;
-    str::Free(wsep);
+    // str::Free(wsep);
     int page = std::atoi(value);
     auto word_pages = static_cast<std::map<std::wstring, std::vector<int> >*>(mark->userArea());
     if (word_pages == nullptr) {
@@ -258,13 +294,6 @@ MarkerNode::~MarkerNode() {
     }
 }
 
-void* MarkerNode::userArea() {
-    return user_area_;
-}
-void MarkerNode::setUserArea(void* v) {
-    user_area_ = v;
-}
-
 const char* MarkerNode::selectWord(MainWindow* win, const int pageNo, char* wd, bool conti) {
 
     char* first_word = nullptr;
@@ -279,11 +308,11 @@ const char* MarkerNode::selectWord(MainWindow* win, const int pageNo, char* wd, 
         } else {
             if (!str::EqI(wd, mark_word)) { continue; }
         }
-        const WCHAR* wsep = strconv::Utf8ToWStr(wd);
+        const WCHAR* wsep = strconv::Utf8ToWStr(wd, (size_t)-1, &GLOBAL_CACHE_ALLOCATOR);
         //TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWStr(wd), nullptr, conti);
         TextSel* sel = dm->textSearch->FindFirst(pageNo, wsep, nullptr, conti);
         if (sel == nullptr) {
-            str::Free(wsep);
+            // str::Free(wsep);
             continue;
         }
         if (!conti) {
@@ -300,13 +329,11 @@ const char* MarkerNode::selectWord(MainWindow* win, const int pageNo, char* wd, 
             conti = true;
             sel = dm->textSearch->FindNext(nullptr, conti);
         } while (sel);
-        str::Free(wsep);
+        // str::Free(wsep);
     }
     dm->textSearch->wordSearch = false;
     return first_word;
 }
-
-
 const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool conti) {
     const char* first_word = nullptr;
     for(auto wd : select_words) {
@@ -315,8 +342,6 @@ const char* MarkerNode::selectWords(MainWindow* win, StrVec& select_words, bool 
     }
     return first_word;
 }
-
-
 
 size_t MarkerNode::getMarkWordsByPageNo(const int pageNo, StrVec& result) {
     int i = 0;
@@ -329,6 +354,7 @@ size_t MarkerNode::getMarkWordsByPageNo(const int pageNo, StrVec& result) {
     }
     return result.Size();
 }
+
 
 int MarkerNode::getPage(const char* cell, const int pageNo, const bool sens) {
     int i = 0;
@@ -354,6 +380,8 @@ int MarkerNode::getPage(const char* cell, const int pageNo, const bool sens) {
     return -1;
 }
 
+
+
 bool MarkerNode::tExist(const int pageNo, const char* cell, const bool sens) {
     int i = 0;
     for (auto pno : pages) {
@@ -370,6 +398,14 @@ bool MarkerNode::tExist(const int pageNo, const char* cell, const bool sens) {
     return false;
 }
 
+void* MarkerNode::userArea() {
+    return user_area_;
+}
+
+void MarkerNode::setUserArea(void* v) {
+    user_area_ = v;
+}
+
 // =============================================================
 //
 // =============================================================
@@ -384,156 +420,6 @@ Markers::Markers(WindowTab* tab) : tab_(), select_(), sense_(false), page_in_cel
 
 Markers::~Markers() {
     deleteAnnotations();
-}
-
-bool Markers::isSelection(const char* keyword)
-{
-    if (str::EqI(keyword, "Net")) {
-        return select_ & 0x01;
-    } else if (str::EqI(keyword, "Cell")) {
-        return select_ & 0x02;
-    } else if (str::EqI(keyword, "Pin")) {
-        return select_ & 0x04;
-    }
-    return false;
-}
-
-void Markers::setSelection(const char* keyword)
-{
-    if (str::EqI(keyword, "Net")) {
-        select_ |= 0x01;
-    } else if (str::EqI(keyword, "Cell")) {
-        select_ |= 0x02;
-    } else if (str::EqI(keyword, "Pin")) {
-        select_ |= 0x04;
-    }
-}
-
-void Markers::unsetSelection(const char* keyword)
-{
-    if (str::EqI(keyword, "Net")) {
-        select_ &= ~0x01;
-    } else if (str::EqI(keyword, "Cell")) {
-        select_ &= ~0x02;
-    } else if (str::EqI(keyword, "Pin")) {
-        select_ &= ~0x04;
-    }
-}
-
-void Markers::parse(const char* json_file)   // read marker setup file...
-{
-    MarkFileParser  mfp;
-    mfp.tab = tab_;
-    DisplayModel* dm = tab_->AsFixed();
-    mfp.Parse(json_file, dm->textSearch->GetSensitive());
-    for(auto m : mfp.markerTable) {
-        markerTable.Append(m);
-    }
-    page_in_cell_.Reset();
-}
-
-void Markers::deleteAnnotations() {
-    while (0 < markerTable.size()) {
-        auto m = markerTable.Pop();
-        delete m;
-    }
-    markerTable.Reset();
-    page_in_cell_.Reset();
-}
-
-MarkerNode* Markers::getMarker(const char* keyword) {
-    for (auto p : markerTable) {
-        if (this->sense_) {
-            if (str::Eq(p->keyword, keyword)) { return p; }
-        } else {
-            if (str::EqI(p->keyword, keyword)) { return p; }
-        }
-    }
-    MarkerNode* marker_node = new MarkerNode(tab_);
-    marker_node->keyword.SetCopy(keyword);
-    markerTable.Append(marker_node);
-    return marker_node;
-}
-
-size_t Markers::getMarkersByWord(const char* word, Vec<MarkerNode*>& result) {
-    size_t n = 0;
-    for (auto p : markerTable) {
-        for (auto w : p->words) {
-            if (this->sense_) {
-                if (str::Eq(w, word)) { result.Append(p); n++; break; }
-            } else {
-                if (str::EqI(w, word)) { result.Append(p); n++; break; }
-            }
-        }
-    }
-    return n;
-}
-
-size_t Markers::getMarkersByWord(const WCHAR* word, Vec<MarkerNode*>& result) {
-    return getMarkersByWord(strconv::WStrToUtf8(word), result);
-}
-
-size_t Markers::getMarkersByRect(Rect& r, Vec<MarkerNode*>& result, bool specified_object_only)
-{
-    size_t n = 0;
-    for (auto p : markerTable) {
-        if (specified_object_only && !isSelection(p->keyword)) {
-            continue;
-        }
-        for (Rect pr : p->rects) {
-            if (r == pr) {
-                result.Append(p);
-                n++;
-                break;
-            }
-        }
-    }
-    return n;
-}
-
-size_t Markers::getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result) {
-    size_t n = 0;
-    for (auto p : markerTable) {
-        for (int i = 0; i < ts->result.len; ++i) {
-            Rect r = ts->result.rects[i];
-            for (Rect pr : p->rects) {
-                if (r == pr) {
-                    result.Append(p);
-                    n++;
-                    break;
-                }
-            }
-        }
-    }
-    return n;
-}
-
-const char* Markers::getCellsInPage(const int pageNo) {
-    for (PageInCell& c : page_in_cell_) {
-        if (c.pageNo == pageNo) {
-            return c.cells.Get();
-        }
-    }
-    str::Str cellsInPage;
-    for (auto m : markerTable) {
-        if (this->sense_) {
-            if (m->keyword != nullptr && str::Eq(m->keyword, "Cell")) {
-                StrVec cellVect;
-                m->getMarkWordsByPageNo(pageNo, cellVect);
-                for (auto c : cellVect) { cellsInPage.AppendFmt(", \"%s\"", c); }
-            }
-        } else {
-            if (m->keyword != nullptr && str::EqI(m->keyword, "Cell")) {
-                StrVec cellVect;
-                m->getMarkWordsByPageNo(pageNo, cellVect);
-                for (auto c : cellVect) { cellsInPage.AppendFmt(", \"%s\"", c); }
-            }
-        }
-    }
-    page_in_cell_.Append(PageInCell());
-    page_in_cell_.Last().pageNo = pageNo;
-    page_in_cell_.Last().cells = cellsInPage;
-    return page_in_cell_.Last().cells.Get();
 }
 
 void Markers::sendSelectMessage(MainWindow* win, bool conti) {
@@ -655,6 +541,156 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
         cmd.AppendFmt(")]");
         DDEExecute(USERAPP_DDE_SERVICE, USERAPP_DDE_TOPIC, ToWStrTemp(cmd.Get()));
     }
+}
+
+void Markers::parse(const char* json_file)   // read marker setup file...
+{
+    MarkFileParser  mfp;
+    mfp.tab = tab_;
+    DisplayModel* dm = tab_->AsFixed();
+    mfp.Parse(json_file, dm->textSearch->GetSensitive());
+    for(auto m : mfp.markerTable) {
+        markerTable.Append(m);
+    }
+    page_in_cell_.Reset();
+}
+
+void Markers::deleteAnnotations() {
+    while (0 < markerTable.size()) {
+        auto m = markerTable.Pop();
+        delete m;
+    }
+    markerTable.Reset();
+    page_in_cell_.Reset();
+}
+
+MarkerNode* Markers::getMarker(const char* keyword) {
+    for (auto p : markerTable) {
+        if (this->sense_) {
+            if (str::Eq(p->keyword, keyword)) { return p; }
+        } else {
+            if (str::EqI(p->keyword, keyword)) { return p; }
+        }
+    }
+    MarkerNode* marker_node = new MarkerNode(tab_);
+    marker_node->keyword.SetCopy(keyword);
+    markerTable.Append(marker_node);
+    return marker_node;
+}
+
+size_t Markers::getMarkersByWord(const WCHAR* word, Vec<MarkerNode*>& result) {
+    return getMarkersByWord(strconv::WStrToUtf8(word), result);
+}
+
+size_t Markers::getMarkersByWord(const char* word, Vec<MarkerNode*>& result) {
+    size_t n = 0;
+    for (auto p : markerTable) {
+        for (auto w : p->words) {
+            if (this->sense_) {
+                if (str::Eq(w, word)) { result.Append(p); n++; break; }
+            } else {
+                if (str::EqI(w, word)) { result.Append(p); n++; break; }
+            }
+        }
+    }
+    return n;
+}
+
+size_t Markers::getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result) {
+    size_t n = 0;
+    for (auto p : markerTable) {
+        for (int i = 0; i < ts->result.len; ++i) {
+            Rect r = ts->result.rects[i];
+            for (Rect pr : p->rects) {
+                if (r == pr) {
+                    result.Append(p);
+                    n++;
+                    break;
+                }
+            }
+        }
+    }
+    return n;
+}
+
+size_t Markers::getMarkersByRect(Rect& r, Vec<MarkerNode*>& result, bool specified_object_only)
+{
+    size_t n = 0;
+    for (auto p : markerTable) {
+        if (specified_object_only && !isSelection(p->keyword)) {
+            continue;
+        }
+        for (Rect pr : p->rects) {
+            if (r == pr) {
+                result.Append(p);
+                n++;
+                break;
+            }
+        }
+    }
+    return n;
+}
+
+void Markers::setSelection(const char* keyword)
+{
+    if (str::EqI(keyword, "Net")) {
+        select_ |= 0x01;
+    } else if (str::EqI(keyword, "Cell")) {
+        select_ |= 0x02;
+    } else if (str::EqI(keyword, "Pin")) {
+        select_ |= 0x04;
+    }
+}
+
+void Markers::unsetSelection(const char* keyword)
+{
+    if (str::EqI(keyword, "Net")) {
+        select_ &= ~0x01;
+    } else if (str::EqI(keyword, "Cell")) {
+        select_ &= ~0x02;
+    } else if (str::EqI(keyword, "Pin")) {
+        select_ &= ~0x04;
+    }
+}
+
+bool Markers::isSelection(const char* keyword)
+{
+    if (str::EqI(keyword, "Net")) {
+        return select_ & 0x01;
+    } else if (str::EqI(keyword, "Cell")) {
+        return select_ & 0x02;
+    } else if (str::EqI(keyword, "Pin")) {
+        return select_ & 0x04;
+    }
+    return false;
+}
+
+const char* Markers::getCellsInPage(const int pageNo) {
+    for (PageInCell& c : page_in_cell_) {
+        if (c.pageNo == pageNo) {
+            return c.cells.Get();
+        }
+    }
+    str::Str cellsInPage;
+    for (auto m : markerTable) {
+        if (this->sense_) {
+            if (m->keyword != nullptr && str::Eq(m->keyword, "Cell")) {
+                StrVec cellVect;
+                m->getMarkWordsByPageNo(pageNo, cellVect);
+                for (auto c : cellVect) { cellsInPage.AppendFmt(", \"%s\"", c); }
+            }
+        } else {
+            if (m->keyword != nullptr && str::EqI(m->keyword, "Cell")) {
+                StrVec cellVect;
+                m->getMarkWordsByPageNo(pageNo, cellVect);
+                for (auto c : cellVect) { cellsInPage.AppendFmt(", \"%s\"", c); }
+            }
+        }
+    }
+    page_in_cell_.Append(PageInCell());
+    page_in_cell_.Last().pageNo = pageNo;
+    page_in_cell_.Last().cells = cellsInPage;
+    return page_in_cell_.Last().cells.Get();
 }
 
 static void SetSelectedWordToFindEdit(MainWindow*win,  StrVec& words) {
@@ -1242,12 +1278,14 @@ void SaveTextToFile(MainWindow* win, const char* fname) {
 //
 // =============================================================
 const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
+    bool FAST_MODE = true;
     WindowTab* tab = win->CurrentTab();
     DisplayModel* dm = tab->AsFixed();
     auto engine = dm->GetEngine();
     // ---------------------------------------------
     std::vector<WordBlock*> word_blocks;
     const char* sep = "\r\n";
+    TmpAllocator allocator;
     // ---------------------------------------------
     //StrVec markedWords;
     bool have_page_numbers = false;
@@ -1272,11 +1310,11 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
         if (wp != nullptr) {
             have_page_numbers = true;
             for (auto word : marker_node->words) {
-                const WCHAR* wsep = strconv::Utf8ToWStr(word);
+                const WCHAR* wsep = FAST_MODE ? strconv::Utf8ToWStr(word, (size_t)-1, &allocator) : strconv::Utf8ToWStr(word);
                 auto pages = word_block->add(wsep);
                 auto word_pages = (*wp)[std::wstring(wsep)];
                 for (auto pg = word_pages.begin(); pg != word_pages.end(); ++pg) {
-                    //logf("::  %s   %d\n", word, *pg);
+                    // logf("::  %s   %d\n", word, *pg);
                     TextSel* sel = dm->textSearch->FindFirst((*pg), wsep, nullptr, conti);
                     if (!sel) {
                         continue;
@@ -1294,25 +1332,33 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
                             marker_node->mark_words.Append(word);
                         }
                         dm->textSelection->CopySelection(dm->textSearch, conti);
-                        UpdateTextSelection(win, false);
+                        if (FAST_MODE) {
+                            win->showSelection = false;
+                            win->selectionMeasure = SizeF();
+                            delete tab->selectionOnPage;
+                            tab->selectionOnPage = SelectionOnPage::FromTextSelect(&dm->textSelection->result);
+                            win->showSelection = true;
+                        } else {
+                            UpdateTextSelection(win, false);
+                        }
                         conti = true;
                         sel = dm->textSearch->FindNext(nullptr, conti, true /* only in page */);
                     } while (sel);
 loop_break:
                     ;
                 }
-                str::Free(wsep);
+                if (!FAST_MODE) str::Free(wsep);
             }
             marker_node->setUserArea(nullptr);
             delete wp;
         } else {
             for (auto word : marker_node->words) {
                 //logf("::  %s\n", word);
-                const WCHAR* wsep = strconv::Utf8ToWStr(word);
+                const WCHAR* wsep = FAST_MODE ? strconv::Utf8ToWStr(word, (size_t)-1, &allocator) : strconv::Utf8ToWStr(word);
                 // TextSel* sel = dm->textSearch->FindFirst(1, strconv::Utf8ToWStr(word), nullptr, conti);
                 TextSel* sel = dm->textSearch->FindFirst(1, wsep, nullptr, conti);
                 if (!sel) {
-                    str::Free(wsep);
+                    if (!FAST_MODE) str::Free(wsep);
                     continue;
                 }
                 // if (!markedWords.Contains(word)) { markedWords.Append(word); }
@@ -1331,7 +1377,7 @@ loop_break:
                     conti = true;
                     sel = dm->textSearch->FindNext(nullptr, conti);
                 } while (sel);
-                str::Free(wsep);
+                if (!FAST_MODE) str::Free(wsep);
             }
         }
         // -- Create 'Annotation' for each page. -------------
@@ -1379,11 +1425,11 @@ loop_break:
     }
     logf("               : done\n");
     // ---------------------------------------------
-    if (save_as != nullptr and have_page_numbers == false) {
+    if (save_as != nullptr and have_page_numbers) {
         // { "Net": { "netname" : [page_no, ...],... 
         WCHAR* tmpFileW = ToWStrTemp(save_as);
         FILE* outFile = nullptr;
-        logf("base_MarkWords : 2 : \n");
+        logf("base_MarkWords : 2 : %s\n", save_as);
         errno_t err = _wfopen_s(&outFile, tmpFileW, L"wb");
         if (err == 0) {
             std::fputs("{\n", outFile);
@@ -1500,7 +1546,7 @@ char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, co
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep);
+    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep, (size_t)-1, &GLOBAL_CACHE_ALLOCATOR);
     int wsep_len = str::Len(wsep);
     str::WStr result;
     const WCHAR* begin = nullptr;
@@ -1552,7 +1598,7 @@ char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, co
             }
         }
     }
-    str::Free(wsep);
+    //str::Free(wsep);
     WCHAR* ws = result.Get();
     return ToUtf8(ws);
 }
@@ -1565,7 +1611,7 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, c
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep);
+    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep, (size_t)-1, &GLOBAL_CACHE_ALLOCATOR);
     str::WStr result;
     for (const WCHAR* src = pageText; *src; ) {
         if (*src == '\n') { ++src; continue; }
@@ -1579,7 +1625,7 @@ char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, c
         }
         src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers, true);
     }
-    str::Free(wsep);
+    //str::Free(wsep);
     WCHAR* ws = result.Get();
     return ToUtf8(ws);
 }
@@ -1593,7 +1639,7 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep);
+    const WCHAR* wsep = strconv::Utf8ToWStr(lineSep, (size_t)-1, &GLOBAL_CACHE_ALLOCATOR);
     str::WStr result;
     int radius = (regionI.dx < regionI.dy ?  regionI.dy : regionI.dx) / 2;
     float sqrr = pow(radius, 2);
@@ -1625,7 +1671,7 @@ char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, c
         if (sqrr <= pow(rect.x + rect.dx - cx, 2) + pow(rect.y + rect.dy - cy, 2)) {++src; continue;}
         src = SelectWordAt(dm, pageNo, pageText, coords, src, wsep, result, markers, true);
     }
-    str::Free(wsep);
+    //str::Free(wsep);
     WCHAR* ws = result.Get();
     return ToUtf8(ws);
 }
