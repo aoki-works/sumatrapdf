@@ -116,7 +116,7 @@ class Markers
     ~Markers();
   public:
     void sendSelectMessage(MainWindow* win, bool conti=false);
-    void parse(const char* fname);
+    void parse(const char* fname, bool& have_page_number);
   public:
     void selectWords(MainWindow* win, const char* keyword, StrVec& words);
     void selectWords(MainWindow* win, StrVec& words);

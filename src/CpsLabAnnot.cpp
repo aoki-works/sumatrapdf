@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <set>
 #include <vector>
+#include <iostream>
+#include <filesystem>
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
@@ -93,6 +95,7 @@ struct MarkFileParser : json::ValueVisitor {
     WindowTab* tab;
     Vec<MarkerNode*> markerTable;
     bool sensitive = false;
+    bool have_page_number = false;
     TmpAllocator allocator;
 
     MarkerNode* getMark(const char* keyword);
@@ -117,6 +120,11 @@ void MarkFileParser::Parse(const char* path, const bool sens) {
 }
 
 MarkerNode* MarkFileParser::getMark(const char* keyword) {
+    /*
+       {"Net" : .... }
+       {"Cell" : .... }
+       {"Pin" : .... }
+     */
     for(auto m : markerTable) {
         if (this->sensitive) {
             if (str::Eq(m->keyword.Get(), keyword)) { return m; }
@@ -131,7 +139,13 @@ MarkerNode* MarkFileParser::getMark(const char* keyword) {
 }
 
 bool MarkFileParser::mark_color(const char* path, const char* value) {
-    AutoFreeStr keyword;
+    /*
+        {"mark_color" : : {"Net": "xxx", "Cell": "xxx", "Pin": "xxx" }}
+        {"Net" : {"mark_color": "xx"}
+        {"Cell" : {"mark_color": "xx"}
+        {"Pin" : {"mark_color": "xx"}
+     */
+    AutoFreeStr keyword;    /* "Net"|"Cell"|"Pin" */
     const char* prop = str::Parse(path, "/%s/mark_color", &keyword);
     if (prop == nullptr) {
         prop = str::Parse(path, "/mark_color/%s", &keyword);
@@ -145,7 +159,13 @@ bool MarkFileParser::mark_color(const char* path, const char* value) {
 }
 
 bool MarkFileParser::select_color(const char* path, const char* value) {
-    AutoFreeStr keyword;
+    /*
+        {"select_color" : : {"Net": "xxx", "Cell": "xxx", "Pin": "xxx" }}
+        {"Net" : {"select_color": "xx"}
+        {"Cell" : {"select_color": "xx"}
+        {"Pin" : {"select_color": "xx"}
+     */
+    AutoFreeStr keyword;    /* "Net"|"Cell"|"Pin" */
     const char* prop = str::Parse(path, "/%s/select_color", &keyword);
     if (prop == nullptr) {
         prop = str::Parse(path, "/select_color/%s", &keyword);
@@ -159,7 +179,10 @@ bool MarkFileParser::select_color(const char* path, const char* value) {
 }
 
 bool MarkFileParser::words(const char* path, const char* value) {
-    AutoFreeStr keyword;
+    /*
+        "word": ["xx", "yy", "zz"]
+     */
+    AutoFreeStr keyword;    /* "Net"|"Cell"|"Pin" */
     int idx;
     const char* prop = str::Parse(path, "/%s/word[%d]", &keyword, &idx);
     if (prop == nullptr) {
@@ -190,9 +213,14 @@ bool MarkFileParser::words(const char* path, const char* value) {
 }
 
 bool MarkFileParser::pages(const char* path, const char* value) {
-    AutoFreeStr keyword;
-    AutoFreeStr word;
-    int idx;
+    /*
+        "Net": {"xxx" : [1,2,3], "yyy" : [1,3,4}...}
+        "Pin": {"xxx" : [1,2,3], "yyy" : [1,3,4}...}
+        "Cell": {"xxx" : [1,2,3], "yyy" : [1,3,4}...}
+     */
+    AutoFreeStr keyword;    /* "Net"|"Cell"|"Pin" */
+    AutoFreeStr word;       /* net_name, cell_name, pin_name */
+    int idx;                /* page number */
     const char* prop = str::Parse(path, "/%s/%s[%d]", &keyword, &word, &idx);
     if (prop == nullptr) {
         return false;
@@ -211,6 +239,7 @@ bool MarkFileParser::pages(const char* path, const char* value) {
         mark->words.Append(word.Get());
     }
     (*word_pages)[name].push_back(page);
+    this->have_page_number = true;
     return true;
 }
 
@@ -543,7 +572,7 @@ void Markers::sendSelectMessage(MainWindow* win, bool conti) {
     }
 }
 
-void Markers::parse(const char* json_file)   // read marker setup file...
+void Markers::parse(const char* json_file, bool& have_page_number)   // read marker setup file...
 {
     MarkFileParser  mfp;
     mfp.tab = tab_;
@@ -552,6 +581,7 @@ void Markers::parse(const char* json_file)   // read marker setup file...
     for(auto m : mfp.markerTable) {
         markerTable.Append(m);
     }
+    have_page_number = mfp.have_page_number;
     page_in_cell_.Reset();
 }
 
@@ -1288,13 +1318,13 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
     TmpAllocator allocator;
     // ---------------------------------------------
     //StrVec markedWords;
-    bool have_page_numbers = false;
+    //bool have_page_numbers = false;
     dm->textSearch->wordSearch = true;
     char* first_word = nullptr;
     logf("base_MarkWords : 1  %s\n", save_as);
     for (auto marker_node : tab->markers->markerTable) {
         str::Str annot_key_content("@CPSLabMark:");
-        const char* keyword = marker_node->keyword.Get();
+        const char* keyword = marker_node->keyword.Get();   /* Net|Cell|Pin */
         auto word_block = new WordBlock(marker_node);
         word_blocks.push_back(word_block);
         // -------------------------------------
@@ -1308,7 +1338,7 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
         bool conti = false;
         auto wp = static_cast<std::map<std::wstring, std::vector<int> >*>(marker_node->userArea());
         if (wp != nullptr) {
-            have_page_numbers = true;
+            // have_page_numbers = true;
             for (auto word : marker_node->words) {
                 const WCHAR* wsep = FAST_MODE ? strconv::Utf8ToWStr(word, (size_t)-1, &allocator) : strconv::Utf8ToWStr(word);
                 auto pages = word_block->add(wsep);
@@ -1425,7 +1455,7 @@ loop_break:
     }
     logf("               : done\n");
     // ---------------------------------------------
-    if (save_as != nullptr and have_page_numbers) {
+    if (save_as != nullptr /* && have_page_numbers */ ) {
         // { "Net": { "netname" : [page_no, ...],... 
         WCHAR* tmpFileW = ToWStrTemp(save_as);
         FILE* outFile = nullptr;
@@ -1479,7 +1509,7 @@ loop_break:
                 }
                 std::fprintf(outFile, "\n  }");
             }
-            std::fputs("n}\n", outFile);
+            std::fputs("\n}\n", outFile);
         }
         std::fclose(outFile);
         logf("               : done\n");
@@ -1511,12 +1541,17 @@ const char* MarkWords(MainWindow* win, const char* json_file) {
         char dir[_MAX_DIR];
         char fname[_MAX_FNAME];
         char ext[_MAX_EXT];
+        bool have_page_number;
         _splitpath(json_file, drive, dir, fname, ext);
         std::string save_as = std::string(drive) + std::string(dir) + "reply_" + std::string(fname) + std::string(ext);
-        logf("MarkWords : parse\n");
-        tab->markers->parse(json_file); //  read setup-file.
+        logf("MarkWords : parse : %s\n", json_file);
+        tab->markers->parse(json_file, have_page_number); //  read setup-file.
         logf("          : done\n");
-        return base_MarkWords(win, save_as.c_str());
+        if (have_page_number) {
+            return base_MarkWords(win);
+        } else {
+            return base_MarkWords(win, save_as.c_str());
+        }
         //return base_MarkWords(win);
     } else {
         return base_MarkWords(win);
