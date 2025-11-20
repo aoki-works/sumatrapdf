@@ -9,6 +9,10 @@
 #include <vector>
 #include <iostream>
 #include <filesystem>
+#include <cwctype>
+#include <string>
+#include <codecvt>
+#include <locale>
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
@@ -81,6 +85,34 @@ struct CacheAllocator : Allocator {
     CacheAllocator& operator=(const CacheAllocator&) = delete;
 };
 */
+// =============================================================
+//
+// =============================================================
+std::wstring to_upper(const std::wstring& input, bool debug=false) {
+    std::wstring result;
+    result.reserve(input.size());   // for memory
+    for (wchar_t ch : input) {
+        result += std::towupper(ch);
+    }
+    if (debug) {
+        if (input != result) {
+            logf(" %ls -> %ls \n", input.c_str(), result.c_str());
+        } else {
+            logf(" %ls => %ls \n", input.c_str(), result.c_str());
+        }
+    }
+    return result;
+}
+
+
+bool wstring_eq(const std::wstring& wideStr, const char* charStr) {
+    // char[] ‚ð std::wstring ‚É•ÏŠ·
+    size_t len = std::strlen(charStr);
+    std::wstring convertedStr(len, L'\0');
+    std::mbstowcs(&convertedStr[0], charStr, len);
+    // ”äŠr
+    return wideStr == convertedStr;
+}
 
 // =============================================================
 //
@@ -193,6 +225,9 @@ bool MarkFileParser::words(const char* path, const char* value) {
     if (GetWordPagePool != nullptr) {
         WCHAR* wsep = strconv::Utf8ToWStr(value, (size_t)-1, &this->allocator);
         std::wstring name = wsep;
+        if (!this->sensitive) {
+            name = to_upper(name);
+        }
         // str::Free(wsep);
         if (GetWordPagePool->contains(name)) {
             auto word_pages = static_cast<std::map<std::wstring, std::vector<int> >*>(mark->userArea());
@@ -228,6 +263,9 @@ bool MarkFileParser::pages(const char* path, const char* value) {
     MarkerNode* mark = getMark(keyword.Get());
     WCHAR* wsep = strconv::Utf8ToWStr(word.Get(), (size_t)-1, &this->allocator);
     std::wstring name = wsep;
+    if (!this->sensitive) {
+        name = to_upper(name);
+    }
     // str::Free(wsep);
     int page = std::atoi(value);
     auto word_pages = static_cast<std::map<std::wstring, std::vector<int> >*>(mark->userArea());
@@ -1244,6 +1282,9 @@ void SaveWordsToFile(MainWindow* win, const char* fname) {
             //char* w = ToUtf8(begin, end - begin);
             word_vec.Append(w);
             auto ws = std::wstring(begin, end-begin);
+            if (!sens) {
+                ws = to_upper(ws);
+            }
             (*GetWordPagePool)[ws].insert(pageNo);
             //str::Free(w);
             src = end;
@@ -1322,9 +1363,11 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
     dm->textSearch->wordSearch = true;
     char* first_word = nullptr;
     logf("base_MarkWords : 1  %s\n", save_as);
+    logf("casesense : %d\n", dm->textSearch->GetSensitive());
     for (auto marker_node : tab->markers->markerTable) {
         str::Str annot_key_content("@CPSLabMark:");
         const char* keyword = marker_node->keyword.Get();   /* Net|Cell|Pin */
+        std::string com_key = keyword;
         auto word_block = new WordBlock(marker_node);
         word_blocks.push_back(word_block);
         // -------------------------------------
@@ -1340,13 +1383,27 @@ const char* base_MarkWords(MainWindow* win, const char* save_as=nullptr) {
         if (wp != nullptr) {
             // have_page_numbers = true;
             for (auto word : marker_node->words) {
+                bool debug = false;
+                std::string comp = word;
+                /*if (comp == "MCPU_DDR4_CH1_CS1AN" || comp == "MCPU_DDR4_CH1_CS1BN") {
+                    logf("  hit ... ::  %s   :: \n", word);
+                    debug = true;
+                }*/
                 const WCHAR* wsep = FAST_MODE ? strconv::Utf8ToWStr(word, (size_t)-1, &allocator) : strconv::Utf8ToWStr(word);
                 auto pages = word_block->add(wsep);
-                auto word_pages = (*wp)[std::wstring(wsep)];
+                std::wstring name = wsep;
+                if (!dm->textSearch->GetSensitive()) {
+                    name = to_upper(name);
+                }
+                auto word_pages = (*wp)[name];
+                if (debug && word_pages.empty()) {
+                    logf("  not found empty ... ... ::  %s   :: \n", word);
+                }
                 for (auto pg = word_pages.begin(); pg != word_pages.end(); ++pg) {
                     // logf("::  %s   %d\n", word, *pg);
                     TextSel* sel = dm->textSearch->FindFirst((*pg), wsep, nullptr, conti);
                     if (!sel) {
+                        if (debug) logf("not found ::  %s   %d\n", word, *pg);
                         continue;
                     }
                     if (first_word == nullptr) {
