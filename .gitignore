@@ -57,3 +57,6 @@ nul
 docs/scratch.txt
 build.log
 bin/zopflipng.exe
+
+# CPS Lab
+.claude/worktrees/
