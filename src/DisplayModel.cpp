@@ -62,7 +62,6 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
-#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -313,14 +312,17 @@ DisplayModel::DisplayModel(EngineBase* engine, DocControllerCallback* cb) : DocC
 }
 
 DisplayModel::~DisplayModel() {
-    dontRenderFlag = true;
-    cb->CleanUp(this);
+    logf("~DisplayModel: 0x%p\n", this);
+    pauseRendering = true;
+    if (cb) {
+        cb->CleanUp(this);
+    }
 
     delete pdfSync;
     delete textSearch;
     delete textSelection;
     delete textCache;
-    engine->Release();
+    SafeEngineRelease(&engine);
     free(pagesInfo);
 }
 
@@ -601,7 +603,7 @@ void DisplayModel::CalcZoomReal(float newZoomVirtual) {
             if (PageShown(pageNo)) {
                 float zoom = ZoomRealFromVirtualForPage(newZoomVirtual, pageNo);
                 PageInfo* pageInfo = GetPageInfo(pageNo);
-                ReportIf(zoom < 0.01f);
+                ReportDebugIf(zoom < 0.01f);
                 pageInfo->zoomReal = zoom;
                 if (minZoom > zoom) {
                     minZoom = zoom;
@@ -973,7 +975,7 @@ static float getZoomSafe(DisplayModel* dm, int pageNo, const PageInfo* pageInfo)
         "getZoomSafe: invalid zoom in doc: %s\npageNo: %d\npageInfo->zoomReal\n%.2f\ndm->zoomReal: %.2f\n"
         "dm->zoomVirtual: %.2f\n",
         name, pageNo, zoom, pageInfo->zoomReal, dm->zoomReal, dm->zoomVirtual);
-    ReportIf(true);
+    ReportDebugIf(true);
 
     if (dm->zoomReal > 0) {
         return dm->zoomReal;
@@ -1141,14 +1143,13 @@ void DisplayModel::RenderVisibleParts() {
         }
     }
 
-    // TODO: why the hell this is requesting pages again?
-#if 0
-    // request the visible pages last so that the above requested
-    // invisible pages are not rendered if the queue fills up
+    // re-request the visible pages again so:
+    // * they get picked first by rendering thread
+    // * if queue fills up, the invisible pages from predictive rendering
+    //   wont be rendered
     for (int pageNo = lastVisiblePage; pageNo >= firstVisiblePage; pageNo--) {
         cb->RequestRendering(pageNo);
     }
-#endif
 }
 
 void DisplayModel::SetViewPortSize(Size newViewPortSize) {
@@ -1180,6 +1181,9 @@ RectF DisplayModel::GetContentBox(int pageNo) const {
     RectF cbox{};
     // we cache the contentBox
     PageInfo* pageInfo = GetPageInfo(pageNo);
+    if (!pageInfo) {
+        return cbox;
+    }
     if (pageInfo->contentBox.IsEmpty()) {
         pageInfo->contentBox = engine->PageContentBox(pageNo);
     }
@@ -1389,6 +1393,9 @@ bool DisplayModel::GoToPrevPage(int scrollY) {
     }
 
     PageInfo* pageInfo = GetPageInfo(currPageNo);
+    if (!pageInfo) {
+        return false;
+    }
     if (zoomVirtual == kZoomFitContent && -pageInfo->pageOnScreen.y <= top.y) {
         scrollY = 0; // continue, even though the current page isn't fully visible
     } else if (std::max(-pageInfo->pageOnScreen.y, 0) > scrollY && IsContinuous(GetDisplayMode())) {
@@ -1596,32 +1603,36 @@ float DisplayModel::GetZoomVirtual(bool absolute) const {
     return zoomVirtual;
 }
 
-float DisplayModel::GetNextZoomStep(float towardsLevel) const {
-    if (gGlobalPrefs->zoomIncrement > 0) {
-        float zoom = GetZoomVirtual(true);
-        float factor = (gGlobalPrefs->zoomIncrement / 100 + 1);
-        if (zoom < towardsLevel) {
-            return std::min(zoom * factor, towardsLevel);
-        }
-        if (zoom > towardsLevel) {
-            return std::max(zoom / factor, towardsLevel);
-        }
-        return zoom;
+bool MaybeGetNextZoomByIncrement(float* currZoomInOut, float towardsLevel) {
+    auto zoomIncrPerc = gGlobalPrefs->zoomIncrement;
+    if (zoomIncrPerc <= 1) {
+        return false;
     }
+    float factor = (zoomIncrPerc / 100) + 1;
+    float currZoom = *currZoomInOut;
+    float newZoom = currZoom;
+    if (currZoom < towardsLevel) {
+        newZoom = std::min(currZoom * factor, towardsLevel);
+    } else if (currZoom > towardsLevel) {
+        newZoom = std::max(currZoom / factor, towardsLevel);
+    }
+    *currZoomInOut = newZoom;
+    return true;
+}
 
-    // differences to Adobe Reader: starts at 8.33 (instead of 1 and 6.25)
-    // and has four additional intermediary zoom levels ("added")
-    // clang-format off
-    static float defaultZooms2[] = {
-        8.33f, 12.5f, 18 /* added */, 25, 33.33f, 50, 66.67f, 75,
-        100, 125, 150, 200, 300, 400, 600, 800, 1000 /* added */,
-        1200, 1600, 2000 /* added */, 2400, 3200, 4800 /* added */, 6400
-    };
-    // clang-format on
-    // ReportIf(defaultZooms[0] != kZoomMin || defaultZooms[dimof(defaultZooms)-1] != kZoomMax);
+// differences to Adobe Reader: starts at 8.33 (instead of 1 and 6.25)
+// and has four additional intermediary zoom levels ("added")
+// clang-format off
+static float defaultZoomLevels[] = {
+    8.33f, 12.5f, 18 /* added */, 25, 33.33f, 50, 66.67f, 75,
+    100, 125, 150, 200, 300, 400, 600, 800, 1000 /* added */,
+    1200, 1600, 2000 /* added */, 2400, 3200, 4800 /* added */, 6400
+};
+// clang-format on
 
-    float* zoomLevels = defaultZooms2;
-    int nZoomLevels = dimofi(defaultZooms2);
+float* GetDefaultZoomLevels(int* nZoomLevelsOut) {
+    float* zoomLevels = defaultZoomLevels;
+    int nZoomLevels = dimofi(defaultZoomLevels);
 
     int nCustomZooms = gGlobalPrefs->zoomLevels->Size();
     if (nCustomZooms > 0) {
@@ -1630,11 +1641,24 @@ float DisplayModel::GetNextZoomStep(float towardsLevel) const {
         zoomLevels = gGlobalPrefs->zoomLevels->LendData();
         nZoomLevels = nCustomZooms;
     }
+    *nZoomLevelsOut = nZoomLevels;
+    return zoomLevels;
+}
 
+float DisplayModel::GetNextZoomStep(float towardsLevel) const {
     float currZoom = GetZoomVirtual(true);
     if (currZoom == towardsLevel) {
         return towardsLevel;
     }
+
+    if (MaybeGetNextZoomByIncrement(&currZoom, towardsLevel)) {
+        return currZoom;
+    }
+
+    // ReportIf(defaultZooms[0] != kZoomMin || defaultZooms[dimof(defaultZooms)-1] != kZoomMax);
+
+    int nZoomLevels;
+    float* zoomLevels = GetDefaultZoomLevels(&nZoomLevels);
 
     float pageZoom = (float)HUGE_VAL, widthZoom = (float)HUGE_VAL;
     for (int pageNo = 1; pageNo <= PageCount(); pageNo++) {
@@ -1706,7 +1730,7 @@ char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-	/*****************************************
+
     str::WStr result;
     Rect regionI = region.Round();
     for (const WCHAR* src = pageText; *src; src++) {
@@ -1723,16 +1747,6 @@ char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
 
     WCHAR* ws = result.Get();
     return ToUtf8(ws);
-	*********************************************/
-    char* result;
-    Rect regionI = region.Round();
-    if (gGlobalPrefs->circularSelectionRegion) {
-        result = cpslab::GetWordsInCircle(this, pageNo, regionI);
-
-    } else {
-        result = cpslab::GetWordsInRegion(this, pageNo, regionI);
-    }
-    return result;
 }
 
 // returns true if it was necessary to scroll the display (horizontally or vertically)

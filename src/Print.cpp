@@ -1,10 +1,11 @@
-/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2025 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/FileUtil.h"
 #include "utils/UITask.h"
+#include "utils/ThreadUtil.h"
 #include "utils/WinUtil.h"
 
 #include "wingui/UIModels.h"
@@ -37,9 +38,7 @@ class AbortCookieManager {
   public:
     AbortCookie* cookie = nullptr;
 
-    AbortCookieManager() {
-        InitializeCriticalSection(&cookieAccess);
-    }
+    AbortCookieManager() { InitializeCriticalSection(&cookieAccess); }
     ~AbortCookieManager() {
         Clear();
         DeleteCriticalSection(&cookieAccess);
@@ -69,7 +68,7 @@ struct PrintData {
     Vec<SelectionOnPage> sel;   // empty when printing a page range
     Print_Advanced_Data advData;
     int rotation = 0;
-    ProgressUpdateUI* progressUI = nullptr;
+    ProgressUpdateCb progressCb;
     AbortCookieManager* abortCookie = nullptr;
     bool failedEngineClone = false;
 
@@ -95,7 +94,7 @@ struct PrintData {
 
     ~PrintData() {
         delete printer;
-        engine->Release();
+        SafeEngineRelease(&engine);
     }
 };
 
@@ -284,7 +283,7 @@ static bool PrintToDevice(const PrintData& pd) {
     }
 
     logf("PrintToDevice: printer: '%s', file: '%s'\n", pd.printer->name, pd.engine->FilePath());
-    auto progressUI = pd.progressUI;
+    auto progressCb = pd.progressCb;
     auto abortCookie = pd.abortCookie;
     int res;
 
@@ -333,9 +332,7 @@ static bool PrintToDevice(const PrintData& pd) {
         return false;
     }
 
-    if (progressUI) {
-        progressUI->UpdateProgress(current, total);
-    }
+    UpdateProgress(progressCb, current, total);
 
     auto devMode = pd.printer->devMode;
     // http://blogs.msdn.com/b/oldnewthing/archive/2012/11/09/10367057.aspx
@@ -395,9 +392,7 @@ static bool PrintToDevice(const PrintData& pd) {
                 continue;
             }
 
-            if (progressUI) {
-                progressUI->UpdateProgress(current, total);
-            }
+            UpdateProgress(progressCb, current, total);
 
             StartPage(hdc);
 
@@ -443,14 +438,14 @@ static bool PrintToDevice(const PrintData& pd) {
                     }
                     delete bmp;
                     shrink *= 2;
-                } while (!ok && shrink < 32 && !(progressUI && progressUI->WasCanceled()));
+                } while (!ok && shrink < 32 && !WasCanceled(progressCb));
             }
             // TODO: abort if !ok?
 
             res = EndPage(hdc);
-            if (res <= 0 || (progressUI && progressUI->WasCanceled())) {
-                bool wasCancelled = progressUI && progressUI->WasCanceled();
-                logf("PrintToDevice: EndPage() failed with %d or wasCancelled: %d\n", res, (int)wasCancelled);
+            bool wasCanceled = WasCanceled(progressCb);
+            if (res <= 0 || wasCanceled) {
+                logf("PrintToDevice: EndPage() failed with %d or wasCanceled: %d\n", res, (int)wasCanceled);
                 AbortDoc(hdc);
                 return false;
             }
@@ -473,9 +468,7 @@ static bool PrintToDevice(const PrintData& pd) {
                 (PrintRangeAdv::Odd == pd.advData.range && pageNo % 2 == 0)) {
                 continue;
             }
-            if (progressUI) {
-                progressUI->UpdateProgress(current, total);
-            }
+            UpdateProgress(progressCb, current, total);
 
             res = StartPage(hdc);
             if (res <= 0) {
@@ -558,13 +551,13 @@ static bool PrintToDevice(const PrintData& pd) {
                 }
                 delete bmp;
                 shrink *= 2;
-            } while (!ok && shrink < 32 && !(progressUI && progressUI->WasCanceled()));
+            } while (!ok && shrink < 32 && !WasCanceled(progressCb));
             // TODO: abort if !ok?
 
             res = EndPage(hdc);
-            if (res <= 0 || (progressUI && progressUI->WasCanceled())) {
-                bool wasCancelled = progressUI && progressUI->WasCanceled();
-                logf("PrintToDevice: EndPage() failed with %d or wasCancelled: %d\n", res, (int)wasCancelled);
+            bool wasCanceled = WasCanceled(progressCb);
+            if (res <= 0 || wasCanceled) {
+                logf("PrintToDevice: EndPage() failed with %d or wasCanceled: %d\n", res, (int)wasCanceled);
                 AbortDoc(hdc);
                 return false;
             }
@@ -588,14 +581,16 @@ struct UpdatePrintProgressData {
 };
 
 static void UpdatePrintProgress(UpdatePrintProgressData* d) {
-    UpdateNotificationProgress(d->wnd, d->current, d->total);
+    int perc = CalcPerc(d->current, d->total);
+    TempStr msg = str::FormatTemp(_TRA("Printing page %d of %d..."), d->current, d->total);
+    UpdateNotificationProgress(d->wnd, msg, perc);
     delete d;
 }
 
 class PrintThreadData;
 void RemovePrintNotif(PrintThreadData* self, NotificationWnd*);
 
-class PrintThreadData : public ProgressUpdateUI {
+class PrintThreadData {
   public:
     NotificationWnd* wnd = nullptr;
     AbortCookieManager cookie;
@@ -623,7 +618,6 @@ class PrintThreadData : public ProgressUpdateUI {
         args.timeoutMs = 0;
         auto fn = MkFunc1(RemovePrintNotif, this);
         args.onRemoved = fn;
-        args.progressMsg = _TRA("Printing page %d of %d...");
         // don't use a groupId for this notification so that
         // multiple printing notifications could coexist between tabs
         args.groupId = nullptr;
@@ -632,24 +626,22 @@ class PrintThreadData : public ProgressUpdateUI {
     PrintThreadData(PrintThreadData const&) = delete;
     PrintThreadData& operator=(PrintThreadData const&) = delete;
 
-    ~PrintThreadData() override {
+    ~PrintThreadData() {
         CloseHandle(thread);
         delete data;
         RemovePrintNotification();
     }
 
-    void UpdateProgress(int current, int total) override {
+    void UpdateProgress(int current, int total) {
         auto data = new UpdatePrintProgressData;
         data->wnd = wnd;
         data->current = current;
         data->total = total;
         auto fn = MkFunc0<UpdatePrintProgressData>(UpdatePrintProgress, data);
-        uitask::Post(fn, "TaskPrintUpdateProgress");
+        uitask::Post(fn, nullptr);
     }
 
-    bool WasCanceled() override {
-        return isCanceled || !IsMainWindowValid(win) || win->printCanceled;
-    }
+    bool WasCanceled() { return isCanceled || !IsMainWindowValid(win) || win->printCanceled; }
 };
 
 void RemovePrintNotif(PrintThreadData* self, NotificationWnd*) {
@@ -671,37 +663,46 @@ static void DeletePrinterThread(DeletePrinterThreadData* d) {
     delete d;
 }
 
-static DWORD WINAPI PrintThread(void* d) {
-    PrintThreadData* threadData = (PrintThreadData*)d;
-    MainWindow* win = threadData->win;
+static void UpdatePrintProgress(PrintThreadData* ftd, ProgressUpdateData* data) {
+    if (data->wasCancelled) {
+        bool wasCancelled = ftd->WasCanceled();
+        *data->wasCancelled = wasCancelled;
+        return;
+    }
+    ftd->UpdateProgress(data->current, data->total);
+}
+
+static void PrintThread(PrintThreadData* ptd) {
+    MainWindow* win = ptd->win;
     // wait for PrintToDeviceOnThread to return so that we
     // close the correct handle to the current printing thread
     while (!win->printThread) {
         Sleep(1);
     }
 
-    HANDLE thread = threadData->thread = win->printThread;
+    HANDLE thread = ptd->thread = win->printThread;
 
-    PrintData* pd = threadData->data;
-    pd->progressUI = threadData;
-    pd->abortCookie = &threadData->cookie;
+    PrintData* pd = ptd->data;
+    pd->progressCb = MkFunc1<PrintThreadData, ProgressUpdateData*>(UpdatePrintProgress, ptd);
+    ;
+    pd->abortCookie = &ptd->cookie;
     PrintToDevice(*pd);
 
     auto data = new DeletePrinterThreadData;
     data->win = win;
     data->thread = thread;
-    data->threadData = threadData;
+    data->threadData = ptd;
     auto fn = MkFunc0<DeletePrinterThreadData>(DeletePrinterThread, data);
     uitask::Post(fn, "PrintDeleteThread");
     DestroyTempAllocator();
-    return 0;
 }
 
 static void PrintToDeviceOnThread(MainWindow* win, PrintData* data) {
-    ReportIf(win->printThread);
+    AbortPrinting(win);
     PrintThreadData* threadData = new PrintThreadData(win, data);
     win->printThread = nullptr;
-    win->printThread = CreateThread(nullptr, 0, PrintThread, threadData, 0, nullptr);
+    auto fn = MkFunc0(PrintThread, threadData);
+    win->printThread = StartThread(fn, "PrintThread");
 }
 
 void AbortPrinting(MainWindow* win) {
@@ -746,7 +747,9 @@ So far have tested printing from XP to
  - HP Deskjet D4160
  - Lexmark Z515 inkjet, which should cover most bases.
 */
-enum { MAXPAGERANGES = 10 };
+enum {
+    MAXPAGERANGES = 10
+};
 void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     // we remember some printer settings per process
     static ScopedMem<DEVMODE> defaultDevMode;
@@ -776,10 +779,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     }
 
     if (win->AsChm()) {
-        // the Print dialog allows access to the file system, so fall back
-        // to printing the entire document without dialog if that isn't desired
-        bool showUI = CanAccessDisk();
-        win->AsChm()->PrintCurrentPage(showUI);
+        win->AsChm()->PrintCurrentPage(true);
         return;
     }
     DisplayModel* dm = win->AsFixed();
@@ -788,6 +788,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
         return;
     }
     auto engine = dm->GetEngine();
+    EngineBase* pinnedEngine = nullptr;
     ReportIf(!engine);
     if (!engine) {
         return;
@@ -811,13 +812,6 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
         }
     }
     AbortPrinting(win);
-
-    // the Print dialog allows access to the file system, so fall back
-    // to printing the entire document without dialog if that isn't desired
-    if (!CanAccessDisk()) {
-        PrintFile2(engine);
-        return;
-    }
 
     PRINTDLGEXW pdex{};
     pdex.lStructSize = sizeof(PRINTDLGEXW);
@@ -853,6 +847,16 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     }
 
     HRESULT res = PrintDlgExW(&pdex);
+
+    // PrintDlgExW pumps messages, so the window may have been closed/destroyed while the dialog was open
+    if (!IsMainWindowValid(win)) {
+        logf("PrintCurrentFile: window closed during PrintDlgEx\n");
+        free(ppr);
+        GlobalFree(pdex.hDevMode);
+        GlobalFree(pdex.hDevNames);
+        return;
+    }
+
     if (res != S_OK) {
         logf("PrintCurrentFile: PrintDlgEx failed\n");
         MessageBoxWarning(win->hwndFrame, _TRA("Couldn't initialize printer"), _TRA("Printing problem."));
@@ -862,6 +866,20 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
         // it's cancel or apply so silently ignore as it's not an error
         goto Exit;
     }
+
+    // re-validate after modal dialog - tab/document may have changed while dialog was open
+    dm = win->AsFixed();
+    if (!dm) {
+        goto Exit;
+    }
+    engine = dm->GetEngine();
+    if (!engine) {
+        goto Exit;
+    }
+    pinnedEngine = engine;
+    pinnedEngine->AddRef();
+    rotation = dm->GetRotation();
+    nPages = dm->PageCount();
 
     if (!pdex.hDevNames) {
         MessageBoxWarning(win->hwndFrame, _TRA("Couldn't get printer name"), _TRA("Printing problem."));
@@ -906,7 +924,16 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     }
 
     if (pdex.Flags & PD_CURRENTPAGE) {
-        PRINTPAGERANGE pr = {(DWORD)dm->CurrentPageNo(), (DWORD)dm->CurrentPageNo()};
+        PRINTPAGERANGE pr;
+        if (pdex.nPageRanges == 1 && pdex.lpPageRanges[0].nFromPage == pdex.lpPageRanges[0].nToPage) {
+            // Unified Print Dialog (which doesn't have a "Current page" option)
+            // sets PD_CURRENTPAGE when the custom range contains one page (2 or 2-2)
+            // with nFromPage and nToPage equal to the chosen page.
+            // PD_PAGENUMS isn't set in that case.
+            pr = pdex.lpPageRanges[0];
+        } else {
+            pr = {(DWORD)dm->CurrentPageNo(), (DWORD)dm->CurrentPageNo()};
+        }
         ranges.Append(pr);
     } else if (win->CurrentTab()->selectionOnPage && (pdex.Flags & PD_SELECTION)) {
         printSelection = true;
@@ -920,8 +947,19 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
         }
     }
 
+    // re-validate engine - it may have been invalidated while message boxes were shown
+    dm = win->AsFixed();
+    if (!dm) {
+        goto Exit;
+    }
+    engine = dm->GetEngine();
+    if (!engine) {
+        goto Exit;
+    }
+
     sel = printSelection ? win->CurrentTab()->selectionOnPage : nullptr;
-    pd = new PrintData(engine, printer, ranges, advanced, rotation, sel);
+    pd = new PrintData(pinnedEngine, printer, ranges, advanced, rotation, sel);
+    SafeEngineRelease(&pinnedEngine);
 
     if (!waitForCompletion && !pd->failedEngineClone) {
         PrintToDeviceOnThread(win, pd);
@@ -931,6 +969,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     }
 
 Exit:
+    SafeEngineRelease(&pinnedEngine);
     free(ppr);
     GlobalFree(pdex.hDevNames);
     GlobalFree(pdex.hDevMode);
@@ -1077,7 +1116,11 @@ static short GetPaperByName(const WCHAR* papername) {
 // wantedName can be a paper name, like "A6" or number for DMPAPER_* contstants like DMPAPER_LETTER
 static short GetPaperByName(Printer* printer, const char* wantedName) {
     auto devMode = printer->devMode;
-    ReportIf(!(devMode->dmFields & DM_PAPERSIZE));
+    // TODO: seen in crash report with cmd-line:
+    //  -print-to KM-202MD -print-settings "paper=76mm x 130mm" foo.pdf
+    // Note that: 76mm x 130mm is not valid
+    // Note: not sure what this was meant to check
+    // ReportIf(!(devMode->dmFields & DM_PAPERSIZE));
     if (!(devMode->dmFields & DM_PAPERSIZE)) {
         return devMode->dmPaperSize;
     }
@@ -1108,7 +1151,6 @@ static short GetPaperKind(const char* kindName) {
 
 static short GetPaperSourceByName(Printer* printer, const char* binName) {
     auto devMode = printer->devMode;
-    ReportIf(!(devMode->dmFields & DM_DEFAULTSOURCE));
     if (!(devMode->dmFields & DM_DEFAULTSOURCE)) {
         return devMode->dmDefaultSource;
     }
@@ -1308,7 +1350,7 @@ bool PrintFile(const char* fileName, char* printerName, bool displayErrors, cons
         return false;
     }
     bool ok = PrintFile2(engine, printerName, displayErrors, settings);
-    engine->Release();
+    SafeEngineRelease(&engine);
     logfa("PrintFile: finished ok\n");
     return ok;
 }

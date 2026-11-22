@@ -26,6 +26,7 @@
 
 #include "Settings.h"
 #include "DisplayMode.h"
+#include "DocProperties.h"
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
@@ -68,8 +69,10 @@
 #include "Installer.h"
 #include "ExternalViewers.h"
 #include "AppColors.h"
+#include "PreviewPipe.h"
 #include "Theme.h"
-#include "CpsLabAnnot.h"
+#include "DarkModeSubclass.h"
+#include "CommandPalette.h"
 
 #include "utils/Log.h"
 
@@ -78,7 +81,7 @@ static NO_INLINE bool MaybeMakePluginWindow(MainWindow* win, HWND hwndParent) {
     if (!hwndParent) {
         return true;
     }
-    logfa("MakePluginWindow: win: 0x%p, hwndParent: 0x%x (isWindow: %d), gPluginURL: %s\n", win, hwndParent,
+    logfa("MakePluginWindow: win: 0x%p, hwndParent: 0x%p (isWindow: %d), gPluginURL: %s\n", win, hwndParent,
           (int)IsWindow(hwndParent), gPluginURL ? gPluginURL : "<nulL>");
     ReportIf(!gPluginMode);
 
@@ -101,7 +104,7 @@ static NO_INLINE bool MaybeMakePluginWindow(MainWindow* win, HWND hwndParent) {
     UpdateWindow(hwndFrame);
 
     // from here on, we depend on the plugin's host to resize us
-    SetFocus(hwndFrame);
+    HwndSetFocus(hwndFrame);
     return true;
 }
 
@@ -144,8 +147,7 @@ static void SendMyselfDDE(const char* cmdA, HWND targetHwnd) {
         }
         // fall-through to DDEExecute if wasn't handled
     }
-    //DDEExecute(kSumatraDdeServer, kSumatraDdeTopic, cmd);
-    DDEExecute(cpslab::PDFSYNC_DDE_SERVICE, cpslab::PDFSYNC_DDE_TOPIC, cmd);
+    DDEExecute(kSumatraDdeServer, kSumatraDdeTopic, cmd);
 }
 
 // delegate file opening to a previously running instance by sending a DDE message
@@ -188,7 +190,7 @@ static void OpenUsingDDE(HWND targetHwnd, const char* path, Flags& i, bool isFir
 }
 
 static void FlagsEnterFullscreen(const Flags& flags, MainWindow* win) {
-    if (!win) {
+    if (!win || !win->IsDocLoaded()) {
         return;
     }
     if (flags.enterPresentation || flags.enterFullScreen) {
@@ -222,7 +224,7 @@ static void MaybeStartSearch(MainWindow* win, const char* searchTerm) {
     HwndSetText(win->hwndFindEdit, searchTerm);
     bool wasModified = true;
     bool showProgress = true;
-    FindTextOnThread(win, TextSearchDirection::Forward, searchTerm, wasModified, showProgress);
+    FindTextOnThread(win, TextSearch::Direction::Forward, searchTerm, wasModified, showProgress);
 }
 
 static MainWindow* LoadOnStartup(const char* filePath, const Flags& flags, bool isFirstWin) {
@@ -395,19 +397,12 @@ static bool SetupPluginMode(Flags& i) {
     return true;
 }
 
-static void SetupCrashHandler() {
-    TempStr symDir = GetCrashInfoDirTemp();
-    TempStr crashDumpPath = path::JoinTemp(symDir, "sumatrapdfcrash.dmp");
-    TempStr crashFilePath = path::JoinTemp(symDir, "sumatrapdfcrash.txt");
-    InstallCrashHandler(crashDumpPath, crashFilePath, symDir);
-}
-
 static HWND FindPrevInstWindow(HANDLE* hMutex) {
-    // create a unique identifier for this executable
+    // create a unique identifier for this executable and appdata combination
     // (allows independent side-by-side installations)
-    TempStr exePath = GetExePathTemp();
-    str::ToLowerInPlace(exePath);
-    u32 hash = MurmurHash2(exePath, str::Len(exePath));
+    TempStr combinedPath = str::JoinTemp(GetSelfExePathTemp(), "|", GetAppDataDirTemp());
+    str::ToLowerInPlace(combinedPath);
+    u32 hash = MurmurHash2(combinedPath, str::Len(combinedPath));
     TempStr mapId = str::FormatTemp("SumatraPDF-%08x", hash);
 
     int retriesLeft = 3;
@@ -471,6 +466,12 @@ static HACCEL FindAcceleratorsForHwnd(HWND hwnd, HWND* hwndAccel) {
         return editAccTable;
     }
 
+    HWND hwndCP = CommandPaletteHwndForAccelerator(hwnd);
+    if (hwndCP) {
+        *hwndAccel = hwndCP;
+        return editAccTable;
+    }
+
     MainWindow* win = FindMainWindowByHwnd(hwnd);
     if (!win) {
         return nullptr;
@@ -497,32 +498,27 @@ static HACCEL FindAcceleratorsForHwnd(HWND hwnd, HWND* hwndAccel) {
     return nullptr;
 }
 
+static bool MaybeTranslateAccelerator(MSG& msg) {
+    // TODO: why mouse events?
+    bool doAccels = ((msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) ||
+                     (msg.message >= WM_MOUSEFIRST && msg.message <= WM_MOUSELAST));
+    if (!doAccels) return false;
+    HWND hwndAccel;
+    HACCEL accels = FindAcceleratorsForHwnd(msg.hwnd, &hwndAccel);
+    if (!accels) return false;
+    return TranslateAcceleratorW(hwndAccel, accels, &msg);
+}
+
 static int RunMessageLoop() {
     MSG msg;
-    HACCEL accels;
-    HWND hwndDialog;
-    HWND hwndAccel;
 
     while (GetMessage(&msg, nullptr, 0, 0)) {
         if (PreTranslateMessage(msg)) {
             continue;
         }
 
-        // TODO: why mouse events?
-        bool doAccels = ((msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) ||
-                         (msg.message >= WM_MOUSEFIRST && msg.message <= WM_MOUSELAST));
-
-        if (doAccels) {
-            accels = FindAcceleratorsForHwnd(msg.hwnd, &hwndAccel);
-            if (accels) {
-                auto didTranslate = TranslateAccelerator(hwndAccel, accels, &msg);
-                if (didTranslate) {
-                    continue;
-                }
-            }
-        }
-
-        hwndDialog = GetCurrentModelessDialog();
+        if (MaybeTranslateAccelerator(msg)) continue;
+        HWND hwndDialog = GetCurrentModelessDialog();
         if (hwndDialog && IsDialogMessage(hwndDialog, &msg)) {
             // DbgLogMsg("dialog: ", msg.hwnd, msg.message, msg.wParam, msg.lParam);
             continue;
@@ -535,14 +531,12 @@ static int RunMessageLoop() {
     return (int)msg.wParam;
 }
 
-#if defined(DEBUG)
 static void ShutdownCommon() {
     mui::Destroy();
     uitask::Destroy();
     UninstallCrashHandler();
     dbghelp::FreeCallstackLogs();
 }
-#endif
 
 static void ReplaceColor(char** col, char* maybeColor) {
     ParsedColor c;
@@ -605,12 +599,18 @@ static void UpdateGlobalPrefs(const Flags& i) {
 // we're in installer mode if the name of the executable
 // has "install" string in it e.g. SumatraPDF-installer.exe
 static bool ExeHasNameOfInstaller() {
-    TempStr exePath = GetExePathTemp();
+    TempStr exePath = GetSelfExePathTemp();
     TempStr exeName = path::GetBaseNameTemp(exePath);
     if (str::FindI(exeName, "uninstall")) {
         return false;
     }
     return str::FindI(exeName, "install");
+}
+
+static bool ExeHasNameOfStoreInstaller() {
+    TempStr exePath = GetSelfExePathTemp();
+    TempStr exeName = path::GetBaseNameTemp(exePath);
+    return str::FindI(exeName, "install-store");
 }
 
 static bool HasDataResource(int id) {
@@ -636,7 +636,7 @@ static bool IsOurExeInstalled() {
     if (!installedDir.Get()) {
         return false;
     }
-    TempStr exeDir = GetExeDirTemp();
+    TempStr exeDir = GetSelfExeDirTemp();
     return str::EqI(installedDir.Get(), exeDir);
 }
 
@@ -647,19 +647,85 @@ static bool IsInstallerButNotInstalled() {
     return !IsOurExeInstalled();
 }
 
-static void CheckIsStoreBuild() {
-    TempStr exePath = GetExePathTemp();
-    TempStr exeName = path::GetBaseNameTemp(exePath);
-    if (str::FindI(exeName, "store")) {
-        gIsStoreBuild = true;
-        return;
+// we delay load libmupdf.dll but it seems in some cases it fails to load
+// as seen in crash reports
+// here I'm trying to explicitly LoadLibrary() to hopefully fix that
+// if not, at least I can add logging to figure out why it fails
+constexpr int kBtnIdLearnMore = 100;
+constexpr const char* kFailedToLoadURL = "https://www.sumatrapdfreader.org/docs/Failed-to-load-libmpdf";
+
+static HRESULT CALLBACK LoadLibmupdfDialogCallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
+                                                   LONG_PTR lpRefData) {
+    switch (msg) {
+        case TDN_HYPERLINK_CLICKED: {
+            WCHAR* s = (WCHAR*)lParam;
+            LaunchBrowser(ToUtf8Temp(s));
+            break;
+        }
+        case TDN_BUTTON_CLICKED:
+            if ((int)wParam == kBtnIdLearnMore) {
+                LaunchBrowser(kFailedToLoadURL);
+                return S_FALSE; // don't close the dialog
+            }
+            break;
     }
-    TempStr dir = path::GetDirTemp(exePath);
-    TempStr path = path::JoinTemp(dir, "AppxManifest.xml");
-    if (file::Exists(path)) {
-        gIsStoreBuild = true;
+    return S_OK;
+}
+
+static bool LoadLibmupdf(bool showErrorDialog) {
+    if (!ExeHasInstallerResources()) {
+        // this is not a version that needs libmupdf.dll
+        return true;
     }
-    return;
+    TempStr path = GetPathInExeDirTemp("libmupdf.dll");
+    HMODULE hm = LoadLibraryW(ToWStrTemp(path));
+    if (hm) return true;
+    logf("LoadLibmupdf: failed to load %s\n", path);
+    DWORD err = GetLastError();
+    logf("last err: 0x%x\n", (int)err);
+    TempStr errStr = nullptr;
+    if (err != 0) {
+        errStr = GetLastErrorStrTemp(err);
+        logf("error string: %s\n", errStr ? errStr : "(none)");
+    }
+    ReportIfFast(true);
+
+    if (!showErrorDialog) {
+        // e.g. -print-to ... -silent invoked by another program:
+        // a modal dialog would hang the caller
+        return false;
+    }
+
+    TempStr msg = str::FormatTemp(
+        "SumatraPDF.exe failed to load libmupdf.dll.\nError code: %d\nError message: %s\n"
+        "We can't proceed.\n"
+        "For more information see <a href=\"%s\">SumatraPDF docs</a>.",
+        (int)err, errStr ? errStr : "unknown", kFailedToLoadURL);
+
+    TASKDIALOG_BUTTON buttons[2];
+    buttons[0].nButtonID = IDOK;
+    buttons[0].pszButtonText = L"Ok";
+    buttons[1].nButtonID = kBtnIdLearnMore;
+    buttons[1].pszButtonText = L"Learn more";
+
+    TASKDIALOGCONFIG dialogConfig{};
+    DWORD flags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT | TDF_ENABLE_HYPERLINKS;
+    if (trans::IsCurrLangRtl()) {
+        flags |= TDF_RTL_LAYOUT;
+    }
+    dialogConfig.cbSize = sizeof(TASKDIALOGCONFIG);
+    dialogConfig.pszWindowTitle = L"SumatraPDF";
+    dialogConfig.pszMainInstruction = L"Failed to load libmupdf.dll";
+    dialogConfig.pszContent = ToWStrTemp(msg);
+    dialogConfig.nDefaultButton = IDOK;
+    dialogConfig.dwFlags = flags;
+    dialogConfig.pfCallback = LoadLibmupdfDialogCallback;
+    dialogConfig.pButtons = buttons;
+    dialogConfig.cButtons = 2;
+    dialogConfig.pszMainIcon = TD_ERROR_ICON;
+
+    TaskDialogIndirect(&dialogConfig, nullptr, nullptr, nullptr);
+    return false;
 }
 
 // TODO: maybe could set font on TDN_CREATED to Consolas, to better show the message
@@ -693,8 +759,7 @@ static bool ForceRunningAsInstaller() {
         return false;
     }
 
-    TempStr exePath = GetExePathTemp();
-    TempStr dir = path::GetDirTemp(exePath);
+    TempStr dir = GetSelfExeDirTemp();
     TempStr path = path::JoinTemp(dir, "libmupdf.dll");
     auto realSize = file::GetSize(path);
     if (realSize < 0) {
@@ -841,41 +906,38 @@ static void ShowNoAdminErrorMessage() {
     TaskDialogIndirect(&dialogConfig, nullptr, nullptr, nullptr);
 }
 
-static void MaybeDeleteStaleDirectory(char* dir, VisitDirData* d) {
-    auto fd = d->fd;
-    ReportIf(!IsDirectory(fd->dwFileAttributes));
-    TempStr name = ToUtf8Temp(fd->cFileName);
-    bool maybeDelete = str::StartsWith(name, "manual-") || str::StartsWith(name, "crashinfo-");
-    if (!maybeDelete) {
-        logf("MaybeDeleteStaleDirectory: skipping '%s' because not manual-* or crsahinfo-*\n", name);
-        return;
-    }
-    TempStr currVer = GetVerDirNameTemp("");
-    if (str::Contains(name, currVer)) {
-        logf("MaybeDeleteStaleDirectory: skipping '%s' because our ver '%s'\n", name, currVer);
-        return;
-    }
-    bool ok = dir::RemoveAll(dir);
-    logf("MaybeDeleteStaleDirectory: dir::RemoveAll('%s') returned %d\n", dir, ok);
-    return;
-}
-
 // delete symbols and manual from possibly previous versions
 static void DeleteStaleFilesAsync() {
     TempStr dir = GetNotImportantDataDirTemp();
-    auto fn = MkFunc1(MaybeDeleteStaleDirectory, dir);
-    VisitDir(dir, kVisitDirIncludeDirs, fn);
+    TempStr ver = GetVerDirNameTemp("");
+    logf("DeleteStaleFilesAsync: dir: '%s', gIsPreRelaseBuild: %d, ver: %s\n", dir, (int)gIsPreReleaseBuild, ver);
+
+    DirIter di{dir};
+    di.includeFiles = false;
+    di.includeDirs = true;
+    for (DirIterEntry* de : di) {
+        const char* name = de->name;
+        bool maybeDelete = str::StartsWith(name, "manual-") || str::StartsWith(name, "crashinfo-");
+        if (!maybeDelete) {
+            logf("DeleteStaleFilesAsync: skipping '%s' because not manual-* or crsahinfo-*\n", name);
+            continue;
+        }
+        TempStr currVer = GetVerDirNameTemp("");
+        if (str::Contains(name, currVer)) {
+            logf("DeleteStaleFilesAsync: skipping '%s' because our ver '%s'\n", name, currVer);
+            continue;
+        }
+        bool ok = dir::RemoveAll(dir);
+        logf("DeleteStaleFilesAsync: dir::RemoveAll('%s') returned %d\n", dir, ok);
+    }
 }
 
 void StartDeleteStaleFiles() {
     // for now we only care about pre-release builds as they can be updated frequently
-    if (false && !gIsPreReleaseBuild) {
+    if (!(gIsPreReleaseBuild || gIsDebugBuild)) {
         logf("DeleteStaleFiles: skipping because gIsPreRelaseBuild: %d\n", (int)gIsPreReleaseBuild);
         return;
     }
-    TempStr dir = GetNotImportantDataDirTemp();
-    TempStr ver = GetVerDirNameTemp("");
-    logf("DeleteStaleFiles: dir: '%s', gIsPreRelaseBuild: %d, ver: %s\n", dir, (int)gIsPreReleaseBuild, ver);
     auto fn = MkFunc0Void(DeleteStaleFilesAsync);
     RunAsync(fn, "DeleteStaleFilesThread");
 }
@@ -931,7 +993,1102 @@ static void testLogf() {
 extern "C" void destroy_system_font_list();
 extern void DeleteManualBrowserWindow();
 
-int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
+static EngineBase* CreateEngineFromDataForPreview(const ByteSlice& data, PreviewFileType fileType) {
+    IStream* stream = CreateStreamFromData(data);
+    if (!stream) {
+        return nullptr;
+    }
+    EngineBase* engine = nullptr;
+    switch (fileType) {
+        case PreviewFileType::XPS:
+        case PreviewFileType::PDF:
+#ifdef _MSC_VER
+            __try {
+                const char* name = (fileType == PreviewFileType::PDF) ? "preview.pdf" : "preview.xps";
+                engine = CreateEngineMupdfFromStream(stream, name);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                logf("CreateEngineMupdfFromStream: failed with exception 0x%08x\n", GetExceptionCode());
+                engine = nullptr;
+            }
+#else
+        {
+            const char* name = (fileType == PreviewFileType::PDF) ? "preview.pdf" : "preview.xps";
+            engine = CreateEngineMupdfFromStream(stream, name);
+        }
+#endif
+            break;
+        case PreviewFileType::DjVu:
+            engine = CreateEngineDjVuFromStream(stream);
+            break;
+        case PreviewFileType::EPUB:
+            engine = CreateEngineEpubFromStream(stream);
+            break;
+        case PreviewFileType::FB2:
+            engine = CreateEngineFb2FromStream(stream);
+            break;
+        case PreviewFileType::MOBI:
+            engine = CreateEngineMobiFromStream(stream);
+            break;
+        case PreviewFileType::CBX:
+            engine = CreateEngineCbxFromStream(stream);
+            break;
+        case PreviewFileType::TGA:
+            engine = CreateEngineImageFromStream(stream);
+            break;
+        default:
+            break;
+    }
+    stream->Release();
+    return engine;
+}
+
+// Helper to render a page and extract bitmap data
+static u8* RenderPageToBitmap(EngineBase* engine, int pageNo, float zoom, u32* outWidth, u32* outHeight,
+                              u32* outDataLen) {
+    RectF page = engine->Transform(engine->PageMediabox(pageNo), pageNo, 1.0, 0);
+    Rect target = RectF(0, 0, page.dx * zoom, page.dy * zoom).Round();
+
+    RectF pageRect = engine->Transform(ToRectF(target), pageNo, zoom, 0, true);
+    RenderPageArgs args(pageNo, zoom, 0, &pageRect);
+    RenderedBitmap* bmp = engine->RenderPage(args);
+
+    if (!bmp) {
+        logf("RenderPageToBitmap: RenderPage failed for page %d\n", pageNo);
+        return nullptr;
+    }
+
+    u32 width = target.dx;
+    u32 height = target.dy;
+    u32 bmpDataLen = width * height * 4;
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+    bmi.bmiHeader.biHeight = height;
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    u8* bmpData = AllocArray<u8>(bmpDataLen);
+    if (!bmpData) {
+        delete bmp;
+        return nullptr;
+    }
+
+    HDC hdc = GetDC(nullptr);
+    if (!GetDIBits(hdc, bmp->GetBitmap(), 0, height, bmpData, &bmi, DIB_RGB_COLORS)) {
+        ReleaseDC(nullptr, hdc);
+        free(bmpData);
+        delete bmp;
+        return nullptr;
+    }
+    ReleaseDC(nullptr, hdc);
+
+    // Set alpha to 0xFF for each pixel
+    for (u32 i = 0; i < width * height; i++) {
+        bmpData[4 * i + 3] = 0xFF;
+    }
+
+    delete bmp;
+
+    *outWidth = width;
+    *outHeight = height;
+    *outDataLen = bmpDataLen;
+    return bmpData;
+}
+
+// Helper to write bitmap response to pipe
+static bool WriteBitmapResponse(HANDLE hPipe, u32 status, u32 width, u32 height, u8* bmpData, u32 bmpDataLen) {
+    DWORD bytesWritten = 0;
+    u32 responseMagic = kPreviewResponseMagic;
+
+    WriteFile(hPipe, &responseMagic, 4, &bytesWritten, nullptr);
+    WriteFile(hPipe, &status, 4, &bytesWritten, nullptr);
+    WriteFile(hPipe, &width, 4, &bytesWritten, nullptr);
+    WriteFile(hPipe, &height, 4, &bytesWritten, nullptr);
+    WriteFile(hPipe, &bmpDataLen, 4, &bytesWritten, nullptr);
+
+    if (status == 0 && bmpData && bmpDataLen > 0) {
+        DWORD totalWritten = 0;
+        while (totalWritten < bmpDataLen) {
+            DWORD toWrite = bmpDataLen - totalWritten;
+            if (!WriteFile(hPipe, bmpData + totalWritten, toWrite, &bytesWritten, nullptr) || bytesWritten == 0) {
+                return false;
+            }
+            totalWritten += bytesWritten;
+        }
+    }
+    FlushFileBuffers(hPipe);
+    return true;
+}
+
+// Protocol version 1: One-shot thumbnail rendering
+static void RunPreviewPipeV1(HANDLE hPipe, u32 fileType, u32 thumbSize, u32 dataSize) {
+    DWORD bytesRead = 0;
+
+    // Sanity check
+    if (dataSize == 0 || dataSize > 100 * 1024 * 1024) {
+        logf("RunPreviewPipeV1: invalid dataSize %d\n", dataSize);
+        u32 status = 1;
+        WriteBitmapResponse(hPipe, status, 0, 0, nullptr, 0);
+        return;
+    }
+
+    // Read file data
+    u8* fileData = AllocArray<u8>(dataSize);
+    if (!fileData) {
+        logf("RunPreviewPipeV1: failed to allocate %d bytes\n", dataSize);
+        u32 status = 3;
+        WriteBitmapResponse(hPipe, status, 0, 0, nullptr, 0);
+        return;
+    }
+
+    DWORD totalRead = 0;
+    while (totalRead < dataSize) {
+        DWORD toRead = dataSize - totalRead;
+        if (!ReadFile(hPipe, fileData + totalRead, toRead, &bytesRead, nullptr) || bytesRead == 0) {
+            logf("RunPreviewPipeV1: failed to read file data at offset %d\n", totalRead);
+            free(fileData);
+            u32 status = 1;
+            WriteBitmapResponse(hPipe, status, 0, 0, nullptr, 0);
+            return;
+        }
+        totalRead += bytesRead;
+    }
+
+    logf("RunPreviewPipeV1: read %d bytes of file data\n", totalRead);
+
+    ByteSlice data = {fileData, (size_t)dataSize};
+    EngineBase* engine = CreateEngineFromDataForPreview(data, (PreviewFileType)fileType);
+
+    u32 status = 0;
+    u32 width = 0, height = 0, bmpDataLen = 0;
+    u8* bmpData = nullptr;
+
+    if (!engine) {
+        logf("RunPreviewPipeV1: failed to create engine\n");
+        status = 1;
+    } else {
+        RectF page = engine->Transform(engine->PageMediabox(1), 1, 1.0, 0);
+        float zoom = std::min((float)thumbSize / page.dx, (float)thumbSize / page.dy) - 0.001f;
+        bmpData = RenderPageToBitmap(engine, 1, zoom, &width, &height, &bmpDataLen);
+        if (!bmpData) {
+            status = 2;
+        }
+        engine->Release();
+    }
+
+    free(fileData);
+
+    WriteBitmapResponse(hPipe, status, width, height, bmpData, bmpDataLen);
+    free(bmpData);
+    logf("RunPreviewPipeV1: done, status=%d\n", status);
+}
+
+// Protocol version 2: Session-based preview with multiple commands
+static void RunPreviewPipeV2(HANDLE hPipe) {
+    logf("RunPreviewPipeV2: starting session\n");
+    DWORD bytesRead = 0, bytesWritten = 0;
+    EngineBase* engine = nullptr;
+    bool running = true;
+
+    while (running) {
+        // Read command header: magic(4) + version(4) + command(4)
+        u32 magic = 0, version = 0, cmd = 0;
+
+        if (!ReadFile(hPipe, &magic, 4, &bytesRead, nullptr) || bytesRead != 4) {
+            logf("RunPreviewPipeV2: failed to read magic (connection closed?)\n");
+            break;
+        }
+        if (magic != kPreviewRequestMagic) {
+            logf("RunPreviewPipeV2: invalid magic 0x%08x\n", magic);
+            break;
+        }
+        if (!ReadFile(hPipe, &version, 4, &bytesRead, nullptr) || bytesRead != 4) {
+            logf("RunPreviewPipeV2: failed to read version\n");
+            break;
+        }
+        if (version != kPreviewProtocolVersion2) {
+            logf("RunPreviewPipeV2: invalid version %d\n", version);
+            break;
+        }
+        if (!ReadFile(hPipe, &cmd, 4, &bytesRead, nullptr) || bytesRead != 4) {
+            logf("RunPreviewPipeV2: failed to read command\n");
+            break;
+        }
+
+        logf("RunPreviewPipeV2: received command %d\n", cmd);
+
+        switch ((PreviewCmd)cmd) {
+            case PreviewCmd::Init: {
+                // Read: fileType(4) + dataSize(4) + data
+                u32 fileType = 0, dataSize = 0;
+                if (!ReadFile(hPipe, &fileType, 4, &bytesRead, nullptr) || bytesRead != 4 ||
+                    !ReadFile(hPipe, &dataSize, 4, &bytesRead, nullptr) || bytesRead != 4) {
+                    logf("RunPreviewPipeV2: Init - failed to read header\n");
+                    running = false;
+                    break;
+                }
+
+                logf("RunPreviewPipeV2: Init - fileType=%d, dataSize=%d\n", fileType, dataSize);
+
+                if (dataSize == 0 || dataSize > 100 * 1024 * 1024) {
+                    logf("RunPreviewPipeV2: Init - invalid dataSize\n");
+                    u32 responseMagic = kPreviewResponseMagic;
+                    u32 status = 1;
+                    u32 pageCount = 0;
+                    WriteFile(hPipe, &responseMagic, 4, &bytesWritten, nullptr);
+                    WriteFile(hPipe, &status, 4, &bytesWritten, nullptr);
+                    WriteFile(hPipe, &pageCount, 4, &bytesWritten, nullptr);
+                    FlushFileBuffers(hPipe);
+                    running = false;
+                    break;
+                }
+
+                u8* fileData = AllocArray<u8>(dataSize);
+                if (!fileData) {
+                    logf("RunPreviewPipeV2: Init - failed to allocate memory\n");
+                    u32 responseMagic = kPreviewResponseMagic;
+                    u32 status = 3;
+                    u32 pageCount = 0;
+                    WriteFile(hPipe, &responseMagic, 4, &bytesWritten, nullptr);
+                    WriteFile(hPipe, &status, 4, &bytesWritten, nullptr);
+                    WriteFile(hPipe, &pageCount, 4, &bytesWritten, nullptr);
+                    FlushFileBuffers(hPipe);
+                    running = false;
+                    break;
+                }
+
+                DWORD totalRead = 0;
+                while (totalRead < dataSize) {
+                    DWORD toRead = dataSize - totalRead;
+                    if (!ReadFile(hPipe, fileData + totalRead, toRead, &bytesRead, nullptr) || bytesRead == 0) {
+                        break;
+                    }
+                    totalRead += bytesRead;
+                }
+
+                if (totalRead != dataSize) {
+                    logf("RunPreviewPipeV2: Init - failed to read file data\n");
+                    free(fileData);
+                    u32 responseMagic = kPreviewResponseMagic;
+                    u32 status = 1;
+                    u32 pageCount = 0;
+                    WriteFile(hPipe, &responseMagic, 4, &bytesWritten, nullptr);
+                    WriteFile(hPipe, &status, 4, &bytesWritten, nullptr);
+                    WriteFile(hPipe, &pageCount, 4, &bytesWritten, nullptr);
+                    FlushFileBuffers(hPipe);
+                    running = false;
+                    break;
+                }
+
+                ByteSlice data = {fileData, (size_t)dataSize};
+                engine = CreateEngineFromDataForPreview(data, (PreviewFileType)fileType);
+                free(fileData);
+
+                u32 responseMagic = kPreviewResponseMagic;
+                u32 status = engine ? 0 : 1;
+                u32 pageCount = engine ? (u32)engine->PageCount() : 0;
+
+                logf("RunPreviewPipeV2: Init - engine created, pageCount=%d\n", pageCount);
+
+                WriteFile(hPipe, &responseMagic, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &status, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &pageCount, 4, &bytesWritten, nullptr);
+                FlushFileBuffers(hPipe);
+                break;
+            }
+
+            case PreviewCmd::GetPageBox: {
+                // Read: pageNo(4)
+                u32 pageNo = 0;
+                if (!ReadFile(hPipe, &pageNo, 4, &bytesRead, nullptr) || bytesRead != 4) {
+                    logf("RunPreviewPipeV2: GetPageBox - failed to read pageNo\n");
+                    running = false;
+                    break;
+                }
+
+                logf("RunPreviewPipeV2: GetPageBox - pageNo=%d\n", pageNo);
+
+                u32 responseMagic = kPreviewResponseMagic;
+                u32 status = 0;
+                float widthF = 0, heightF = 0;
+
+                if (!engine || pageNo < 1 || pageNo > (u32)engine->PageCount()) {
+                    status = 1;
+                } else {
+                    RectF bbox = engine->PageMediabox(pageNo);
+                    bbox = engine->Transform(bbox, pageNo, 1.0, 0);
+                    widthF = bbox.dx;
+                    heightF = bbox.dy;
+                }
+
+                // Write floats as bit patterns
+                u32 widthBits, heightBits;
+                memcpy(&widthBits, &widthF, 4);
+                memcpy(&heightBits, &heightF, 4);
+
+                WriteFile(hPipe, &responseMagic, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &status, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &widthBits, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &heightBits, 4, &bytesWritten, nullptr);
+                FlushFileBuffers(hPipe);
+                break;
+            }
+
+            case PreviewCmd::Render: {
+                // Read: pageNo(4) + zoomBits(4) + targetWidth(4) + targetHeight(4)
+                u32 pageNo = 0, zoomBits = 0, targetWidth = 0, targetHeight = 0;
+                if (!ReadFile(hPipe, &pageNo, 4, &bytesRead, nullptr) || bytesRead != 4 ||
+                    !ReadFile(hPipe, &zoomBits, 4, &bytesRead, nullptr) || bytesRead != 4 ||
+                    !ReadFile(hPipe, &targetWidth, 4, &bytesRead, nullptr) || bytesRead != 4 ||
+                    !ReadFile(hPipe, &targetHeight, 4, &bytesRead, nullptr) || bytesRead != 4) {
+                    logf("RunPreviewPipeV2: Render - failed to read params\n");
+                    running = false;
+                    break;
+                }
+
+                float zoom;
+                memcpy(&zoom, &zoomBits, 4);
+
+                logf("RunPreviewPipeV2: Render - pageNo=%d, zoom=%.3f, target=%dx%d\n", pageNo, zoom, targetWidth,
+                     targetHeight);
+
+                u32 status = 0;
+                u32 width = 0, height = 0, bmpDataLen = 0;
+                u8* bmpData = nullptr;
+
+                if (!engine || pageNo < 1 || pageNo > (u32)engine->PageCount()) {
+                    status = 1;
+                } else {
+                    bmpData = RenderPageToBitmap(engine, pageNo, zoom, &width, &height, &bmpDataLen);
+                    if (!bmpData) {
+                        status = 2;
+                    }
+                }
+
+                WriteBitmapResponse(hPipe, status, width, height, bmpData, bmpDataLen);
+                free(bmpData);
+                break;
+            }
+
+            case PreviewCmd::Shutdown: {
+                logf("RunPreviewPipeV2: Shutdown command received\n");
+                running = false;
+                break;
+            }
+
+            default:
+                logf("RunPreviewPipeV2: unknown command %d\n", cmd);
+                running = false;
+                break;
+        }
+    }
+
+    if (engine) {
+        engine->Release();
+    }
+    logf("RunPreviewPipeV2: session ended\n");
+}
+
+// Helper to save HBITMAP to PNG file using GDI+
+static bool SaveHBitmapAsPng(HBITMAP hBitmap, const char* filePath) {
+    if (!hBitmap || !filePath) {
+        return false;
+    }
+    Gdiplus::Bitmap gbmp(hBitmap, nullptr);
+    CLSID pngEncId = GetEncoderClsid(L"image/png");
+    WCHAR* filePathW = ToWStrTemp(filePath);
+    Gdiplus::Status status = gbmp.Save(filePathW, &pngEncId, nullptr);
+    return status == Gdiplus::Ok;
+}
+
+// Determine PreviewFileType from file extension
+static PreviewFileType GetPreviewFileTypeFromPath(const char* path) {
+    if (str::EndsWithI(path, ".pdf")) {
+        return PreviewFileType::PDF;
+    }
+    if (str::EndsWithI(path, ".djvu") || str::EndsWithI(path, ".djv")) {
+        return PreviewFileType::DjVu;
+    }
+    if (str::EndsWithI(path, ".epub")) {
+        return PreviewFileType::EPUB;
+    }
+    if (str::EndsWithI(path, ".fb2") || str::EndsWithI(path, ".fb2z")) {
+        return PreviewFileType::FB2;
+    }
+    if (str::EndsWithI(path, ".mobi") || str::EndsWithI(path, ".prc") || str::EndsWithI(path, ".azw")) {
+        return PreviewFileType::MOBI;
+    }
+    if (str::EndsWithI(path, ".cbz") || str::EndsWithI(path, ".cbr") || str::EndsWithI(path, ".cb7") ||
+        str::EndsWithI(path, ".cbt")) {
+        return PreviewFileType::CBX;
+    }
+    if (str::EndsWithI(path, ".tga")) {
+        return PreviewFileType::TGA;
+    }
+    if (str::EndsWithI(path, ".xps")) {
+        return PreviewFileType::XPS;
+    }
+    // Default to PDF
+    return PreviewFileType::PDF;
+}
+
+// Test preview pipe functionality by exercising all pipe operations
+static void RunTestPreviewPipe(const char* filePath) {
+    logf("RunTestPreviewPipe: testing with file '%s'\n", filePath);
+
+    // Check if file exists
+    if (!file::Exists(filePath)) {
+        logf("RunTestPreviewPipe: file '%s' does not exist\n", filePath);
+        return;
+    }
+
+    // Create output directory
+    const char* resultsDir = "pipe-preview-results";
+    if (!dir::Create(resultsDir)) {
+        if (!dir::Exists(resultsDir)) {
+            logf("RunTestPreviewPipe: failed to create directory '%s'\n", resultsDir);
+            return;
+        }
+    }
+
+    // Load file data
+    ByteSlice fileData = file::ReadFile(filePath);
+    if (fileData.empty()) {
+        logf("RunTestPreviewPipe: failed to read file '%s'\n", filePath);
+        return;
+    }
+
+    PreviewFileType fileType = GetPreviewFileTypeFromPath(filePath);
+    logf("RunTestPreviewPipe: file size=%d, fileType=%d\n", (int)fileData.size(), (int)fileType);
+
+    str::Str resultText;
+    resultText.AppendFmt("Preview Pipe Test Results\n");
+    resultText.AppendFmt("=========================\n\n");
+    resultText.AppendFmt("File: %s\n", filePath);
+    resultText.AppendFmt("File size: %d bytes\n", (int)fileData.size());
+    resultText.AppendFmt("File type: %d\n\n", (int)fileType);
+
+    // ===== Test Protocol V1 (Thumbnail mode) =====
+    resultText.AppendFmt("--- Protocol V1 (Thumbnail mode) ---\n");
+    {
+        // Generate unique pipe name
+        char* pipeName = GenerateUniquePipeName();
+        if (!pipeName) {
+            logf("RunTestPreviewPipe: failed to generate pipe name\n");
+            resultText.AppendFmt("ERROR: Failed to generate pipe name\n");
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Create the pipe
+        HANDLE hPipe = CreatePreviewPipe(pipeName);
+        if (hPipe == INVALID_HANDLE_VALUE) {
+            logf("RunTestPreviewPipe: V1 failed to create pipe\n");
+            resultText.AppendFmt("ERROR: Failed to create pipe\n");
+            str::Free(pipeName);
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Launch SumatraPDF.exe with -preview-pipe
+        HANDLE hProcess = LaunchSumatraForPreview(pipeName);
+        if (!hProcess) {
+            logf("RunTestPreviewPipe: V1 failed to launch SumatraPDF\n");
+            resultText.AppendFmt("ERROR: Failed to launch SumatraPDF.exe\n");
+            CloseHandle(hPipe);
+            str::Free(pipeName);
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Wait for connection
+        if (!WaitForPipeConnection(hPipe)) {
+            logf("RunTestPreviewPipe: V1 failed to wait for pipe connection\n");
+            resultText.AppendFmt("ERROR: Failed to connect to pipe\n");
+            TerminateProcess(hProcess, 1);
+            CloseHandle(hProcess);
+            CloseHandle(hPipe);
+            str::Free(pipeName);
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Send preview request (thumbnail size 256)
+        uint thumbSize = 256;
+        if (!SendPreviewRequest(hPipe, fileType, thumbSize, fileData)) {
+            logf("RunTestPreviewPipe: V1 failed to send preview request\n");
+            resultText.AppendFmt("ERROR: Failed to send preview request\n");
+        } else {
+            // Check if child process is still running before reading response
+            DWORD exitCode = 0;
+            if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
+                logf("RunTestPreviewPipe: V1 child process exited with code %d before response\n", exitCode);
+                resultText.AppendFmt("ERROR: Child process exited with code %d before sending response\n", exitCode);
+            } else {
+                // Receive response
+                HBITMAP hBitmap = ReceivePreviewResponse(hPipe);
+                if (hBitmap) {
+                    BITMAP bm;
+                    GetObject(hBitmap, sizeof(bm), &bm);
+                    resultText.AppendFmt("Thumbnail received: %dx%d pixels\n", bm.bmWidth, bm.bmHeight);
+
+                    // Save as PNG
+                    TempStr thumbPath = path::JoinTemp(resultsDir, "thumbnail.png");
+                    if (SaveHBitmapAsPng(hBitmap, thumbPath)) {
+                        resultText.AppendFmt("Thumbnail saved to: thumbnail.png\n");
+                    } else {
+                        resultText.AppendFmt("ERROR: Failed to save thumbnail as PNG\n");
+                    }
+                    DeleteObject(hBitmap);
+                } else {
+                    // Check if process crashed while we were waiting
+                    if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
+                        logf("RunTestPreviewPipe: V1 child process crashed with code %d\n", exitCode);
+                        resultText.AppendFmt("ERROR: Child process crashed with code %d\n", exitCode);
+                    } else {
+                        resultText.AppendFmt("ERROR: Failed to receive thumbnail\n");
+                    }
+                }
+            }
+        }
+
+        // Cleanup
+        DisconnectNamedPipe(hPipe);
+        CloseHandle(hPipe);
+        TerminateProcess(hProcess, 0);
+        CloseHandle(hProcess);
+        str::Free(pipeName);
+    }
+
+    resultText.AppendFmt("\n--- Protocol V2 (Session mode) ---\n");
+
+    // ===== Test Protocol V2 (Session mode) =====
+    {
+        // Generate unique pipe name
+        char* pipeName = GenerateUniquePipeName();
+        if (!pipeName) {
+            resultText.AppendFmt("ERROR: Failed to generate pipe name\n");
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Create the pipe
+        HANDLE hPipe = CreatePreviewPipe(pipeName);
+        if (hPipe == INVALID_HANDLE_VALUE) {
+            resultText.AppendFmt("ERROR: Failed to create pipe\n");
+            str::Free(pipeName);
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Launch SumatraPDF.exe
+        HANDLE hProcess = LaunchSumatraForPreview(pipeName);
+        if (!hProcess) {
+            resultText.AppendFmt("ERROR: Failed to launch SumatraPDF.exe\n");
+            CloseHandle(hPipe);
+            str::Free(pipeName);
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Wait for connection
+        if (!WaitForPipeConnection(hPipe)) {
+            resultText.AppendFmt("ERROR: Failed to connect to pipe\n");
+            TerminateProcess(hProcess, 1);
+            CloseHandle(hProcess);
+            CloseHandle(hPipe);
+            str::Free(pipeName);
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        DWORD bytesWritten = 0, bytesRead = 0;
+
+        // First, send the protocol identification header (read by RunPreviewPipeServer)
+        u32 magic = kPreviewRequestMagic;
+        u32 version = kPreviewProtocolVersion2;
+        WriteFile(hPipe, &magic, 4, &bytesWritten, nullptr);
+        WriteFile(hPipe, &version, 4, &bytesWritten, nullptr);
+
+        // Now send Init command (each command has its own magic/version/cmd header)
+        u32 cmd = (u32)PreviewCmd::Init;
+        u32 ft = (u32)fileType;
+        u32 dataSize = (u32)fileData.size();
+
+        WriteFile(hPipe, &magic, 4, &bytesWritten, nullptr);
+        WriteFile(hPipe, &version, 4, &bytesWritten, nullptr);
+        WriteFile(hPipe, &cmd, 4, &bytesWritten, nullptr);
+        WriteFile(hPipe, &ft, 4, &bytesWritten, nullptr);
+        WriteFile(hPipe, &dataSize, 4, &bytesWritten, nullptr);
+
+        // Write file data
+        DWORD totalWritten = 0;
+        while (totalWritten < dataSize) {
+            DWORD toWrite = dataSize - totalWritten;
+            WriteFile(hPipe, fileData.data() + totalWritten, toWrite, &bytesWritten, nullptr);
+            if (bytesWritten == 0) break;
+            totalWritten += bytesWritten;
+        }
+        FlushFileBuffers(hPipe);
+
+        // Check if child process is still running
+        DWORD exitCode = 0;
+        if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
+            logf("RunTestPreviewPipe: V2 child process exited with code %d before Init response\n", exitCode);
+            resultText.AppendFmt("Init ERROR: Child process exited with code %d\n", exitCode);
+            DisconnectNamedPipe(hPipe);
+            CloseHandle(hPipe);
+            CloseHandle(hProcess);
+            str::Free(pipeName);
+            fileData.Free();
+            TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+            file::WriteFile(resultPath, resultText.AsByteSlice());
+            return;
+        }
+
+        // Read Init response
+        u32 respMagic = 0, status = 0, pageCount = 0;
+        ReadFile(hPipe, &respMagic, 4, &bytesRead, nullptr);
+        ReadFile(hPipe, &status, 4, &bytesRead, nullptr);
+        ReadFile(hPipe, &pageCount, 4, &bytesRead, nullptr);
+
+        if (respMagic != kPreviewResponseMagic || status != 0) {
+            // Check if child process crashed
+            if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
+                resultText.AppendFmt("Init ERROR: Child process crashed with code %d\n", exitCode);
+            } else {
+                resultText.AppendFmt("Init ERROR: magic=0x%08x, status=%d\n", respMagic, status);
+            }
+        } else {
+            resultText.AppendFmt("Init SUCCESS: pageCount=%d\n", pageCount);
+
+            // GetPageBox for each page and Render each page
+            for (u32 pn = 1; pn <= pageCount; pn++) {
+                // GetPageBox
+                magic = kPreviewRequestMagic;
+                version = kPreviewProtocolVersion2;
+                cmd = (u32)PreviewCmd::GetPageBox;
+
+                WriteFile(hPipe, &magic, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &version, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &cmd, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &pn, 4, &bytesWritten, nullptr);
+                FlushFileBuffers(hPipe);
+
+                u32 widthBits = 0, heightBits = 0;
+                ReadFile(hPipe, &respMagic, 4, &bytesRead, nullptr);
+                ReadFile(hPipe, &status, 4, &bytesRead, nullptr);
+                ReadFile(hPipe, &widthBits, 4, &bytesRead, nullptr);
+                ReadFile(hPipe, &heightBits, 4, &bytesRead, nullptr);
+
+                float width, height;
+                memcpy(&width, &widthBits, 4);
+                memcpy(&height, &heightBits, 4);
+
+                if (respMagic != kPreviewResponseMagic || status != 0) {
+                    resultText.AppendFmt("Page %d GetPageBox ERROR: status=%d\n", pn, status);
+                    continue;
+                }
+                resultText.AppendFmt("Page %d: %.2f x %.2f points\n", pn, width, height);
+
+                // Render page at zoom 1.0
+                magic = kPreviewRequestMagic;
+                version = kPreviewProtocolVersion2;
+                cmd = (u32)PreviewCmd::Render;
+                float zoom = 1.0f;
+                u32 zoomBits;
+                memcpy(&zoomBits, &zoom, 4);
+                u32 targetWidth = (u32)width;
+                u32 targetHeight = (u32)height;
+
+                WriteFile(hPipe, &magic, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &version, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &cmd, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &pn, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &zoomBits, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &targetWidth, 4, &bytesWritten, nullptr);
+                WriteFile(hPipe, &targetHeight, 4, &bytesWritten, nullptr);
+                FlushFileBuffers(hPipe);
+
+                // Read render response header
+                u32 bmpWidth = 0, bmpHeight = 0, bmpDataLen = 0;
+                ReadFile(hPipe, &respMagic, 4, &bytesRead, nullptr);
+                ReadFile(hPipe, &status, 4, &bytesRead, nullptr);
+                ReadFile(hPipe, &bmpWidth, 4, &bytesRead, nullptr);
+                ReadFile(hPipe, &bmpHeight, 4, &bytesRead, nullptr);
+                ReadFile(hPipe, &bmpDataLen, 4, &bytesRead, nullptr);
+
+                if (respMagic != kPreviewResponseMagic || status != 0) {
+                    resultText.AppendFmt("Page %d Render ERROR: status=%d\n", pn, status);
+                    continue;
+                }
+
+                // Read bitmap data
+                u8* bmpData = AllocArray<u8>(bmpDataLen);
+                if (bmpData) {
+                    DWORD totalRead = 0;
+                    while (totalRead < bmpDataLen) {
+                        DWORD toRead = bmpDataLen - totalRead;
+                        if (!ReadFile(hPipe, bmpData + totalRead, toRead, &bytesRead, nullptr) || bytesRead == 0) {
+                            break;
+                        }
+                        totalRead += bytesRead;
+                    }
+
+                    if (totalRead == bmpDataLen) {
+                        // Create DIB section
+                        BITMAPINFO bmi{};
+                        bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+                        bmi.bmiHeader.biWidth = bmpWidth;
+                        bmi.bmiHeader.biHeight = bmpHeight;
+                        bmi.bmiHeader.biPlanes = 1;
+                        bmi.bmiHeader.biBitCount = 32;
+                        bmi.bmiHeader.biCompression = BI_RGB;
+
+                        u8* dibData = nullptr;
+                        HBITMAP hBitmap = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, (void**)&dibData, nullptr, 0);
+                        if (hBitmap && dibData) {
+                            memcpy(dibData, bmpData, bmpDataLen);
+
+                            // Save as PNG
+                            TempStr pageName = str::FormatTemp("page%d.png", pn);
+                            TempStr pagePath = path::JoinTemp(resultsDir, pageName);
+                            if (SaveHBitmapAsPng(hBitmap, pagePath)) {
+                                resultText.AppendFmt("Page %d rendered: %dx%d, saved to %s\n", pn, bmpWidth, bmpHeight,
+                                                     pageName);
+                            } else {
+                                resultText.AppendFmt("Page %d rendered: %dx%d, ERROR saving PNG\n", pn, bmpWidth,
+                                                     bmpHeight);
+                            }
+                            DeleteObject(hBitmap);
+                        } else {
+                            resultText.AppendFmt("Page %d ERROR: CreateDIBSection failed\n", pn);
+                        }
+                    } else {
+                        resultText.AppendFmt("Page %d ERROR: incomplete bitmap data\n", pn);
+                    }
+                    free(bmpData);
+                } else {
+                    resultText.AppendFmt("Page %d ERROR: failed to allocate memory\n", pn);
+                }
+            }
+
+            // Send Shutdown command
+            magic = kPreviewRequestMagic;
+            version = kPreviewProtocolVersion2;
+            cmd = (u32)PreviewCmd::Shutdown;
+            WriteFile(hPipe, &magic, 4, &bytesWritten, nullptr);
+            WriteFile(hPipe, &version, 4, &bytesWritten, nullptr);
+            WriteFile(hPipe, &cmd, 4, &bytesWritten, nullptr);
+            FlushFileBuffers(hPipe);
+
+            resultText.AppendFmt("Shutdown command sent\n");
+        }
+
+        // Cleanup
+        DisconnectNamedPipe(hPipe);
+        CloseHandle(hPipe);
+        // Give the process a moment to exit gracefully
+        WaitForSingleObject(hProcess, 1000);
+        TerminateProcess(hProcess, 0);
+        CloseHandle(hProcess);
+        str::Free(pipeName);
+    }
+
+    fileData.Free();
+
+    // Write result file
+    TempStr resultPath = path::JoinTemp(resultsDir, "result.txt");
+    file::WriteFile(resultPath, resultText.AsByteSlice());
+    logf("RunTestPreviewPipe: results written to %s\n", resultPath);
+}
+
+static void RunPreviewPipeServer(const char* pipeName) {
+    logf("RunPreviewPipeServer: connecting to pipe '%s'\n", pipeName);
+
+    // Connect to the named pipe (DLL is the server, we are the client)
+    HANDLE hPipe = CreateFileA(pipeName, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hPipe == INVALID_HANDLE_VALUE) {
+        logf("RunPreviewPipeServer: failed to connect to pipe, error %d\n", (int)GetLastError());
+        return;
+    }
+
+    // Read common header: magic(4) + version(4)
+    u32 magic = 0, version = 0;
+    DWORD bytesRead = 0;
+
+    if (!ReadFile(hPipe, &magic, 4, &bytesRead, nullptr) || bytesRead != 4 || magic != kPreviewRequestMagic) {
+        logf("RunPreviewPipeServer: invalid magic 0x%08x\n", magic);
+        CloseHandle(hPipe);
+        return;
+    }
+    if (!ReadFile(hPipe, &version, 4, &bytesRead, nullptr) || bytesRead != 4) {
+        logf("RunPreviewPipeServer: failed to read version\n");
+        CloseHandle(hPipe);
+        return;
+    }
+
+    logf("RunPreviewPipeServer: protocol version %d\n", version);
+
+    if (version == kPreviewProtocolVersion) {
+        // Version 1: Read remaining v1 header (fileType, thumbSize, dataSize) and process
+        u32 fileType = 0, thumbSize = 0, dataSize = 0;
+        if (!ReadFile(hPipe, &fileType, 4, &bytesRead, nullptr) || bytesRead != 4 ||
+            !ReadFile(hPipe, &thumbSize, 4, &bytesRead, nullptr) || bytesRead != 4 ||
+            !ReadFile(hPipe, &dataSize, 4, &bytesRead, nullptr) || bytesRead != 4) {
+            logf("RunPreviewPipeServer: failed to read v1 header\n");
+            CloseHandle(hPipe);
+            return;
+        }
+        logf("RunPreviewPipeServer: V1 - fileType=%d, thumbSize=%d, dataSize=%d\n", fileType, thumbSize, dataSize);
+        RunPreviewPipeV1(hPipe, fileType, thumbSize, dataSize);
+    } else if (version == kPreviewProtocolVersion2) {
+        // Version 2: Session-based, commands follow
+        RunPreviewPipeV2(hPipe);
+    } else {
+        logf("RunPreviewPipeServer: unsupported version %d\n", version);
+    }
+
+    CloseHandle(hPipe);
+    logf("RunPreviewPipeServer: done\n");
+}
+
+// Protocol constants for named pipe IFilter - must match ifilter2 DLL
+constexpr u32 kIFilterRequestMagic = 0x49464C54;  // "IFLT" - IFilter Request
+constexpr u32 kIFilterResponseMagic = 0x49464C52; // "IFLR" - IFilter Response
+constexpr u32 kIFilterProtocolVersion = 1;
+
+// File type enum for IFilter - matches ifilter2 DLL
+enum class IFilterFileType : u32 {
+    PDF = 1,
+    EPUB = 2,
+};
+
+static EngineBase* CreateEngineFromDataForIFilter(const ByteSlice& data, IFilterFileType fileType) {
+    IStream* stream = CreateStreamFromData(data);
+    if (!stream) {
+        return nullptr;
+    }
+    EngineBase* engine = nullptr;
+    switch (fileType) {
+        case IFilterFileType::PDF:
+            engine = CreateEngineMupdfFromStream(stream, "ifilter.pdf");
+            break;
+        case IFilterFileType::EPUB:
+            engine = CreateEngineEpubFromStream(stream);
+            break;
+        default:
+            break;
+    }
+    stream->Release();
+    return engine;
+}
+
+// Helper to write a length-prefixed UTF-8 string to pipe
+static bool WriteLenPrefixedString(HANDLE hPipe, const char* s) {
+    DWORD bytesWritten = 0;
+    u32 len = s ? (u32)str::Len(s) : 0;
+    if (!WriteFile(hPipe, &len, 4, &bytesWritten, nullptr) || bytesWritten != 4) {
+        return false;
+    }
+    if (len > 0) {
+        DWORD totalWritten = 0;
+        while (totalWritten < len) {
+            DWORD toWrite = len - totalWritten;
+            if (!WriteFile(hPipe, s + totalWritten, toWrite, &bytesWritten, nullptr) || bytesWritten == 0) {
+                return false;
+            }
+            totalWritten += bytesWritten;
+        }
+    }
+    return true;
+}
+
+// Helper to write a length-prefixed UTF-16 string to pipe
+static bool WriteLenPrefixedWString(HANDLE hPipe, const WCHAR* ws) {
+    DWORD bytesWritten = 0;
+    u32 len = ws ? (u32)(str::Len(ws) * sizeof(WCHAR)) : 0;
+    if (!WriteFile(hPipe, &len, 4, &bytesWritten, nullptr) || bytesWritten != 4) {
+        return false;
+    }
+    if (len > 0) {
+        DWORD totalWritten = 0;
+        while (totalWritten < len) {
+            DWORD toWrite = len - totalWritten;
+            if (!WriteFile(hPipe, (const u8*)ws + totalWritten, toWrite, &bytesWritten, nullptr) || bytesWritten == 0) {
+                return false;
+            }
+            totalWritten += bytesWritten;
+        }
+    }
+    return true;
+}
+
+static void RunIFilterPipeServer(const char* pipeName) {
+    logf("RunIFilterPipeServer: connecting to pipe '%s'\n", pipeName);
+
+    // Connect to the named pipe (DLL is the server, we are the client)
+    HANDLE hPipe = CreateFileA(pipeName, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hPipe == INVALID_HANDLE_VALUE) {
+        logf("RunIFilterPipeServer: failed to connect to pipe, error %d\n", (int)GetLastError());
+        return;
+    }
+
+    // Read request header: magic(4) + version(4) + fileType(4) + dataSize(4) = 16 bytes
+    u32 magic = 0, version = 0, fileType = 0, dataSize = 0;
+    DWORD bytesRead = 0;
+
+    if (!ReadFile(hPipe, &magic, 4, &bytesRead, nullptr) || bytesRead != 4 || magic != kIFilterRequestMagic) {
+        logf("RunIFilterPipeServer: invalid magic 0x%08x\n", magic);
+        CloseHandle(hPipe);
+        return;
+    }
+    if (!ReadFile(hPipe, &version, 4, &bytesRead, nullptr) || bytesRead != 4 || version != kIFilterProtocolVersion) {
+        logf("RunIFilterPipeServer: invalid version %d\n", version);
+        CloseHandle(hPipe);
+        return;
+    }
+    if (!ReadFile(hPipe, &fileType, 4, &bytesRead, nullptr) || bytesRead != 4) {
+        logf("RunIFilterPipeServer: failed to read fileType\n");
+        CloseHandle(hPipe);
+        return;
+    }
+    if (!ReadFile(hPipe, &dataSize, 4, &bytesRead, nullptr) || bytesRead != 4) {
+        logf("RunIFilterPipeServer: failed to read dataSize\n");
+        CloseHandle(hPipe);
+        return;
+    }
+
+    logf("RunIFilterPipeServer: fileType=%d, dataSize=%d\n", fileType, dataSize);
+
+    // Sanity check
+    if (dataSize == 0 || dataSize > 100 * 1024 * 1024) { // max 100MB
+        logf("RunIFilterPipeServer: invalid dataSize %d\n", dataSize);
+        CloseHandle(hPipe);
+        return;
+    }
+
+    // Read file data
+    u8* fileData = AllocArray<u8>(dataSize);
+    if (!fileData) {
+        logf("RunIFilterPipeServer: failed to allocate %d bytes\n", dataSize);
+        CloseHandle(hPipe);
+        return;
+    }
+
+    DWORD totalRead = 0;
+    while (totalRead < dataSize) {
+        DWORD toRead = dataSize - totalRead;
+        if (!ReadFile(hPipe, fileData + totalRead, toRead, &bytesRead, nullptr) || bytesRead == 0) {
+            logf("RunIFilterPipeServer: failed to read file data at offset %d\n", totalRead);
+            free(fileData);
+            CloseHandle(hPipe);
+            return;
+        }
+        totalRead += bytesRead;
+    }
+
+    logf("RunIFilterPipeServer: read %d bytes of file data\n", totalRead);
+
+    // Create engine from data
+    ByteSlice data = {fileData, (size_t)dataSize};
+    EngineBase* engine = CreateEngineFromDataForIFilter(data, (IFilterFileType)fileType);
+
+    u32 status = 0;
+    u32 pageCount = 0;
+    char* author = nullptr;
+    char* title = nullptr;
+    char* date = nullptr;
+    Vec<WCHAR*> pageTexts;
+
+    if (!engine) {
+        logf("RunIFilterPipeServer: failed to create engine\n");
+        status = 1; // error
+    } else {
+        pageCount = engine->PageCount();
+
+        // Extract metadata
+        author = str::Dup(engine->GetPropertyTemp(kPropAuthor));
+        title = str::Dup(engine->GetPropertyTemp(kPropTitle));
+        if (!title) {
+            title = str::Dup(engine->GetPropertyTemp(kPropSubject));
+        }
+        date = str::Dup(engine->GetPropertyTemp(kPropModificationDate));
+        if (!date) {
+            date = str::Dup(engine->GetPropertyTemp(kPropCreationDate));
+        }
+
+        logf("RunIFilterPipeServer: pageCount=%d, author='%s', title='%s'\n", pageCount, author ? author : "(null)",
+             title ? title : "(null)");
+
+        // Extract text from each page
+        for (int i = 1; i <= (int)pageCount; i++) {
+            PageText pt = engine->ExtractPageText(i);
+            if (pt.text && pt.len > 0) {
+                // Replace \n with \r\n for Windows
+                WCHAR* text = str::Replace(pt.text, L"\n", L"\r\n");
+                pageTexts.Append(text);
+            } else {
+                pageTexts.Append(nullptr);
+            }
+            FreePageText(&pt);
+        }
+
+        engine->Release();
+    }
+
+    free(fileData);
+
+    // Write response header: magic(4) + status(4) + pageCount(4) = 12 bytes
+    DWORD bytesWritten = 0;
+    u32 responseMagic = kIFilterResponseMagic;
+    WriteFile(hPipe, &responseMagic, 4, &bytesWritten, nullptr);
+    WriteFile(hPipe, &status, 4, &bytesWritten, nullptr);
+    WriteFile(hPipe, &pageCount, 4, &bytesWritten, nullptr);
+
+    // Write metadata as length-prefixed strings
+    WriteLenPrefixedString(hPipe, author);
+    WriteLenPrefixedString(hPipe, title);
+    WriteLenPrefixedString(hPipe, date);
+
+    // Write page texts as length-prefixed UTF-16 strings
+    for (int i = 0; i < (int)pageTexts.size(); i++) {
+        WriteLenPrefixedWString(hPipe, pageTexts[i]);
+    }
+
+    // Cleanup
+    str::Free(author);
+    str::Free(title);
+    str::Free(date);
+    for (WCHAR* ws : pageTexts) {
+        str::Free(ws);
+    }
+
+    FlushFileBuffers(hPipe);
+    CloseHandle(hPipe);
+    logf("RunIFilterPipeServer: done, status=%d\n", status);
+}
+
+int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+    RememberMainUIThreadId();
     int exitCode = 1; // by default it's error
     int nWithDde = 0;
     MainWindow* win = nullptr;
@@ -942,7 +2099,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     HWND existingHwnd = nullptr;
     WindowTab* tabToSelect = nullptr;
     const char* logFilePath = nullptr;
-    Vec<SessionData*>* sessionData = nullptr;
 
     supressThrowFromNew();
 
@@ -961,7 +2117,11 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     srand((unsigned int)time(nullptr));
 
     if (!gIsAsanBuild) {
-        SetupCrashHandler();
+        // SetupCrashHandler()
+        TempStr symDir = GetCrashInfoDirTemp();
+        TempStr crashDumpPath = path::JoinTemp(symDir, "sumatrapdfcrash.dmp");
+        TempStr crashFilePath = path::JoinTemp(symDir, "sumatrapdfcrash.txt");
+        InstallCrashHandler(crashDumpPath, crashFilePath, symDir);
     }
 
     ScopedOle ole;
@@ -977,17 +2137,38 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     }
 
     Flags flags;
+    if (ExeHasNameOfStoreInstaller()) {
+        logf("Running store installer\n");
+        flags.install = true;
+        flags.silent = true;
+        flags.storeInstaller = true;
+        gCli = &flags;
+        return RunInstaller();
+    }
+
     ParseFlags(GetCommandLineW(), flags);
     gCli = &flags;
 
-    CheckIsStoreBuild();
+    if (gCli->silent) {
+        gLogToConsole = false;
+    }
 
-    if (false) {
-        const char* dir = "C:\\Users\\kjk\\Downloads\\test";
-        auto di = DirIter{dir};
-        for (VisitDirData* d : di) {
-            logf("d->filePath: '%s'\n", d->filePath);
-        }
+    // Handle preview pipe mode early - used by previewer DLL
+    if (flags.previewPipeName) {
+        RunPreviewPipeServer(flags.previewPipeName);
+        ::ExitProcess(0);
+    }
+
+    // Handle ifilter pipe mode early - used by ifilter DLL
+    if (flags.ifilterPipeName) {
+        RunIFilterPipeServer(flags.ifilterPipeName);
+        ::ExitProcess(0);
+    }
+
+    // Handle test preview pipe mode - exercises all preview pipe functionality
+    if (flags.testPreviewPipePath) {
+        RunTestPreviewPipe(flags.testPreviewPipePath);
+        ::ExitProcess(0);
     }
 
     // do this before running installer etc. so that we have disk / net permissions
@@ -996,7 +2177,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
 
 #if defined(DEBUG)
     if (false) {
-        TempStr exePath = GetExePathTemp();
+        const char* dir = "C:\\Users\\kjk\\Downloads";
+        auto di = DirIter{dir};
+        di.recurse = true;
+        for (DirIterEntry* d : di) {
+            logf("d->filePath: '%s'\n", d->filePath);
+        }
+    }
+    if (false) {
+        TempStr exePath = GetSelfExePathTemp();
         RunNonElevated(exePath);
         return 0;
     }
@@ -1015,8 +2204,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
 
     {
         char* s = ToUtf8Temp(GetCommandLineW());
-        logf("Starting SumatraPDF %s, GetCommandLineW(): '%s', flags.install: %d, flags.uninstall: %d\n",
-             UPDATE_CHECK_VERA, s, (int)flags.install, (int)flags.uninstall);
+        logf("Starting: '%s'\n  ver %s, flags.install: %d, flags.uninstall: %d\n", s, UPDATE_CHECK_VERA,
+             (int)flags.install, (int)flags.uninstall);
     }
 #if defined(DEBUG)
     if (gIsDebugBuild || gIsPreReleaseBuild) {
@@ -1054,24 +2243,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         return exitCode;
     }
 
-    logf("  isInstaller: %d\n", (int)isInstaller);
-    if (isInstaller) {
-        if (!ExeHasInstallerResources()) {
-            ShowNotValidInstallerError();
-            return 1;
-        }
-        exitCode = RunInstaller();
-        // exit immediately. for some reason exit handlers try to
-        // pull in libmupdf.dll which we don't have access to in the installer
-        ::ExitProcess(exitCode);
-    }
-
-    logf("  isUninstaller: %d, flags.uninstaller: %d\n", (int)isUninstaller, (int)flags.uninstall);
-    if (isUninstaller) {
-        exitCode = RunUninstaller();
-        ::ExitProcess(exitCode);
-    }
-
     if (flags.updateSelfTo) {
         logf(" flags.updateSelfTo: '%s'\n", flags.updateSelfTo);
         RedirectIOToExistingConsole();
@@ -1103,6 +2274,24 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         }
     }
 
+    // must check before isInstaller becase isInstaller can be auto-deduced
+    // from -installer.exe pattern in the name, so it would ignore explit -uninstall flag
+    if (isUninstaller) {
+        exitCode = RunUninstaller();
+        ::ExitProcess(exitCode);
+    }
+
+    if (isInstaller) {
+        if (!ExeHasInstallerResources()) {
+            ShowNotValidInstallerError();
+            return 1;
+        }
+        exitCode = RunInstaller();
+        // exit immediately. for some reason exit handlers try to
+        // pull in libmupdf.dll which we don't have access to in the installer
+        ::ExitProcess(exitCode);
+    }
+
     if (ForceRunningAsInstaller()) {
         logf("forcing running as an installer\n");
         exitCode = RunInstaller();
@@ -1111,13 +2300,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         ::ExitProcess(exitCode);
     }
 
-#if defined(DEBUG)
-    if (flags.testRenderPage) {
-        TestRenderPage(flags);
-        ShutdownCommon();
-        return 0;
+    // load libmupdf.dll eagerly before any code path that might call into it.
+    // if we let the delay-load helper do it and it fails, it raises a fatal
+    // exception. this must remain after the installer checks above because
+    // during installation libmupdf.dll isn't extracted yet
+    if (!LoadLibmupdf(!flags.silent)) {
+        ::ExitProcess(1);
     }
 
+#if defined(DEBUG)
     if (flags.testExtractPage) {
         TestExtractPage(flags);
         ShutdownCommon();
@@ -1148,11 +2339,23 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
 
     gRenderCache = new RenderCache();
 
+    // TODO: for reasons I don't understand, this must be called before LoadSettings()
+    if (UseDarkModeLib()) {
+        DarkMode::initDarkMode();
+        DarkMode::setColorizeTitleBarConfig(true);
+    }
+
     LoadSettings();
     UpdateGlobalPrefs(flags);
     SetCurrentLang(flags.lang ? flags.lang : gGlobalPrefs->uiLanguage);
+    FileWatcherInit();
 
-    // RedirectIOToConsole();  //CPS Lab DEBUG
+    if (flags.testRenderPage) {
+        TestRenderPage(flags);
+        ShutdownCommon();
+        return 0;
+    }
+
     if (flags.showConsole) {
         RedirectIOToConsole();
     }
@@ -1215,32 +2418,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         goto Exit;
     }
 
-    // DDE Server/Topic name for PdfSync
-    if(flags.pdfsync_dde_service != nullptr) {
-        cpslab::PDFSYNC_DDE_SERVICE = strconv::Utf8ToWStr(flags.pdfsync_dde_service);
-    }
-    // logf("PDFSYNC_DDE_SERVICE : '%ls'\n", PDFSYNC_DDE_SERVICE);
-    if(flags.pdfsync_dde_topic != nullptr) {
-        cpslab::PDFSYNC_DDE_TOPIC = strconv::Utf8ToWStr(flags.pdfsync_dde_topic);
-    }
-    // logf("PDFSYNC_DDE_TOPIC : '%ls'\n", PDFSYNC_DDE_TOPIC);
-
-    // DDE Server/Topic name for UserApp
-    if(flags.userapp_dde_service != nullptr) {
-        cpslab::USERAPP_DDE_SERVICE = strconv::Utf8ToWStr(flags.userapp_dde_service);
-    }
-    if(flags.userapp_dde_topic != nullptr) {
-        cpslab::USERAPP_DDE_TOPIC = strconv::Utf8ToWStr(flags.userapp_dde_topic);
-    }
-    if(flags.userapp_dde_debug_topic != nullptr) {
-        cpslab::USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWStr(flags.userapp_dde_debug_topic);
-    }
-    if (flags.document_mode) {
-        cpslab::MODE = cpslab::CpsMode::Document;
-    }
-    if (flags.export_text_blocks) {
-        cpslab::EXPORT_TEXT_BLOCKS = flags.export_text_blocks;
-    }
     // only call FindPrevInstWindow() once
     existingInstanceHwnd = FindPrevInstWindow(&hMutex);
 
@@ -1289,10 +2466,10 @@ ContinueOpenWindow:
     // keep this data alive until the end of program and ensure it's not
     // over-written by re-loading settings file while we're using it
     // and also to keep TabState forever for lazy loading of tabs
-    sessionData = gGlobalPrefs->sessionData;
+    gInitialSessionData = gGlobalPrefs->sessionData;
     gGlobalPrefs->sessionData = new Vec<SessionData*>();
 
-    restoreSession = gGlobalPrefs->restoreSession && (sessionData->size() > 0) && !gPluginMode;
+    restoreSession = gGlobalPrefs->restoreSession && (gInitialSessionData->Size() > 0) && !gPluginMode;
     if (!gGlobalPrefs->useTabs && (existingInstanceHwnd != nullptr)) {
         // do not restore a session if tabs are disabled and SumatraPDF is already running
         // TODO: maybe disable restoring if tabs are disabled?
@@ -1312,7 +2489,7 @@ ContinueOpenWindow:
     }
 
     if (restoreSession) {
-        for (SessionData* data : *sessionData) {
+        for (SessionData* data : *gInitialSessionData) {
             win = CreateAndShowMainWindow(data);
             for (TabState* state : *data->tabStates) {
                 if (str::IsEmpty(state->filePath)) {
@@ -1450,9 +2627,10 @@ Exit:
     }
     str::Free(logFilePath);
 
-    if (sessionData) {
-        DeleteVecMembers(*sessionData);
-        delete sessionData;
+    if (gInitialSessionData) {
+        FreeSessionDataVec(gInitialSessionData);
+        delete gInitialSessionData;
+        gInitialSessionData = nullptr;
     }
     FreeExternalViewers();
     while (gWindows.size() > 0) {
@@ -1500,13 +2678,14 @@ Exit:
     ShutdownCleanup();
     EngineEbookCleanup();
     FreeCustomCommands();
+    FreeThemes();
 
     // it's still possible to crash after this (destructors of static classes,
     // atexit() code etc.) point, but it's very unlikely
     if (!gIsAsanBuild) {
         UninstallCrashHandler();
     }
-
+    DeleteAppTools();
     DestroyLogging();
     DestroyTempAllocator();
 

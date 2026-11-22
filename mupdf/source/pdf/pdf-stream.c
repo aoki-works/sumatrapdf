@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -43,7 +43,9 @@ pdf_obj_num_is_stream(fz_context *ctx, pdf_document *doc, int num)
 		return 0;
 	}
 
+	if (entry)
 	return entry->stm_ofs != 0 || entry->stm_buf;
+	return 0;
 }
 
 int
@@ -152,6 +154,14 @@ build_compression_params(fz_context *ctx, pdf_obj *f, pdf_obj *p, fz_compression
 		params->u.flate.colors = pdf_dict_get_int_default(ctx, p, PDF_NAME(Colors), 1);
 		params->u.flate.bpc = pdf_dict_get_int_default(ctx, p, PDF_NAME(BitsPerComponent), 8);
 	}
+	else if (pdf_name_eq(ctx, f, PDF_NAME(BrotliDecode)) || pdf_name_eq(ctx, f, PDF_NAME(Br)))
+	{
+		params->type = FZ_IMAGE_BROTLI;
+		params->u.brotli.predictor = pdf_dict_get_int_default(ctx, p, PDF_NAME(Predictor), 1);
+		params->u.brotli.columns = pdf_dict_get_int_default(ctx, p, PDF_NAME(Columns), 1);
+		params->u.brotli.colors = pdf_dict_get_int_default(ctx, p, PDF_NAME(Colors), 1);
+		params->u.brotli.bpc = pdf_dict_get_int_default(ctx, p, PDF_NAME(BitsPerComponent), 8);
+	}
 	else if (pdf_name_eq(ctx, f, PDF_NAME(LZWDecode)) || pdf_name_eq(ctx, f, PDF_NAME(LZW)))
 	{
 		params->type = FZ_IMAGE_LZW;
@@ -175,6 +185,11 @@ build_compression_params(fz_context *ctx, pdf_obj *f, pdf_obj *p, fz_compression
 			else
 				params->u.jbig2.globals = pdf_load_jbig2_globals(ctx, g);
 		}
+	}
+	else if (pdf_name_eq(ctx, f, PDF_NAME(JPXDecode)))
+	{
+		params->type = FZ_IMAGE_JPX;
+		params->u.jpx.smask_in_data = pdf_dict_get_bool_default(ctx, p, PDF_NAME(SMaskInData), 0);
 	}
 }
 
@@ -443,7 +458,7 @@ pdf_open_raw_stream_number(fz_context *ctx, pdf_document *doc, int num)
 	int orig_num, orig_gen;
 
 	x = pdf_cache_object(ctx, doc, num);
-	if (x->stm_ofs == 0)
+	if (!x || x->stm_ofs == 0)
 		fz_throw(ctx, FZ_ERROR_FORMAT, "object is not a stream");
 
 	return pdf_open_raw_filter(ctx, doc->file, doc, x->obj, num, &orig_num, &orig_gen, x->stm_ofs);
@@ -455,7 +470,7 @@ pdf_open_image_stream(fz_context *ctx, pdf_document *doc, int num, fz_compressio
 	pdf_xref_entry *x;
 
 	x = pdf_cache_object(ctx, doc, num);
-	if (x->stm_ofs == 0 && x->stm_buf == NULL)
+	if (!x || (x->stm_ofs == 0 && x->stm_buf == NULL))
 		fz_throw(ctx, FZ_ERROR_FORMAT, "object is not a stream");
 
 	return pdf_open_filter(ctx, doc, doc->file, x->obj, num, x->stm_ofs, params, might_be_image);
@@ -528,6 +543,8 @@ pdf_guess_filter_length(size_t len, const char *filter)
 
 	if (!strcmp(filter, "FlateDecode"))
 		nlen = len * 3;
+	else if (!strcmp(filter, "BrotliDecode"))
+		nlen = len * 4;
 	else if (!strcmp(filter, "RunLengthDecode"))
 		nlen = len * 3;
 	else if (!strcmp(filter, "LZWDecode"))
@@ -593,7 +610,7 @@ can_reuse_buffer(fz_context *ctx, pdf_xref_entry *entry, fz_compression_params *
 	return (params->type == FZ_IMAGE_RAW) ? 0 : 1;
 }
 
-static fz_buffer *
+fz_buffer *
 pdf_load_image_stream(fz_context *ctx, pdf_document *doc, int num, fz_compression_params *params, int *truncated, size_t worst_case)
 {
 	fz_stream *stm = NULL;
@@ -629,6 +646,19 @@ pdf_load_image_stream(fz_context *ctx, pdf_document *doc, int num, fz_compressio
 		n = pdf_array_len(ctx, obj);
 		for (i = 0; i < n; i++)
 			len = pdf_guess_filter_length(len, pdf_array_get_name(ctx, obj, i));
+		if (worst_case == 0 && pdf_name_eq(ctx, pdf_dict_get(ctx, dict, PDF_NAME(Subtype)), PDF_NAME(Image)))
+		{
+			int64_t w = pdf_dict_get_int64(ctx, dict, PDF_NAME(Width));
+			int64_t h = pdf_dict_get_int64(ctx, dict, PDF_NAME(Height));
+			int bpc = pdf_dict_get_int_default(ctx, dict, PDF_NAME(BitsPerComponent), 8);
+			int nc = pdf_guess_colorspace_components(ctx, pdf_dict_get(ctx, dict, PDF_NAME(ColorSpace)));
+			if (w > 0 && h > 0 && bpc > 0 && nc > 0)
+			{
+				worst_case = (size_t)(((w * nc * bpc + 7) >> 3) * h);
+				if (worst_case < len)
+					worst_case = len;
+			}
+		}
 	}
 	fz_always(ctx)
 	{

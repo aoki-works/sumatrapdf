@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -109,4 +109,92 @@ FUN(Font_advanceGlyph)(JNIEnv *env, jobject self, jint glyph, jboolean wmode)
 		jni_rethrow(env, ctx);
 
 	return advance;
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(Font_isMono)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	fz_font *font = from_Font(env, self);
+	jboolean result = JNI_FALSE;
+
+	if (!ctx || !font) return JNI_FALSE;
+
+	fz_try(ctx)
+		result = fz_font_is_monospaced(ctx, font);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return result;
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(Font_isSerif)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	fz_font *font = from_Font(env, self);
+	jboolean result = JNI_FALSE;
+
+	if (!ctx || !font) return JNI_FALSE;
+
+	fz_try(ctx)
+		result = fz_font_is_serif(ctx, font);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return result;
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(Font_isBold)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	fz_font *font = from_Font(env, self);
+	jboolean result = JNI_FALSE;
+
+	if (!ctx || !font) return JNI_FALSE;
+
+	fz_try(ctx)
+		result = fz_font_is_bold(ctx, font);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return result;
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(Font_isItalic)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	fz_font *font = from_Font(env, self);
+	jboolean result = JNI_FALSE;
+
+	if (!ctx || !font) return JNI_FALSE;
+
+	fz_try(ctx)
+		result = fz_font_is_italic(ctx, font);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return result;
+}
+
+JNIEXPORT void JNICALL
+FUN(Font_installFontLoader)(JNIEnv *env, jclass cls, jobject jloader)
+{
+	fz_context *ctx = get_context(env);
+
+	if (!ctx) return;
+
+	(*env)->SetStaticObjectField(env, cls_Font, fid_Font_fontLoader, jloader);
+
+	fz_try(ctx)
+		fz_install_load_system_font_funcs(ctx,
+			load_java_font,
+			load_java_cjk_font,
+			load_java_fallback_font);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+
+	return;
 }

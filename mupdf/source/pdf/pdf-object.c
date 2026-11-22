@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -83,13 +83,13 @@ typedef struct
 	pdf_obj super;
 	char *text; /* utf8 encoded text string */
 	size_t len;
-	char buf[1];
+	char buf[FZ_FLEXIBLE_ARRAY];
 } pdf_obj_string;
 
 typedef struct
 {
 	pdf_obj super;
-	char n[1];
+	char n[FZ_FLEXIBLE_ARRAY];
 } pdf_obj_name;
 
 typedef struct
@@ -659,13 +659,14 @@ do_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b, int check_streams)
 		 * Otherwise, do the full, painful, comparison. */
 		{
 			/* Slightly convoluted to know if something is a stream. */
-			pdf_document *doc = DICT(a)->doc;
+			pdf_document *doca = DICT(a)->doc;
+			pdf_document *docb = DICT(b)->doc;
 			int ap = pdf_obj_parent_num(ctx, a);
 			int bp;
 			int a_is_stream = 0;
-			pdf_xref_entry *entrya = pdf_get_xref_entry_no_change(ctx, doc, ap);
+			pdf_xref_entry *entrya = pdf_get_xref_entry_no_change(ctx, doca, ap);
 			pdf_xref_entry *entryb;
-			if (entrya != NULL && entrya->obj == a && pdf_obj_num_is_stream(ctx, doc, ap))
+			if (entrya != NULL && entrya->obj == a && pdf_obj_num_is_stream(ctx, doca, ap))
 			{
 				/* It's a stream, and we know a != b from above. */
 				if (!check_streams)
@@ -673,8 +674,8 @@ do_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b, int check_streams)
 				a_is_stream = 1;
 			}
 			bp = pdf_obj_parent_num(ctx, b);
-			entryb = pdf_get_xref_entry_no_change(ctx, doc, bp);
-			if (entryb != NULL && entryb->obj == b && pdf_obj_num_is_stream(ctx, doc, bp))
+			entryb = pdf_get_xref_entry_no_change(ctx, docb, bp);
+			if (entryb != NULL && entryb->obj == b && pdf_obj_num_is_stream(ctx, docb, bp))
 			{
 				/* It's a stream, and we know a != b from above. So mismatch. */
 				if (!check_streams || !a_is_stream)
@@ -699,8 +700,8 @@ do_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b, int check_streams)
 				{
 					unsigned char *dataa, *datab;
 					size_t lena, lenb;
-					sa = pdf_load_raw_stream_number(ctx, doc, ap);
-					sb = pdf_load_raw_stream_number(ctx, doc, bp);
+					sa = pdf_load_raw_stream_number(ctx, doca, ap);
+					sb = pdf_load_raw_stream_number(ctx, docb, bp);
 					lena = fz_buffer_storage(ctx, sa, &dataa);
 					lenb = fz_buffer_storage(ctx, sb, &datab);
 					if (lena == lenb && memcmp(dataa, datab, lena) == 0)
@@ -718,8 +719,6 @@ do_objcmp(fz_context *ctx, pdf_obj *a, pdf_obj *b, int check_streams)
 				return differ;
 			}
 		}
-
-		return 0;
 	}
 	return 1;
 }
@@ -1055,7 +1054,7 @@ dump_changes(fz_context *ctx, pdf_document *doc, pdf_journal_entry *entry)
 }
 #endif
 
-/* We build up journal entries as being a list of changes (framents) that
+/* We build up journal entries as being a list of changes (fragments) that
  * happen all together as part of a single step. When we reach pdf_end_operation
  * we have all the changes that have happened during this operation in a list
  * that basically boils down to being:
@@ -1352,7 +1351,7 @@ swap_fragments(fz_context *ctx, pdf_document *doc, pdf_journal_entry *entry)
 		obuf = xre->stm_buf;
 		xre->obj = frag->inactive;
 		type = xre->type;
-		xre->type = frag->newobj ? 0 : 'o';
+		xre->type = frag->newobj ? 0 : 'n';
 		frag->newobj = type == 0;
 		xre->stm_buf = frag->stream;
 		frag->inactive = old;
@@ -1403,6 +1402,7 @@ void pdf_abandon_operation(fz_context *ctx, pdf_document *doc)
 void pdf_undo(fz_context *ctx, pdf_document *doc)
 {
 	pdf_journal_entry *entry;
+	pdf_journal_fragment *frag;
 
 	if (ctx == NULL || doc == NULL)
 		return;
@@ -1424,6 +1424,12 @@ void pdf_undo(fz_context *ctx, pdf_document *doc)
 	doc->journal->current = entry->prev;
 
 	swap_fragments(ctx, doc, entry);
+
+	// nuke all caches
+	pdf_drop_page_tree_internal(ctx, doc);
+	pdf_sync_open_pages(ctx, doc);
+	for (frag = entry->head; frag; frag = frag->next)
+		pdf_purge_object_from_store(ctx, doc, frag->obj_num);
 }
 
 /* Move forwards in the undo history. Throws an error if we are at the
@@ -1431,6 +1437,7 @@ void pdf_undo(fz_context *ctx, pdf_document *doc)
 void pdf_redo(fz_context *ctx, pdf_document *doc)
 {
 	pdf_journal_entry *entry;
+	pdf_journal_fragment *frag;
 
 	if (ctx == NULL || doc == NULL)
 		return;
@@ -1463,6 +1470,12 @@ void pdf_redo(fz_context *ctx, pdf_document *doc)
 	doc->journal->current = entry;
 
 	swap_fragments(ctx, doc, entry);
+
+	// nuke all caches
+	pdf_drop_page_tree_internal(ctx, doc);
+	pdf_sync_open_pages(ctx, doc);
+	for (frag = entry->head; frag; frag = frag->next)
+		pdf_purge_object_from_store(ctx, doc, frag->obj_num);
 }
 
 void pdf_discard_journal(fz_context *ctx, pdf_journal *journal)
@@ -1655,6 +1668,8 @@ void pdf_deserialise_journal(fz_context *ctx, pdf_document *doc, fz_stream *stm)
 		obj = pdf_parse_dict(ctx, doc, stm, &doc->lexbuf.base);
 
 		nis = pdf_dict_get_int(ctx, obj, PDF_NAME(NumSections));
+		if (nis < 0 || nis > doc->num_xref_sections)
+			fz_throw(ctx, FZ_ERROR_FORMAT, "Bad journal format");
 		pdf_fingerprint_file(ctx, doc, digest, nis);
 
 		file_size = pdf_dict_get_int(ctx, obj, PDF_NAME(FileSize));
@@ -1692,8 +1707,8 @@ void pdf_deserialise_journal(fz_context *ctx, pdf_document *doc, fz_stream *stm)
 		if (fz_skip_string(ctx, stm, "entry\n") == 0)
 		{
 			/* Read the fragment title. */
-			pdf_token tok = pdf_lex(ctx, stm, &doc->lexbuf.base);
 			char *title;
+			tok = pdf_lex(ctx, stm, &doc->lexbuf.base);
 
 			if (tok != PDF_TOK_STRING)
 				fz_throw(ctx, FZ_ERROR_FORMAT, "Bad string in journal");
@@ -1721,6 +1736,9 @@ void pdf_deserialise_journal(fz_context *ctx, pdf_document *doc, fz_stream *stm)
 	doc->journal->current = NULL;
 	if (pos > 0)
 	{
+		if (doc->journal->head == NULL)
+			fz_throw(ctx, FZ_ERROR_FORMAT, "Badly formed journal");
+
 		doc->journal->current = doc->journal->head;
 		while (--pos)
 		{
@@ -1841,6 +1859,10 @@ static void prepare_object_for_alteration(fz_context *ctx, pdf_obj *obj, pdf_obj
 			pdf_drop_local_xref_and_resources(ctx, doc);
 		}
 	}
+
+	// Empty store of items keyed on the object being changed.
+	if (parent != 0)
+		pdf_purge_object_from_store(ctx, doc, parent);
 
 	entry = NULL;
 	if (doc->journal)
@@ -2032,6 +2054,22 @@ pdf_array_find(fz_context *ctx, pdf_obj *arr, pdf_obj *obj)
 			return i;
 
 	return -1;
+}
+
+pdf_obj *pdf_new_point(fz_context *ctx, pdf_document *doc, fz_point point)
+{
+	pdf_obj *arr = pdf_new_array(ctx, doc, 2);
+	fz_try(ctx)
+	{
+		pdf_array_push_real(ctx, arr, point.x);
+		pdf_array_push_real(ctx, arr, point.y);
+	}
+	fz_catch(ctx)
+	{
+		pdf_drop_obj(ctx, arr);
+		fz_rethrow(ctx);
+	}
+	return arr;
 }
 
 pdf_obj *pdf_new_rect(fz_context *ctx, pdf_document *doc, fz_rect rect)
@@ -2428,7 +2466,7 @@ pdf_obj *
 pdf_dict_geta(fz_context *ctx, pdf_obj *obj, pdf_obj *key, pdf_obj *abbrev)
 {
 	pdf_obj *v;
-	/* ISO 32000-2:2020 (PDF 2.0) - abbreviated names take precendence. */
+	/* ISO 32000-2:2020 (PDF 2.0) - abbreviated names take precedence. */
 	v = pdf_dict_get(ctx, obj, abbrev);
 	if (v)
 		return v;
@@ -3643,7 +3681,8 @@ pdf_sprint_encrypted_obj(fz_context *ctx, char *buf, size_t cap, size_t *len, pd
 	}
 	fz_catch(ctx)
 	{
-		fz_free(ctx, fmt.ptr);
+		if (!buf || cap == 0)
+			fz_free(ctx, fmt.ptr);
 		fz_rethrow(ctx);
 	}
 
@@ -3805,6 +3844,16 @@ void pdf_dict_put_string(fz_context *ctx, pdf_obj *dict, pdf_obj *key, const cha
 void pdf_dict_put_text_string(fz_context *ctx, pdf_obj *dict, pdf_obj *key, const char *x)
 {
 	pdf_dict_put_drop(ctx, dict, key, pdf_new_text_string(ctx, x));
+}
+
+void pdf_dict_put_indirect(fz_context *ctx, pdf_obj *dict, pdf_obj *key, int num)
+{
+	pdf_dict_put_drop(ctx, dict, key, pdf_new_indirect(ctx, pdf_get_bound_document(ctx, dict), num, 0));
+}
+
+void pdf_dict_put_point(fz_context *ctx, pdf_obj *dict, pdf_obj *key, fz_point x)
+{
+	pdf_dict_put_drop(ctx, dict, key, pdf_new_point(ctx, pdf_get_bound_document(ctx, dict), x));
 }
 
 void pdf_dict_put_rect(fz_context *ctx, pdf_obj *dict, pdf_obj *key, fz_rect x)
@@ -3987,6 +4036,11 @@ const char *pdf_dict_get_text_string_opt(fz_context *ctx, pdf_obj *dict, pdf_obj
 	if (!pdf_is_string(ctx, obj))
 		return NULL;
 	return pdf_to_text_string(ctx, obj);
+}
+
+fz_point pdf_dict_get_point(fz_context *ctx, pdf_obj *dict, pdf_obj *key)
+{
+	return pdf_to_point(ctx, pdf_dict_get(ctx, dict, key), 0);
 }
 
 fz_rect pdf_dict_get_rect(fz_context *ctx, pdf_obj *dict, pdf_obj *key)

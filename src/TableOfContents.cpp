@@ -113,12 +113,9 @@ static void RelayoutTocItem(LPNMTVCUSTOMDRAW ntvcd) {
     HWND hTV = ncd->hdr.hwndFrom;
     HTREEITEM hItem = (HTREEITEM)ncd->dwItemSpec;
     RECT rcItem;
-    if (0 == ncd->rc.right - ncd->rc.left || 0 == ncd->rc.bottom - ncd->rc.top)
-        return;
-    if (!TreeView_GetItemRect(hTV, hItem, &rcItem, TRUE))
-        return;
-    if (rcItem.right > ncd->rc.right)
-        rcItem.right = ncd->rc.right;
+    if (0 == ncd->rc.right - ncd->rc.left || 0 == ncd->rc.bottom - ncd->rc.top) return;
+    if (!TreeView_GetItemRect(hTV, hItem, &rcItem, TRUE)) return;
+    if (rcItem.right > ncd->rc.right) rcItem.right = ncd->rc.right;
 
     // Clear the label
     RECT rcFullWidth = rcItem;
@@ -166,8 +163,7 @@ static void RelayoutTocItem(LPNMTVCUSTOMDRAW ntvcd) {
     HBRUSH brushBg = CreateSolidBrush(ntvcd->clrTextBk);
     FillRect(ncd->hdc, &rcItem, brushBg);
     DeleteObject(brushBg);
-    if ((ncd->uItemState & CDIS_FOCUS))
-        DrawFocusRect(ncd->hdc, &rcItem);
+    if ((ncd->uItemState & CDIS_FOCUS)) DrawFocusRect(ncd->hdc, &rcItem);
 
     InflateRect(&rcItem, -2, -1);
     DrawTextW(ncd->hdc, szText, -1, &rcItem, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_WORD_ELLIPSIS);
@@ -188,6 +184,11 @@ static void GoToTocLink(GoToTocLinkData* d) {
     auto tocItem = d->tocItem;
     auto ctrl = d->ctrl;
 
+    // validate tab before dereferencing — it may have been freed
+    // while this task was queued (e.g. user closed the tab/window)
+    if (!IsWindowTabValid(tab)) {
+        return;
+    }
     MainWindow* win = tab->win;
     // tocItem is invalid if the DocController has been replaced
     if (!IsMainWindowValid(win) || win->CurrentTab() != tab || tab->ctrl != ctrl) {
@@ -760,8 +761,7 @@ static void UpdateFont(HDC hdc, int fontFlags) {
 // https://docs.microsoft.com/en-us/windows/win32/api/commctrl/ns-commctrl-nmtvcustomdraw
 void OnTocCustomDraw(TreeView::CustomDrawEvent* ev) {
 #if defined(DISPLAY_TOC_PAGE_NUMBERS)
-    if (false)
-        return CDRF_DODEFAULT;
+    if (false) return CDRF_DODEFAULT;
     switch (((LPNMCUSTOMDRAW)pnmtv)->dwDrawStage) {
         case CDDS_PREPAINT:
             return CDRF_NOTIFYITEMDRAW;
@@ -996,9 +996,10 @@ void CreateToc(MainWindow* win) {
 
     auto l = new LabelWithCloseWnd();
     {
-        LabelWithCloseCreateArgs args;
+        LabelWithCloseWnd::CreateArgs args;
         args.parent = win->hwndTocBox;
         args.cmdId = IDC_TOC_LABEL_WITH_CLOSE;
+        args.isRtl = IsUIRtl();
         // TODO: use the same font size as in GetTreeFont()?
         args.font = GetDefaultGuiFont(true, false);
         l->Create(args);
@@ -1013,6 +1014,7 @@ void CreateToc(MainWindow* win) {
     args.font = GetAppTreeFont();
     args.fullRowSelect = true;
     args.exStyle = WS_EX_STATICEDGE;
+    args.isRtl = IsUIRtl();
 
     auto fn = MkFunc1Void(TocContextMenu);
     treeView->onContextMenu = fn;

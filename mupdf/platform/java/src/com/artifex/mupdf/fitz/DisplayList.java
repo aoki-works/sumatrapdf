@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -55,11 +55,23 @@ public class DisplayList
 		return toStructuredText(null);
 	}
 
-	public native Quad[][] search(String needle);
+	public native Quad[][] search(String needle, int style);
+	public Quad[][] search(String needle)
+	{
+		return search(needle, StructuredText.SEARCH_IGNORE_CASE);
+	}
 
 	public native void run(Device dev, Matrix ctm, Rect scissor, Cookie cookie);
 
 	public void run(Device dev, Matrix ctm, Cookie cookie) {
 		run(dev, ctm, null, cookie);
+	}
+
+	public native BarcodeInfo decodeBarcode(Rect subarea, float rotate);
+	public BarcodeInfo decodeBarcode(Rect subarea) {
+		return decodeBarcode(subarea, 0);
+	}
+	public BarcodeInfo decodeBarcode() {
+		return decodeBarcode(Rect.Infinite(), 0);
 	}
 }

@@ -19,30 +19,30 @@ struct Span {
 
     Span() = default;
     ~Span() = default;
-    Span(const T* d, int size) : d((T*)d), size(size) {
-    }
-    T* Data() const {
-        return d;
-    }
-    int Size() const {
-        return size;
-    }
+    Span(const T* d, int size) : d((T*)d), size(size) {}
+    T* Data() const { return d; }
+    int Size() const { return size; }
 };
 
 struct StrSpan : Span<char> {
     StrSpan() = default;
     StrSpan(const char* s);
     StrSpan(const char* s, int sLen);
-    char* CStr() const {
-        return d;
-    }
-    int Len() const {
-        return size;
-    }
-    bool IsEmpty() const {
-        return !d || size == 0;
-    }
+    char* CStr() const { return d; }
+    int Len() const { return size; }
+    bool IsEmpty() const { return !d || size == 0; }
 };
+
+struct Str {
+    char* s = nullptr;
+    int len = 0;
+
+    Str();
+    explicit Str(char* s);
+    explicit Str(char* s, int len);
+};
+
+#define StrL(s) Str{(char*)(s), (int)sizeof(s) - 1}
 
 struct ByteSlice {
     u8* d = nullptr;
@@ -79,24 +79,12 @@ struct ByteSlice {
         d = (u8*)data;
         sz = size;
     }
-    u8* data() const {
-        return d;
-    }
-    u8* Get() const {
-        return d;
-    }
-    size_t size() const {
-        return sz;
-    }
-    int Size() const {
-        return (int)sz;
-    }
-    bool empty() const {
-        return !d;
-    }
-    bool IsEmpty() const {
-        return !d;
-    }
+    u8* data() const { return d; }
+    u8* Get() const { return d; }
+    size_t size() const { return sz; }
+    int Size() const { return (int)sz; }
+    bool empty() const { return !d; }
+    bool IsEmpty() const { return !d; }
     ByteSlice Clone() const {
         if (empty()) {
             return {};
@@ -109,16 +97,18 @@ struct ByteSlice {
         d = nullptr;
         sz = 0;
     }
-    operator const char*() {
-        return (const char*)d;
-    }
+    operator const char*() { return (const char*)d; }
 };
 
 bool IsEqual(const ByteSlice&, const ByteSlice&);
 
 namespace str {
 
-enum class TrimOpt { Left, Right, Both };
+enum class TrimOpt {
+    Left,
+    Right,
+    Both
+};
 
 size_t Len(const WCHAR*);
 size_t Len(const char* s);
@@ -181,10 +171,12 @@ bool IsAlNum(char c);
 
 const char* FindChar(const char* str, char c);
 char* FindChar(char* str, char c);
+int FindCharIdx(const char* str, char c);
 const char* FindCharLast(const char* str, char c);
 char* FindCharLast(char* str, char c);
 const char* Find(const char* str, const char* find);
 const char* FindI(const char* str, const char* find);
+int BufFind(const char* buf, int bufSize, const char* toFind);
 
 bool Contains(const char* s, const char* txt);
 bool ContainsI(const char* s, const char* txt);
@@ -218,6 +210,8 @@ int CmpNatural(const char*, const char*);
 
 TempStr FormatFloatWithThousandSepTemp(double number, LCID locale = LOCALE_USER_DEFAULT);
 TempStr FormatNumWithThousandSepTemp(i64 num, LCID locale = LOCALE_USER_DEFAULT);
+TempStr FormatSizeShortTemp(i64 size, const char* sizeUnits[3]);
+TempStr FormatFileSizeTemp(i64);
 TempStr FormatRomanNumeralTemp(int number);
 
 bool IsEmptyOrWhiteSpace(const char*);
@@ -238,7 +232,6 @@ bool EndsWith(const WCHAR* txt, const WCHAR* end);
 bool EndsWithI(const WCHAR* txt, const WCHAR* end);
 WCHAR* ToLower(const WCHAR*);
 WCHAR* ToLowerInPlace(WCHAR*);
-int CmpNatural(const WCHAR*, const WCHAR*);
 const WCHAR* Parse(const WCHAR* str, const WCHAR* format, ...);
 int BufSet(WCHAR* dst, int dstCchSize, const WCHAR* src);
 int BufSet(WCHAR* dst, int dstCchSize, const char* src);
@@ -247,14 +240,13 @@ size_t RemoveCharsInPlace(WCHAR* str, const WCHAR* toRemove);
 const WCHAR* FindChar(const WCHAR* str, WCHAR c);
 WCHAR* FindChar(WCHAR* str, WCHAR c);
 const WCHAR* Find(const WCHAR* str, const WCHAR* find);
-WCHAR* FmtV(const WCHAR* fmt, va_list args);
-WCHAR* Format(const WCHAR* fmt, ...);
 bool IsWs(WCHAR c);
 bool IsDigit(WCHAR c);
 bool IsNonCharacter(WCHAR c);
 size_t TransCharsInPlace(WCHAR* str, const WCHAR* oldChars, const WCHAR* newChars);
 WCHAR* Replace(const WCHAR* s, const WCHAR* toReplace, const WCHAR* replaceWith);
 
+WCHAR* CastToWCHAR(const char* s);
 } // namespace str
 
 namespace url {
@@ -339,12 +331,8 @@ struct Str {
     // https://stackoverflow.com/questions/16504062/how-to-make-the-for-each-loop-function-in-c-work-with-a-custom-class
     using iterator = char*;
 
-    iterator begin() const {
-        return &(els[0]);
-    }
-    iterator end() const {
-        return &(els[len]);
-    }
+    iterator begin() const { return &(els[0]); }
+    iterator end() const { return &(els[len]); }
 };
 
 // bool Replace(Str& s, const char* toReplace, const char* replaceWith);
@@ -390,7 +378,6 @@ struct WStr {
     bool Contains(const WCHAR& el) const;
     int Remove(const WCHAR& el);
     bool IsEmpty() const;
-    void AppendFmt(const WCHAR* fmt, ...);
     void Set(const WCHAR*);
     WCHAR* Get() const;
     WCHAR LastChar() const;
@@ -399,12 +386,8 @@ struct WStr {
     // https://stackoverflow.com/questions/16504062/how-to-make-the-for-each-loop-function-in-c-work-with-a-custom-class
     using iterator = WCHAR*;
 
-    iterator begin() const {
-        return &(els[0]);
-    }
-    iterator end() const {
-        return &(els[len]);
-    }
+    iterator begin() const { return &(els[0]); }
+    iterator end() const { return &(els[len]); }
 };
 
 bool Replace(WStr& s, const WCHAR* toReplace, const WCHAR* replaceWith);
@@ -412,3 +395,9 @@ bool Replace(WStr& s, const WCHAR* toReplace, const WCHAR* replaceWith);
 } // namespace str
 
 int ParseInt(const char* bytes);
+bool IsValidProgramVersion(const char* ver);
+int CompareProgramVersion(const char* ver1, const char* ver2);
+TempStr ShortenStringUtf8Temp(const char* s, int maxRunes);
+TempStr ShortenStringUtf8InTheMiddleTemp(const char* s, int maxRunes);
+bool IsTextRtl(const WCHAR* s);
+bool IsTextRtl(const char* s);

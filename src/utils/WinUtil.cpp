@@ -9,9 +9,17 @@
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
+#include <wintrust.h>
+#include <softpub.h>
+#include <WinCrypt.h>
 #include <bitset>
+#include <float.h>
 #include <intrin.h>
 #include <mlang.h>
+#ifdef __GNUC__
+// mingw needs explicit UUID declaration for IMultiLanguage2
+__CRT_UUID_DECL(IMultiLanguage2, 0xDCCFC164, 0x2B38, 0x11D2, 0xB7, 0xEC, 0x00, 0xC0, 0x4F, 0x8F, 0x5D, 0x9A)
+#endif
 
 #include "utils/Log.h"
 
@@ -26,8 +34,28 @@ bool ToBool(BOOL b) {
     return b ? true : false;
 }
 
+static DWORD gMainUIThreadId = 0;
+
+void RememberMainUIThreadId() {
+    gMainUIThreadId = GetCurrentThreadId();
+}
+
+bool IsMainUIThread() {
+    return GetCurrentThreadId() == gMainUIThreadId;
+}
+
 Size BlittableBitmap::GetSize() {
     return size;
+}
+
+// approximate size, we assume 4 bytes per pixel and don't count stride
+i64 BlittableBitmapByteSize(BlittableBitmap* bmp) {
+    if (!bmp) {
+        return 0;
+    }
+    Size s = bmp->GetSize();
+    i64 res = i64(s.dx) * i64(s.dy) * i64(4);
+    return res;
 }
 
 RenderedBitmap::RenderedBitmap(HBITMAP hbmp, Size size, HANDLE hMap) {
@@ -428,7 +456,7 @@ TryAgainWOW64:
 
 char* LoggedReadRegStrTemp(HKEY hkey, const char* keyName, const char* valName) {
     auto res = ReadRegStrTemp(hkey, keyName, valName);
-    logf("ReadRegStrTemp(%s, %s, %s) => '%s'\n", RegKeyNameWTemp(hkey), keyName, valName, res);
+    logf("ReadRegStrTemp(%s, %s, %s) => '%s'\n", RegKeyNameTemp(hkey), keyName, valName, res);
     return res;
 }
 
@@ -466,11 +494,11 @@ bool LoggedWriteRegStr(HKEY hkey, const char* keyName, const char* valName, cons
     DWORD cbData = (DWORD)(str::Len(valueW) + 1) * sizeof(WCHAR);
     LSTATUS res = SHSetValueW(hkey, keyNameW, valNameW, REG_SZ, (const void*)valueW, cbData);
     if (res != ERROR_SUCCESS) {
-        logf("WriteRegStr(%s, %s, %s, %s) failed with '%d'\n", RegKeyNameWTemp(hkey), keyName, valName, value, res);
+        logf("WriteRegStr(%s, %s, %s, %s) failed with '%d'\n", RegKeyNameTemp(hkey), keyName, valName, value, res);
         LogLastError();
         return false;
     }
-    logf("WriteRegStr(%s, %s, %s, %s) failed with '%d' ok!\n", RegKeyNameWTemp(hkey), keyName, valName, value);
+    logf("WriteRegStr(%s, %s, %s, %s) ok!\n", RegKeyNameTemp(hkey), keyName, valName, value);
     return true;
 }
 
@@ -494,12 +522,12 @@ bool LoggedWriteRegDWORD(HKEY hkey, const char* keyName, const char* valName, DW
     WCHAR* valNameW = ToWStrTemp(valName);
     LSTATUS res = SHSetValueW(hkey, keyNameW, valNameW, REG_DWORD, (const void*)&value, sizeof(DWORD));
     if (res != ERROR_SUCCESS) {
-        logf("WriteRegDWORD(%s, %s, %s, %d) failed with '%d'\n", RegKeyNameWTemp(hkey), keyName, valName, (int)value,
+        logf("WriteRegDWORD(%s, %s, %s, %d) failed with '%d'\n", RegKeyNameTemp(hkey), keyName, valName, (int)value,
              res);
         LogLastError();
         return false;
     }
-    logf("WriteRegDWORD(%s, %s, %s, %d) => ok'\n", RegKeyNameWTemp(hkey), keyName, valName, (int)value);
+    logf("WriteRegDWORD(%s, %s, %s, %d) => ok'\n", RegKeyNameTemp(hkey), keyName, valName, (int)value);
     return true;
 }
 
@@ -507,7 +535,7 @@ bool LoggedWriteRegNone(HKEY hkey, const char* key, const char* valName) {
     WCHAR* keyW = ToWStrTemp(key);
     WCHAR* valNameW = ToWStrTemp(valName);
     LSTATUS res = SHSetValueW(hkey, keyW, valNameW, REG_NONE, nullptr, 0);
-    logf("LoggedWriteRegNone(%s, %s, %s) => '%d'\n", RegKeyNameWTemp(hkey), key, valName, res);
+    logf("LoggedWriteRegNone(%s, %s, %s) => '%d'\n", RegKeyNameTemp(hkey), key, valName, res);
     return (ERROR_SUCCESS == res);
 }
 
@@ -624,7 +652,7 @@ TempStr GetSpecialFolderTemp(int csidl, bool createIfMissing) {
 
 // temp directory
 TempStr GetTempDirTemp() {
-    WCHAR dir[MAX_PATH] = {0};
+    WCHAR dir[MAX_PATH] = {};
 #if 0 // TODO: only available in 20348, not yet present in SDK
     DWORD cch = 0;
     if (DynGetTempPath2W) {
@@ -766,24 +794,18 @@ void HandleRedirectedConsoleOnShutdown() {
 }
 
 // Return the full exe path of my own executable
-TempStr GetExePathTemp() {
-    WCHAR buf[MAX_PATH]{};
-    DWORD nSize = dimof(buf) - 1;
+TempStr GetSelfExePathTemp() {
+    WCHAR buf[MAX_PATH + 2]{};
+    DWORD nChars = dimof(buf) - 1;
     auto h = GetInstance();
-    DWORD res = GetModuleFileNameW(h, buf, nSize);
-    if (res < nSize) {
-        return ToUtf8Temp(buf);
-    }
-    nSize = res + 2;
-    WCHAR* buf2 = Allocator::AllocArray<WCHAR>(nullptr, (size_t)nSize);
-    res = GetModuleFileNameW(h, buf, nSize);
-    ReportIf(res < nSize);
-    return ToUtf8Temp(buf2);
+    // TODO: GetModuleFileNameW() truncates if too big but doesn't return the needed size
+    GetModuleFileNameW(h, buf, nChars);
+    return ToUtf8Temp(buf);
 }
 
 // Return directory where our executable is located
-TempStr GetExeDirTemp() {
-    auto path = GetExePathTemp();
+TempStr GetSelfExeDirTemp() {
+    TempStr path = GetSelfExePathTemp();
     return path::GetDirTemp(path);
 }
 
@@ -970,6 +992,7 @@ bool LaunchFileShell(const char* path, const char* params, const char* verb, boo
         LogLastError(err);
         return false;
     }
+    logf("LaunchFileShell: launched '%s'\n", path);
     return true;
 }
 
@@ -977,13 +1000,30 @@ bool LaunchBrowser(const char* url) {
     return LaunchFileShell(url, nullptr, "open");
 }
 
-void OpenPathInExplorer(const char* path) {
-    if (!path) {
+void OpenPathInDefaultFileManager(const char* path) {
+    if (!path || !*path) {
         return;
     }
-    const char* process = "explorer.exe";
+
+    // Use SHOpenFolderAndSelectItems which respects the default file manager
+    // (e.g. Directory Opus) instead of hardcoding explorer.exe
+    TempWStr pathW = ToWStrTemp(path);
+    PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(pathW);
+    if (pidl) {
+        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        ILFree(pidl);
+        return;
+    }
+
+    // fallback to using explorer.exe
+    WCHAR winDir[MAX_PATH]{};
+    UINT len = GetWindowsDirectoryW(winDir, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) return;
+    TempStr explorer = ToUtf8Temp(winDir);
+    explorer = path::JoinTemp(explorer, "explorer.exe");
+    if (file::Exists(explorer)) return;
     TempStr args = str::FormatTemp("/select,\"%s\"", path);
-    CreateProcessHelper(process, args);
+    CreateProcessHelper(explorer, args);
 }
 
 HANDLE LaunchProcessWithCmdLine(const char* exe, const char* cmdLine) {
@@ -1053,6 +1093,47 @@ bool IsProcessRunningElevated() {
     CheckTokenMembership(nullptr, adminsGroup, &isAdmin);
     FreeSid(adminsGroup);
     return tobool(isAdmin);
+}
+
+// returns the exe path of the parent process, or nullptr on failure
+// if pidOut is not nullptr, it receives the parent process ID
+TempStr GetParentProcessPath(DWORD* pidOut) {
+    if (pidOut) {
+        *pidOut = 0;
+    }
+    DWORD pid = GetCurrentProcessId();
+    AutoCloseHandle snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (INVALID_HANDLE_VALUE == snap) {
+        return nullptr;
+    }
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    DWORD parentPid = 0;
+    if (!Process32FirstW(snap, &pe)) {
+        return nullptr;
+    }
+    do {
+        if (pe.th32ProcessID == pid) {
+            parentPid = pe.th32ParentProcessID;
+            break;
+        }
+    } while (Process32NextW(snap, &pe));
+    if (parentPid == 0) {
+        return nullptr;
+    }
+    if (pidOut) {
+        *pidOut = parentPid;
+    }
+    AutoCloseHandle hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentPid);
+    if (!hProc.IsValid()) {
+        return nullptr;
+    }
+    WCHAR path[MAX_PATH]{};
+    DWORD pathLen = MAX_PATH;
+    if (!QueryFullProcessImageNameW(hProc, 0, path, &pathLen)) {
+        return nullptr;
+    }
+    return ToUtf8Temp(path);
 }
 
 // We assume that if OpenProcess() works, we are at the same or greater
@@ -1289,8 +1370,12 @@ bool IsCursorOverWindow(HWND hwnd) {
     return rcWnd.Contains({pt.x, pt.y});
 }
 
+HWND HwndGetParent(HWND hwnd) {
+    return ::GetParent(hwnd);
+}
+
 TempStr HwndGetClassName(HWND hwnd) {
-    WCHAR buf[512] = {0};
+    WCHAR buf[512] = {};
     int n = GetClassNameW(hwnd, buf, dimof(buf));
     ReportIf(n == 0);
     return ToUtf8Temp(buf);
@@ -1305,6 +1390,14 @@ Point HwndGetCursorPos(HWND hwnd) {
         return {};
     }
     return {pt.x, pt.y};
+}
+
+Point& UnmirrorRtl(HWND hwnd, Point& p) {
+    if (!HwndIsRtl(hwnd)) return p;
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    p.x = rc.right - 1 - p.x;
+    return p;
 }
 
 bool IsMouseOverRect(HWND hwnd, const Rect& r) {
@@ -1339,7 +1432,7 @@ void SetDlgItemFont(HWND hDlg, int nIDDlgItem, HFONT fnt) {
 
 // Get the name of default printer or nullptr if not exists.
 char* GetDefaultPrinterNameTemp() {
-    WCHAR buf[512] = {0};
+    WCHAR buf[512] = {};
     DWORD bufSize = dimof(buf);
     if (GetDefaultPrinter(buf, &bufSize)) {
         return ToUtf8Temp(buf);
@@ -1428,7 +1521,7 @@ bool CopyImageToClipboard(HBITMAP hbmp, bool appendOnly) {
 }
 
 static void SetWindowStyle(HWND hwnd, DWORD flags, bool enable, int type) {
-    DWORD style = GetWindowLong(hwnd, type);
+    DWORD style = GetWindowLongW(hwnd, type);
     DWORD newStyle;
     if (enable) {
         newStyle = style | flags;
@@ -1436,22 +1529,22 @@ static void SetWindowStyle(HWND hwnd, DWORD flags, bool enable, int type) {
         newStyle = style & ~flags;
     }
     if (newStyle != style) {
-        SetWindowLong(hwnd, type, newStyle);
+        SetWindowLongW(hwnd, type, newStyle);
     }
 }
 
 bool IsWindowStyleSet(HWND hwnd, DWORD flags) {
-    DWORD style = GetWindowLong(hwnd, GWL_STYLE);
+    DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
     return bit::IsMaskSet<DWORD>(style, flags);
 }
 
 bool IsWindowStyleExSet(HWND hwnd, DWORD flags) {
-    DWORD style = GetWindowLong(hwnd, GWL_EXSTYLE);
+    DWORD style = GetWindowLongW(hwnd, GWL_EXSTYLE);
     return (style != flags) != 0;
 }
 
 bool HwndIsRtl(HWND hwnd) {
-    DWORD style = GetWindowLong(hwnd, GWL_EXSTYLE);
+    DWORD style = GetWindowLongW(hwnd, GWL_EXSTYLE);
     return bit::IsMaskSet<DWORD>(style, WS_EX_LAYOUTRTL);
 }
 
@@ -1511,7 +1604,7 @@ void DeleteCreatedFonts() {
     while (curr) {
         auto next = curr->next;
         free((void*)curr->name);
-        DeleteFont(&curr->font);
+        DeleteFont(curr->font);
         delete curr;
         curr = next;
     }
@@ -1528,7 +1621,7 @@ static HFONT RememberCreatedFont(HFONT font, const char* name, int size, u16 fla
     cf->size = (u16)size;
     cf->flags = flags;
     cf->weightOffset = weightOffset;
-    ListInsert(&gFonts, cf);
+    ListInsertFront(&gFonts, cf);
     int n = ListLen(gFonts);
     name = name ? name : "";
     /* logf("RememberCreatedFont: added font '%s', size: %d, flags: %x, weightOffset: %d\n", name, size, (int)flags,
@@ -1694,8 +1787,7 @@ void DoubleBuffer::Flush(HDC hdc) const {
     }
 }
 
-DeferWinPosHelper::DeferWinPosHelper() : hdwp(::BeginDeferWindowPos(32)) {
-}
+DeferWinPosHelper::DeferWinPosHelper() : hdwp(::BeginDeferWindowPos(32)) {}
 
 DeferWinPosHelper::~DeferWinPosHelper() {
     End();
@@ -2330,14 +2422,28 @@ bool IsValidHandle(HANDLE h) {
     return !(h == nullptr || h == INVALID_HANDLE_VALUE);
 }
 
-// This is just to satisfy /analyze. CloseHandle(nullptr) works perfectly fine
-// but /analyze complains anyway
-bool SafeCloseHandle(HANDLE* h) {
-    if (IsValidHandle(*h)) {
+// close handle returned by FindFirstFile()
+bool SafeFindClose(HANDLE* hPtr) {
+    HANDLE h = *hPtr;
+    if (!IsValidHandle(h)) {
+        *hPtr = nullptr;
         return false;
     }
-    BOOL ok = CloseHandle(*h);
-    *h = nullptr;
+    BOOL ok = FindClose(h);
+    *hPtr = nullptr;
+    return !!ok;
+}
+
+// This is just to satisfy /analyze. CloseHandle(nullptr) works perfectly fine
+// but /analyze complains anyway
+bool SafeCloseHandle(HANDLE* hPtr) {
+    HANDLE h = *hPtr;
+    if (!IsValidHandle(h)) {
+        *hPtr = nullptr;
+        return false;
+    }
+    BOOL ok = CloseHandle(h);
+    *hPtr = nullptr;
     return !!ok;
 }
 
@@ -2360,7 +2466,7 @@ void RunNonElevated(const char* exePath) {
     logf("RunNonElevated: '%s'\n", exePath);
     TempStr cmd = nullptr;
     char* explorerPath = nullptr;
-    WCHAR buf[MAX_PATH] = {0};
+    WCHAR buf[MAX_PATH] = {};
     uint res = GetWindowsDirectoryW(buf, dimof(buf));
     if (0 == res || res >= dimof(buf)) {
         goto Run;
@@ -2466,37 +2572,27 @@ bool DDEExecute(const WCHAR* server, const WCHAR* topic, const WCHAR* command) {
 
     ReportIf(str::Len(command) >= INT_MAX - 1);
     if (str::Len(command) >= INT_MAX - 1) {
-        logf("Failed \n");
         return false;
     }
 
-    logf("DdeInitializeW \n");
     result = DdeInitializeW(&inst, DdeCallback, APPCMD_CLIENTONLY, 0);
     if (result != DMLERR_NO_ERROR) {
-        logf("Failed \n");
         return false;
     }
 
-    logf("DdeCreateStringHandle ServerName : %ls\n", server);
     hszServer = DdeCreateStringHandleW(inst, server, CP_WINNEUTRAL);
     if (!hszServer) {
-        logf("Failed \n");
         goto Exit;
     }
-    logf("DdeCreateStringHandle TopicName : %ls\n", topic);
     hszTopic = DdeCreateStringHandleW(inst, topic, CP_WINNEUTRAL);
     if (!hszTopic) {
-        logf("Failed \n");
         goto Exit;
     }
-    logf("DdeConnect \n");
     hconv = DdeConnect(inst, hszServer, hszTopic, nullptr);
     if (!hconv) {
-        logf("Failed \n");
         goto Exit;
     }
 
-    logf("DdeTransatcion \n");
     cbLen = ((DWORD)str::Len(command) + 1) * sizeof(WCHAR);
     answer = DdeClientTransaction((BYTE*)command, cbLen, hconv, nullptr, CF_UNICODETEXT, XTYP_EXECUTE, 10000, nullptr);
     if (answer) {
@@ -2515,7 +2611,6 @@ Exit:
         DdeFreeStringHandle(inst, hszServer);
     }
     DdeUninitialize(inst);
-    logf("Return \n");
 
     return ok;
 }
@@ -2547,8 +2642,8 @@ void RectInflateTB(RECT& r, int top, int bottom) {
     r.bottom += bottom;
 }
 
-static LPWSTR knownCursorIds[] = {IDC_ARROW,  IDC_IBEAM,  IDC_HAND, IDC_SIZEALL,
-                                  IDC_SIZEWE, IDC_SIZENS, IDC_NO,   IDC_CROSS};
+static LPWSTR knownCursorIds[] = {IDC_ARROW,  IDC_IBEAM,    IDC_HAND,     IDC_SIZEALL, IDC_SIZEWE,
+                                  IDC_SIZENS, IDC_SIZENWSE, IDC_SIZENESW, IDC_NO,      IDC_CROSS};
 
 static HCURSOR cachedCursors[dimof(knownCursorIds)]{};
 
@@ -2564,7 +2659,7 @@ static int GetCursorIndex(LPWSTR cursorId) {
 
 #if 0
 static const char* cursorNames =
-    "IDC_ARROW\0IDC_BEAM\0IDC_HAND\0IDC_SIZEALL\0IDC_SIZEWE\0IDC_SIZENS\0IDC_NO\0IDC_CROSS\0";
+    "IDC_ARROW\0IDC_BEAM\0IDC_HAND\0IDC_SIZEALL\0IDC_SIZEWE\0IDC_SIZENS\0IDC_SIZENWSE\0IDC_SIZENESW\0IDC_NO\0IDC_CROSS\0";
 
 static const char* GetCursorName(LPWSTR cursorId) {
     int i = GetCursorIndex(cursorId);
@@ -2825,8 +2920,8 @@ void HwndPositionInCenterOf(HWND hwnd, HWND hwndRelative) {
     SetWindowPos(hwnd, nullptr, r.x, r.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
 
-void HwndSendCommand(HWND hwnd, int cmdId) {
-    SendMessageW(hwnd, WM_COMMAND, (WPARAM)cmdId, 0);
+void HwndSendCommand(HWND hwnd, int cmdId, LPARAM lp) {
+    SendMessageW(hwnd, WM_COMMAND, (WPARAM)cmdId, lp);
 }
 
 void HwndDestroyWindowSafe(HWND* hwndPtr) {
@@ -2839,9 +2934,9 @@ void HwndDestroyWindowSafe(HWND* hwndPtr) {
     ::DestroyWindow(hwnd);
 }
 
-void TbSetButtonInfo(HWND hwnd, int buttonId, TBBUTTONINFO* info) {
+void TbSetButtonInfoById(HWND hwnd, int buttonId, TBBUTTONINFO* info) {
     auto res = SendMessageW(hwnd, TB_SETBUTTONINFO, buttonId, (LPARAM)info);
-    ReportIf(0 == res);
+    ReportDebugIf(0 == res);
 }
 
 void TbGetPadding(HWND hwnd, int* padX, int* padY) {
@@ -2857,9 +2952,29 @@ void TbSetPadding(HWND hwnd, int padX, int padY) {
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/controls/tb-getrect
-void TbGetRect(HWND hwnd, int buttonId, RECT* rc) {
-    auto res = SendMessageW(hwnd, TB_GETRECT, buttonId, (LPARAM)rc);
-    ReportIf(res == 0);
+void TbGetRectById(HWND hwnd, int buttonId, RECT* r) {
+    if (!hwnd) {
+        return;
+    }
+    auto res = SendMessageW(hwnd, TB_GETRECT, buttonId, (LPARAM)r);
+    if (res == 0) {
+        logf("TbGetRect: hwnd=0x%p, buttonId: %d pos: (%d, %d) size: (%d, %d)\n", hwnd, buttonId, r->left, r->top,
+             RectDx(*r), RectDy(*r));
+        LogLastError();
+        ReportIf(res == 0);
+    }
+}
+
+void TbGetRectByIdx(HWND hwnd, int buttonIdx, RECT* rc) {
+    if (!hwnd) {
+        return;
+    }
+    auto res = SendMessageW(hwnd, TB_GETITEMRECT, buttonIdx, (LPARAM)rc);
+    if (res == 0) {
+        logf("TbGetRectByIdx: hwnd=0x%p, buttonId: %d\n", hwnd, buttonIdx);
+        LogLastError();
+        ReportIf(res == 0);
+    }
 }
 
 void TbGetMetrics(HWND hwnd, TBMETRICS* metrics) {
@@ -2986,6 +3101,8 @@ static Size HwndMeasureText(HWND hwnd, const WCHAR* txt, HFONT font) {
     ScopedSelectFont prev(dc, font);
 
     RECT r{};
+    // TODO: DT_EDITCONTROL is probably not correct here
+    // TODO: what about DT_NOPREFIX?
     uint fmt = DT_CALCRECT | DT_LEFT | DT_NOCLIP | DT_EDITCONTROL;
     size_t txtLen = str::Len(txt);
     DrawTextExW(dc, (WCHAR*)txt, (int)txtLen, &r, fmt, nullptr);
@@ -3004,6 +3121,7 @@ Size HwndMeasureText(HWND hwnd, const char* txt, HFONT font) {
     return HwndMeasureText(hwnd, sw, font);
 }
 
+// return approximate height of font in pixels
 int FontDyPx(HWND hwnd, HFONT hfont) {
     Size s = HwndMeasureText(hwnd, "A", hfont);
     return s.dy;
@@ -3077,11 +3195,37 @@ int MsgBox(HWND hwnd, const char* text, const char* caption, UINT flags) {
     return MessageBoxW(hwnd, textW, captionW, flags);
 }
 
-// https://learn.microsoft.com/en-us/cpp/intrinsics/cpuid-cpuidex?view=msvc-170
+// Some 3rd-party DLLs loaded into our process (e.g. ffmpeg-based WIC codecs
+// like CopyTrans HEIC, printer drivers, shell extensions) unmask floating-point
+// exceptions in the per-thread FPU/MXCSR control word and don't restore it.
+// We (and mupdf) rely on the default environment where FP exceptions are masked
+// e.g. comparing against NaN must not trap (EXCEPTION_FLT_INVALID_OPERATION).
+// Call this after code paths that might run such DLLs.
+void MaskFpExceptions() {
+    _clearfp();
+    uint unused;
+    _controlfp_s(&unused, _MCW_EM, _MCW_EM);
+}
+
 u32 CpuID() {
 #if IS_ARM_64
-    return 0;
+    // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
+    u32 res = 0;
+    if (IsProcessorFeaturePresent(PF_ARM_NEON_INSTRUCTIONS_AVAILABLE)) {
+        res |= kCpuNEON;
+    }
+    if (IsProcessorFeaturePresent(PF_ARM_V8_CRYPTO_INSTRUCTIONS_AVAILABLE)) {
+        res |= kCpuArmCrypto;
+    }
+    if (IsProcessorFeaturePresent(PF_ARM_V81_ATOMIC_INSTRUCTIONS_AVAILABLE)) {
+        res |= kCpuArmAtomics;
+    }
+    if (IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE)) {
+        res |= kCpuArmDotProd;
+    }
+    return res;
 #else
+    // https://learn.microsoft.com/en-us/cpp/intrinsics/cpuid-cpuidex?view=msvc-170
     std::bitset<32> f_1_ECX_;
     std::bitset<32> f_1_EDX_;
     std::bitset<32> f_7_EBX_;
@@ -3133,6 +3277,40 @@ u32 CpuID() {
 #endif
 }
 
+const char* LatestSupportedSIMD() {
+    u32 id = CpuID();
+    // x86/x64
+    if (id & kCpuAVX2) {
+        return "avx2";
+    }
+    if (id & kCpuAVX) {
+        return "avx";
+    }
+    if (id & kCpuSSE42) {
+        return "sse42";
+    }
+    if (id & kCpuSSE41) {
+        return "sse41";
+    }
+    if (id & kCpuSSE3) {
+        return "sse3";
+    }
+    if (id & kCpuSSE2) {
+        return "sse2";
+    }
+    if (id & kCpuSSE) {
+        return "sse";
+    }
+    // ARM
+    if (id & kCpuArmDotProd) {
+        return "dotprod";
+    }
+    if (id & kCpuNEON) {
+        return "neon";
+    }
+    return "none";
+}
+
 LARGE_INTEGER TimeNow() {
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
@@ -3153,4 +3331,85 @@ double TimeDiffMs(const LARGE_INTEGER& start, const LARGE_INTEGER& end) {
     auto diff = end.QuadPart - start.QuadPart;
     double res = (double)(diff) / (double)(freq.QuadPart);
     return res * 1000;
+}
+
+bool IsPEFileSigned(const char* filePath) {
+    TempWStr ws = ToWStrTemp(filePath);
+    WINTRUST_FILE_INFO fileInfo = {};
+    fileInfo.cbStruct = sizeof(WINTRUST_FILE_INFO);
+    fileInfo.pcwszFilePath = ws;
+    fileInfo.hFile = NULL;
+    fileInfo.pgKnownSubject = NULL;
+
+    GUID actionGUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_DATA trustData = {};
+
+    trustData.cbStruct = sizeof(WINTRUST_DATA);
+    trustData.pPolicyCallbackData = NULL;
+    trustData.pSIPClientData = NULL;
+    trustData.dwUIChoice = WTD_UI_NONE;
+    trustData.fdwRevocationChecks = WTD_REVOKE_NONE;
+    trustData.dwUnionChoice = WTD_CHOICE_FILE;
+    trustData.dwStateAction = WTD_STATEACTION_IGNORE;
+    trustData.hWVTStateData = NULL;
+    trustData.pwszURLReference = NULL;
+    trustData.dwProvFlags = WTD_SAFER_FLAG;
+    trustData.dwUIContext = 0;
+    trustData.pFile = &fileInfo;
+
+    LONG status = WinVerifyTrust(NULL, &actionGUID, &trustData);
+
+    if (status == ERROR_SUCCESS) {
+        return true; // File is signed and signature is valid
+    } else {
+        return false; // File is not signed or signature is not valid
+    }
+}
+
+TempStr GetExecutableSignerTemp(const char* exePath) {
+    TempWStr ws = ToWStrTemp(exePath);
+
+    HCERTSTORE hStore = nullptr;
+    HCRYPTMSG hMsg = nullptr;
+    BOOL ok = CryptQueryObject(CERT_QUERY_OBJECT_FILE, ws, CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+                               CERT_QUERY_FORMAT_FLAG_BINARY, 0, nullptr, nullptr, nullptr, &hStore, &hMsg, nullptr);
+    if (!ok) {
+        return nullptr;
+    }
+
+    DWORD signerInfoSize = 0;
+    CryptMsgGetParam(hMsg, CMSG_SIGNER_INFO_PARAM, 0, nullptr, &signerInfoSize);
+    if (signerInfoSize == 0) {
+        CryptMsgClose(hMsg);
+        CertCloseStore(hStore, 0);
+        return nullptr;
+    }
+
+    auto signerInfo = (CMSG_SIGNER_INFO*)Allocator::AllocZero(GetTempAllocator(), signerInfoSize);
+    ok = CryptMsgGetParam(hMsg, CMSG_SIGNER_INFO_PARAM, 0, signerInfo, &signerInfoSize);
+    if (!ok) {
+        CryptMsgClose(hMsg);
+        CertCloseStore(hStore, 0);
+        return nullptr;
+    }
+
+    CERT_INFO certInfo = {};
+    certInfo.Issuer = signerInfo->Issuer;
+    certInfo.SerialNumber = signerInfo->SerialNumber;
+
+    PCCERT_CONTEXT certCtx = CertFindCertificateInStore(hStore, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0,
+                                                        CERT_FIND_SUBJECT_CERT, &certInfo, nullptr);
+    TempStr res = nullptr;
+    if (certCtx) {
+        char buf[512];
+        DWORD n = CertGetNameStringA(certCtx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr, buf, dimof(buf));
+        if (n > 1) {
+            res = str::DupTemp(buf);
+        }
+        CertFreeCertificateContext(certCtx);
+    }
+
+    CryptMsgClose(hMsg);
+    CertCloseStore(hStore, 0);
+    return res;
 }

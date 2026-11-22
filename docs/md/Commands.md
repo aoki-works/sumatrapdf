@@ -17,6 +17,7 @@ CmdClose,"Ctrl + W, Ctrl + F4",Close Document,
 CmdCloseCurrentDocument,q,Close Current Document,
 CmdCommandPalette,Ctrl + K,Command Palette,
 CmdDuplicateInNewWindow,Shift + Ctrl + N,Open Current Document In New Window,
+CmdDuplicateInNewTab,,Open Current Document In New Tab,ver 3.6+
 CmdExit,Ctrl + Q,Exit Application,
 CmdMoveFrameFocus,F6,Move Frame Focus,
 CmdNewWindow,Ctrl + N,Open New SumatraPDF Window,
@@ -54,7 +55,7 @@ CmdDeleteFile,,Delete Currently Opened File, ver 3.6+
 ```commands
 Command IDs,Keyboard shortcuts,Command Palette
 CmdFindFirst,Ctrl + F,Find
-CmdFindMatch,,Find: Match Case
+CmdFindToggleMatchCase,,Find: Toggle Match Case
 CmdFindNext,F3,Find Next
 CmdFindNextSel,Ctrl + F3,Find Next Selection
 CmdFindPrev,Shift + F3,Find Previous
@@ -80,7 +81,7 @@ CmdToggleScrollbars,,Toggle Scrollbars,
 CmdToggleToolbar,F8,Toggle Toolbar,
 CmdToggleFrequentlyRead,,Toggle Frequently Read,ver 3.5+
 CmdSelectNextTheme,,Select Next Theme,ver 3.5+
-CmdToggleLinks,,Toggle Show Links, Toggle drawing blue rectangle around links
+CmdToggleLinks,,Toggle Show Links,"Toggle drawing blue rectangle around links, ver 3.6+"
 ```
 
 ## Tabs
@@ -93,6 +94,8 @@ CmdCloseTabsToTheRight,,Close Tabs To The Right,ver 3.6+
 CmdCloseOtherTabs,,Close Other Tabs,ver 3.6+
 CmdNextTab,Ctrl + PageUp,Next Tab,
 CmdPrevTab,Ctrl + PageDown,Previous Tab,
+CmdMoveTabRight,Ctrl + Shift + PageUp,Move Tab Right,ver 3.6+
+CmdMoveTabLeft,Ctrl + Shift + PageDown,Move Tab Left,ver 3.6+
 CmdNextTabSmart,Ctrl + Tab,Smart tab Switch,ver 3.6+
 CmdPrevTabSmart,Ctrl + Shift + Tab,Smart tab Switch,ver 3.6+
 ```
@@ -164,6 +167,9 @@ CmdDeleteAnnotation,Delete,Delete Annotation,
 CmdEditAnnotations,,Edit Annotations,
 CmdSaveAnnotations,Shift + Ctrl + S,Save Annotations to existing PDF,
 CmdSaveAnnotationsNewFile,,Save Annotations to new PDF,ver 3.6+
+CmdShowAnnotations,,Show Annotations,"ver 3.6+, for current document"
+CmdHideAnnotations,,Hide Annotations,"ver 3.6+, for current document"
+CmdToggleShowAnnotations,,Toggle Showing Annotations,"ver 3.6+, for current document"
 ```
 
 ## Zoom
@@ -215,7 +221,7 @@ CmdTranslateSelectionWithGoogle,,Translate Selection with Google,
 CmdSearchSelectionWithBing,,Search Selection with Bing,
 CmdSearchSelectionWithGoogle,,Search Selection with Google,
 CmdSearchSelectionWithWikipedia,,Search Selection with Wikipedia,ver 3.6+
-CmdSearchSelectionWithGoogleScholar,,Search Selection with Goolge Scholar,ver 3.6+
+CmdSearchSelectionWithGoogleScholar,,Search Selection with Google Scholar,ver 3.6+
 CmdSendByEmail,,Send Document By Email...,
 CmdInvokeInverseSearch,,Invoke Inverse Search,ver 3.6+
 
@@ -247,6 +253,13 @@ CmdHelpOpenManualOnWebsite,,Help: Manual On Website
 CmdHelpVisitWebsite,,Help: SumatraPDF Website
 ```
 
+## Misc
+```commands
+Command IDs,Keyboard shortcuts,Command Palette,Notes
+CmdToggleInverseSearch,,Toggle Inverse Search,"temporarily disable TeX inverse search on left mouse click, ver 3.6+"
+CmdToggleAntiAlias,,Toggle Anti-Alias Rendering,"Toggle anti-alias rendering in pdf and epub documents, ver 3.6+"
+```
+
 ## Debug
 
 ```commands
@@ -257,6 +270,7 @@ CmdDebugShowNotif,,Debug: Show Notification
 CmdDebugStartStressTest,,Debug: Start Stress Test
 CmdDebugTestApp,,Debug: Test App
 CmdDebugTogglePredictiveRender,,Debug: Toggle Predictive Rendering
+CmdDebugToggleRtl,,Debug: Toggle Rtl
 CmdNone,,Do nothing
 ```
 
@@ -272,6 +286,8 @@ CmdSetTheme,,don't use
 CmdViewWithExternalViewer,,don't use
 CmdSaveAttachment,,don't use
 CmdOpenAttachment,,don't use
+CmdExec,,don't use
+CmdFindMatch,,since 3.6 it's called CmdFindToggleMatchCase
 ```
 
 # Commands with arguments
@@ -291,7 +307,7 @@ Shortcuts [
 
 By default `a` invokes `CmdCreateAnnotHighlight` with default yellow color.
 
-You can over-ride `a` shortcut to creat green (`#00ff00`) highlight annotation instead and automatically open annotations edit window (`openedit` boolean argument).
+You can over-ride `a` shortcut to create green (`#00ff00`) highlight annotation instead and automatically open annotations edit window (`openedit` boolean argument).
 
 You can create multiple keyboard shortcuts for multiple colors.
 
@@ -347,9 +363,9 @@ Arguments:
 - `color` : default, color
 - `openedit` : boolean, `false` if not given
 - `copytoclipboard` : boolean, `false` if not given. For highlight/underline/squiggly/strikeout  annotations, copies the selection (text of annotation) to clipboard. This used to be default behavior for built-in `a` etc. keyboard shortcuts but now it has to be explicitly chosen.
-- `setcontent` : boolean, false if not give. For highlight/underline/squiggly/strikeout sets content of annotation to the selection (text of annotation)
+- `setcontent` : boolean, false if not given. For highlight/underline/squiggly/strikeout sets content of annotation to the selection (text of annotation)
 
-Use cases: 
+Use cases:
 - change default color for annotations
 - create multiple shortcuts for different colors
 
@@ -364,12 +380,27 @@ Shortcuts [
 ]
 ```
 
+## Other CmdCreateAnnot* arguments
+
+**Ver 3.6+**
+
+Arguments for `CmdCreateAnnotHighlight` plus:
+
+- `color` : default, color of text and border, black if not given
+- `bgcolor` : background color of annotation, fully transparent if not given
+- `textsize` : size of annotation text, 12 if not given
+- `borderwidth` : border width, 1 if not given
+- `opacity` : opacity of annotation, 0 - fully transparent (i.e. invisible), 100 - fully opaque (default if not given)
+- `interiorcolor` : interior color for circle, square etc. annotations, fully transparent if not given
+- `focusedit` : boolean, when annotation edit window opens, focus the contents edit control
+- `focuslist` : boolean, when annotation edit window opens, focus the annotations list
+
 ## `CmdZoomCustom`
 
 **Ver 3.6+**
 
 Arguments:
-- `level` : default, string or intenger, zoom level
+- `level` : default, string or integer, zoom level
 
 `level` can be:
 - a number describing zoom level in percent e.g.:

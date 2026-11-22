@@ -77,21 +77,15 @@ struct PageAnchor {
     DrawInstr* instr;
     int pageNo;
 
-    explicit PageAnchor(DrawInstr* instr = nullptr, int pageNo = -1) : instr(instr), pageNo(pageNo) {
-    }
+    explicit PageAnchor(DrawInstr* instr = nullptr, int pageNo = -1) : instr(instr), pageNo(pageNo) {}
 };
 
 class EbookAbortCookie : public AbortCookie {
   public:
     bool abort = false;
-    EbookAbortCookie() {
-    }
-    void Abort() override {
-        abort = true;
-    }
-    void* GetData() override {
-        return nullptr;
-    }
+    EbookAbortCookie() {}
+    void Abort() override { abort = true; }
+    void* GetData() override { return nullptr; }
 };
 
 class EngineEbook : public EngineBase {
@@ -663,18 +657,12 @@ class EbookTocBuilder : public EbookTocVisitor {
     bool isIndex = false;
 
   public:
-    explicit EbookTocBuilder(EngineBase* engine) {
-        this->engine = engine;
-    }
+    explicit EbookTocBuilder(EngineBase* engine) { this->engine = engine; }
 
     void Visit(const char* name, const char* url, int level) override;
 
-    TocItem* GetRoot() {
-        return root;
-    }
-    void SetIsIndex(bool value) {
-        isIndex = value;
-    }
+    TocItem* GetRoot() { return root; }
+    void SetIsIndex(bool value) { isIndex = value; }
 };
 
 void EbookTocBuilder::Visit(const char* name, const char* url, int level) {
@@ -850,7 +838,7 @@ TocTree* EngineEpub::GetToc() {
 EngineBase* EngineEpub::CreateFromFile(const char* fileName) {
     EngineEpub* engine = new EngineEpub();
     if (!engine->Load(fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -859,7 +847,7 @@ EngineBase* EngineEpub::CreateFromFile(const char* fileName) {
 EngineBase* EngineEpub::CreateFromStream(IStream* stream) {
     EngineEpub* engine = new EngineEpub();
     if (!engine->Load(stream)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -971,7 +959,7 @@ TocTree* EngineFb2::GetToc() {
 EngineBase* EngineFb2::CreateFromFile(const char* fileName) {
     EngineFb2* engine = new EngineFb2();
     if (!engine->Load(fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -980,7 +968,7 @@ EngineBase* EngineFb2::CreateFromFile(const char* fileName) {
 EngineBase* EngineFb2::CreateFromStream(IStream* stream) {
     EngineFb2* engine = new EngineFb2();
     if (!engine->Load(stream)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -1128,7 +1116,7 @@ TocTree* EngineMobi::GetToc() {
 EngineBase* EngineMobi::CreateFromFile(const char* fileName) {
     EngineMobi* engine = new EngineMobi();
     if (!engine->Load(fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -1137,7 +1125,7 @@ EngineBase* EngineMobi::CreateFromFile(const char* fileName) {
 EngineBase* EngineMobi::CreateFromStream(IStream* stream) {
     EngineMobi* engine = new EngineMobi();
     if (!engine->Load(stream)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -1235,7 +1223,7 @@ TocTree* EnginePdb::GetToc() {
 EngineBase* EnginePdb::CreateFromFile(const char* fileName) {
     EnginePdb* engine = new EnginePdb();
     if (!engine->Load(fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -1255,8 +1243,7 @@ class ChmDataCache {
     Vec<ImageData> images;
 
   public:
-    ChmDataCache(ChmFile* doc, char* html) : doc(doc), html(html) {
-    }
+    ChmDataCache(ChmFile* doc, char* html) : doc(doc), html(html) {}
 
     ~ChmDataCache() {
         for (auto&& img : images) {
@@ -1266,9 +1253,7 @@ class ChmDataCache {
         html.Free();
     }
 
-    ByteSlice GetHtmlData() {
-        return html;
-    }
+    ByteSlice GetHtmlData() { return html; }
 
     ByteSlice* GetImageData(const char* id, const char* pagePath) {
         AutoFreeStr url = NormalizeURL(id, pagePath);
@@ -1307,8 +1292,7 @@ class ChmFormatter : public HtmlFormatter {
     AutoFreeStr pagePath;
 
   public:
-    ChmFormatter(HtmlFormatterArgs* args, ChmDataCache* doc) : HtmlFormatter(args), chmDoc(doc) {
-    }
+    ChmFormatter(HtmlFormatterArgs* args, ChmDataCache* doc) : HtmlFormatter(args), chmDoc(doc) {}
 };
 
 void ChmFormatter::HandleTagImg(HtmlToken* t) {
@@ -1470,7 +1454,7 @@ class ChmHtmlCollector : public EbookTocVisitor {
     char* GetHtml() {
         // first add the homepage
         const char* index = doc->GetHomePath();
-        AutoFreeWStr urlW(doc->SmartToWStr(index));
+        TempWStr urlW = strconv::StrCPToWStrTemp(index, doc->codepage);
         char* url = ToUtf8Temp(urlW);
         Visit(nullptr, url, 0);
 
@@ -1485,8 +1469,9 @@ class ChmHtmlCollector : public EbookTocVisitor {
                 if (*path == '/') {
                     path++;
                 }
-                urlW.Set(ToWStr(path));
+                urlW = ToWStr(path);
                 url = ToUtf8Temp(urlW);
+                str::Free(urlW);
                 Visit(nullptr, url, -1);
             }
         }
@@ -1615,7 +1600,7 @@ IPageElement* EngineChm::CreatePageLink(DrawInstr* link, Rect rect, int pageNo) 
 EngineBase* EngineChm::CreateFromFile(const char* fileName) {
     EngineChm* engine = new EngineChm();
     if (!engine->Load(fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -1635,9 +1620,7 @@ class EngineHtml : public EngineEbook {
         pageRect = RectF(0, 0, 8.27f * GetFileDPI(), 11.693f * GetFileDPI());
         str::ReplaceWithCopy(&defaultExt, ".html");
     }
-    ~EngineHtml() override {
-        delete doc;
-    }
+    ~EngineHtml() override { delete doc; }
     EngineBase* Clone() override {
         const char* fileName = FilePath();
         if (!fileName) {
@@ -1720,7 +1703,7 @@ IPageElement* EngineHtml::CreatePageLink(DrawInstr* link, Rect rect, int pageNo)
 EngineBase* EngineHtml::CreateFromFile(const char* fileName) {
     EngineHtml* engine = new EngineHtml();
     if (!engine->Load(fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -1825,7 +1808,7 @@ TocTree* EngineTxt::GetToc() {
 EngineBase* EngineTxt::CreateFromFile(const char* fileName) {
     EngineTxt* engine = new EngineTxt();
     if (!engine->Load(fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;

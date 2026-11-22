@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2023 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -198,7 +198,7 @@ int pdftrim_main(int argc, char **argv)
 		default: return usage();
 
 		case 'b': boxname = fz_optarg; break;
-		case 'o': outputfile = fz_optarg; break;
+		case 'o': outputfile = fz_optpath(fz_optarg); break;
 		case 'e': exclude = 1; break;
 		case 'f': fallback = 1; break;
 		case 'm': read_margins(margins, fz_optarg); break;
@@ -247,6 +247,8 @@ int pdftrim_main(int argc, char **argv)
 	/* Register the document handlers (only really need PDF, but this is
 	 * the simplest way. */
 	fz_register_document_handlers(ctx);
+
+	fz_var(doc);
 
 	fz_try(ctx)
 	{

@@ -5,6 +5,7 @@
 #include "utils/FileUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
+#include "utils/WinDynCalls.h"
 
 #include "utils/Log.h"
 
@@ -230,67 +231,69 @@ WCHAR* Join(const WCHAR* path, const WCHAR* fileName, const WCHAR* fileName2) {
 // e.g. suppose the a file "C:\foo\Bar.Pdf" exists on the file system then
 //    "c:\foo\bar.pdf" becomes "c:\foo\Bar.Pdf"
 //    "C:\foo\BAR.PDF" becomes "C:\foo\Bar.Pdf"
-WCHAR* Normalize(const WCHAR* path) {
+static TempWStr NormalizeTemp(const WCHAR* path) {
     // convert to absolute path, change slashes into backslashes
     DWORD cch = GetFullPathNameW(path, 0, nullptr, nullptr);
     if (!cch) {
-        return str::Dup(path);
+        return str::DupTemp(path);
     }
 
-    AutoFreeWStr fullpath(AllocArray<WCHAR>(cch));
-    GetFullPathNameW(path, cch, fullpath, nullptr);
+    TempWStr fullPath = AllocArrayTemp<WCHAR>(cch);
+    GetFullPathNameW(path, cch, fullPath, nullptr);
+
+    TempWStr normPath = fullPath;
     // convert to long form
-    cch = GetLongPathNameW(fullpath, nullptr, 0);
-    if (!cch) {
-        return fullpath.StealData();
-    }
-
-    AutoFreeWStr normpath(AllocArray<WCHAR>(cch));
-    GetLongPathNameW(fullpath, normpath, cch);
-    if (cch <= MAX_PATH) {
-        return normpath.StealData();
+    cch = GetLongPathNameW(fullPath, nullptr, 0);
+    if (cch > 0) {
+        // this sometimes fails for valid long paths
+        // https://github.com/sumatrapdfreader/sumatrapdf/issues/4940
+        normPath = AllocArrayTemp<WCHAR>(cch);
+        GetLongPathNameW(fullPath, normPath, cch);
+        if (cch <= MAX_PATH) {
+            return normPath;
+        }
     }
 
     // handle overlong paths: first, try to shorten the path
-    cch = GetShortPathNameW(fullpath, nullptr, 0);
+    cch = GetShortPathNameW(fullPath, nullptr, 0);
     if (cch && cch <= MAX_PATH) {
-        AutoFreeWStr shortpath(AllocArray<WCHAR>(cch));
-        GetShortPathNameW(fullpath, shortpath, cch);
-        if (str::Len(path::GetBaseNameTemp(normpath)) + path::GetBaseNameTemp(shortpath) - shortpath < MAX_PATH) {
+        TempWStr shortPath = AllocArrayTemp<WCHAR>(cch);
+        GetShortPathNameW(fullPath, shortPath, cch);
+        TempWStr shortPathName = (TempWStr)path::GetBaseNameTemp(shortPath);
+        TempWStr normPathName = (TempWStr)path::GetBaseNameTemp(normPath);
+        if (str::Len(normPathName) + shortPathName - shortPath < MAX_PATH) {
             // keep the long filename if possible
-            *(WCHAR*)path::GetBaseNameTemp(shortpath) = '\0';
-            return str::Join(shortpath, path::GetBaseNameTemp(normpath));
+            *shortPathName = 0;
+            return str::JoinTemp(shortPath, path::GetBaseNameTemp(normPath));
         }
-        return shortpath.StealData();
+        return shortPath;
     }
     // else mark the path as overlong
-    if (str::StartsWith(normpath.Get(), L"\\\\?\\")) {
-        return normpath.StealData();
+    if (str::StartsWith(normPath, L"\\\\?\\")) {
+        return normPath;
     }
-    return str::Join(L"\\\\?\\", normpath);
+    return str::JoinTemp(L"\\\\?\\", normPath);
 }
 
-char* NormalizeTemp(const char* path) {
-    WCHAR* s = ToWStrTemp(path);
-    AutoFreeWStr ws = Normalize(s);
-    char* res = ToUtf8Temp(ws);
+TempStr NormalizeTemp(const char* path) {
+    TempWStr s = ToWStrTemp(path);
+    TempWStr ws = NormalizeTemp(s);
+    TempStr res = ToUtf8Temp(ws);
     return res;
 }
 
 // Normalizes the file path and the converts it into a short form that
 // can be used for interaction with non-UNICODE aware applications
-TempStr ShortPathTemp(const char* pathA) {
-    WCHAR* path = ToWStrTemp(pathA);
-    AutoFreeWStr normpath = Normalize(path);
-    DWORD cch = GetShortPathNameW(normpath, nullptr, 0);
+TempStr ShortPathTemp(const char* path) {
+    TempWStr pathW = ToWStrTemp(path);
+    TempWStr normPath = NormalizeTemp(pathW);
+    DWORD cch = GetShortPathNameW(normPath, nullptr, 0);
     if (!cch) {
-        return ToUtf8(normpath.Get());
+        return ToUtf8Temp(normPath);
     }
-    WCHAR* shortPath = AllocArray<WCHAR>(cch + 1);
-    GetShortPathNameW(normpath, shortPath, cch);
-    char* res = ToUtf8Temp(shortPath);
-    str::Free(shortPath);
-    return res;
+    TempWStr shortPath = AllocArrayTemp<WCHAR>(cch + 1);
+    GetShortPathNameW(normPath, shortPath, cch);
+    return ToUtf8Temp(shortPath);
 }
 
 static bool IsSameFileHandleInformation(BY_HANDLE_FILE_INFORMATION& fi1, BY_HANDLE_FILE_INFORMATION fi2) {
@@ -388,20 +391,52 @@ bool HasVariableDriveLetter(const char* path) {
     return false;
 }
 
-bool IsOnFixedDrive(const char* pathA) {
-    WCHAR* path = ToWStrTemp(pathA);
-    if (PathIsNetworkPathW(path)) {
+bool IsOnNetworkDrive(const char* path) {
+    WCHAR* ws = ToWStrTemp(path);
+    return PathIsNetworkPathW(ws);
+}
+
+bool IsOnFixedDrive(const char* path) {
+    WCHAR* ws = ToWStrTemp(path);
+    if (PathIsNetworkPathW(ws)) {
         return false;
     }
 
     uint type;
     WCHAR root[MAX_PATH];
-    if (GetVolumePathNameW(path, root, dimof(root))) {
+    if (GetVolumePathNameW(ws, root, dimof(root))) {
         type = GetDriveType(root);
     } else {
-        type = GetDriveType(path);
+        type = GetDriveType(ws);
     }
     return DRIVE_FIXED == type;
+}
+
+// ReadDirectoryChangesW() only works reliably on NTFS and ReFS.
+// Network paths don't support it either (SMB doesn't relay notifications).
+// For other file systems (FAT32, exFAT etc.) we need manual polling.
+bool SupportsChangeNotifications(const char* pathA) {
+    WCHAR* path = ToWStrTemp(pathA);
+    if (PathIsNetworkPathW(path)) {
+        return false;
+    }
+
+    WCHAR root[MAX_PATH];
+    if (!GetVolumePathNameW(path, root, dimof(root))) {
+        return false;
+    }
+
+    WCHAR fsName[MAX_PATH];
+    if (!GetVolumeInformationW(root, nullptr, 0, nullptr, nullptr, nullptr, fsName, dimof(fsName))) {
+        return false;
+    }
+    if (str::EqI(fsName, L"NTFS")) {
+        return true;
+    }
+    if (str::EqI(fsName, L"ReFS")) {
+        return true;
+    }
+    return false;
 }
 
 static bool MatchWildcardsRec(const WCHAR* fileName, const WCHAR* filter) {
@@ -466,6 +501,37 @@ bool IsAbsolute(const char* path) {
     TempWStr ws = ToWStrTemp(path);
     return !PathIsRelativeW(ws);
 }
+
+// When running in App Store, Windows virtualizes %APPDATA% etc., so to get a real path
+// for settings etc., we need to un-virtualize
+TempStr GetNonVirtualTemp(const char* virtualPath) {
+    if (!DynGetFinalPathNameByHandleW) {
+        return (TempStr)virtualPath;
+    }
+    TempWStr pathW = ToWStrTemp(virtualPath);
+    HANDLE hFile = CreateFileW(pathW, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return (TempStr)virtualPath;
+    }
+
+    WCHAR realPath[MAX_PATH * 4];
+    DWORD ret = DynGetFinalPathNameByHandleW(hFile, realPath, sizeof(realPath) / sizeof(WCHAR), FILE_NAME_NORMALIZED);
+
+    CloseHandle(hFile);
+    if (ret <= 0) {
+        return (TempStr)virtualPath;
+    }
+
+    TempStr res = ToUtf8Temp(realPath);
+    // Remove the "\\?\" prefix if present
+    if (str::StartsWith(res, "\\\\?\\")) {
+        res = res + 4;
+    }
+    return res;
+}
+
 } // namespace path
 
 // returns the path to either the %TEMP% directory or a
@@ -491,7 +557,7 @@ TempStr GetTempFilePathTemp(const char* filePrefix) {
 // with either the given fileName or the module's name
 // (module is the EXE or DLL in which path::GetPathOfFileInAppDir resides)
 TempStr GetPathInExeDirTemp(const char* fileName) {
-    TempStr dir = GetExeDirTemp();
+    TempStr dir = GetSelfExeDirTemp();
     TempStr path = path::JoinTemp(dir, fileName);
     path = path::NormalizeTemp(path);
     return path;
@@ -607,18 +673,10 @@ bool Exists(const char* path) {
     return true;
 }
 
-// returns -1 on error (can't use INVALID_FILE_SIZE because it won't cast right)
-i64 GetSize(const char* path) {
-    ReportIf(!path);
-    if (!path) {
+i64 GetSize(HANDLE h) {
+    if (h == nullptr || h == INVALID_HANDLE_VALUE) {
         return -1;
     }
-
-    AutoCloseHandle h = OpenReadOnly(path);
-    if (!h.IsValid()) {
-        return -1;
-    }
-
     // Don't use GetFileAttributesEx to retrieve the file size, as
     // that function doesn't interact well with symlinks, etc.
     LARGE_INTEGER size{};
@@ -627,6 +685,17 @@ i64 GetSize(const char* path) {
         return -1;
     }
     return size.QuadPart;
+}
+
+// returns -1 on error (can't use INVALID_FILE_SIZE because it won't cast right)
+i64 GetSize(const char* path) {
+    ReportIf(!path);
+    if (!path) {
+        return -1;
+    }
+
+    AutoCloseHandle h = OpenReadOnly(path);
+    return GetSize(h);
 }
 
 // buf must be at least toRead in size (note: it won't be zero-terminated)
@@ -820,6 +889,23 @@ bool RemoveAll(const char* dir) {
     SHFILEOPSTRUCTW shfo = {nullptr, op, dirDoubleTerminated, nullptr, flags, FALSE, nullptr, nullptr};
     int res = SHFileOperationW(&shfo);
     return res == 0;
+}
+
+// Check if the process can create files/directories in the given directory
+// by attempting to create and immediately remove a temporary file.
+bool HasWriteAccess(const char* dir) {
+    if (!dir) {
+        return false;
+    }
+    TempStr path = path::JoinTemp(dir, "__sumatra_write_test__.tmp");
+    WCHAR* pathW = ToWStrTemp(path);
+    HANDLE h = CreateFileW(pathW, GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                           FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    CloseHandle(h);
+    return true;
 }
 
 } // namespace dir

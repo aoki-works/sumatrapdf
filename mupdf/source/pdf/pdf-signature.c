@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -36,7 +36,7 @@ static void
 begin_widget_op(fz_context *ctx, pdf_annot *annot, const char *op)
 {
 	if (!annot->page)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation not bound to any page");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation not bound to any page");
 
 	pdf_begin_operation(ctx, annot->page->doc, op);
 }
@@ -132,7 +132,7 @@ void pdf_write_digest(fz_context *ctx, fz_output *out, pdf_obj *byte_range, pdf_
 typedef struct fieldname_prefix
 {
 	struct fieldname_prefix *prev;
-	char name[1];
+	char name[FZ_FLEXIBLE_ARRAY];
 } fieldname_prefix;
 
 typedef struct
@@ -165,7 +165,7 @@ check_field_locking(fz_context *ctx, pdf_obj *obj, void *data_, pdf_obj **ff)
 			n += 1;
 		if (data->prefix->name[0])
 			n += strlen(data->prefix->name);
-		prefix = fz_calloc(ctx, 1, sizeof(*prefix)+n);
+		prefix = fz_malloc_flexible(ctx, fieldname_prefix, name, n);
 		prefix->prev = data->prefix;
 		if (data->prefix->name[0])
 			strcpy(prefix->name, data->prefix->name);
@@ -213,7 +213,7 @@ static void enact_sig_locking(fz_context *ctx, pdf_document *doc, pdf_obj *sig)
 	pdf_obj *fields;
 	static pdf_obj *ff_names[2] = { PDF_NAME(Ff), NULL };
 	pdf_obj *ff = NULL;
-	static fieldname_prefix null_prefix = { NULL, "" };
+	static fieldname_prefix null_prefix = { NULL, { 0 } };
 	sig_locking_data data = { locked, &null_prefix };
 
 	if (locked == NULL)
@@ -239,7 +239,7 @@ pdf_sign_signature_with_appearance(fz_context *ctx, pdf_annot *widget, pdf_pkcs7
 	pdf_document *doc;
 
 	if (pdf_dict_get_inheritable(ctx, widget->obj, PDF_NAME(FT)) != PDF_NAME(Sig))
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation is not a signature widget");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation is not a signature widget");
 	if (pdf_widget_is_readonly(ctx, widget))
 		fz_throw(ctx, FZ_ERROR_ARGUMENT, "Signature is read only, it cannot be signed.");
 
@@ -438,9 +438,9 @@ void pdf_clear_signature(fz_context *ctx, pdf_annot *widget)
 	fz_display_list *dlist = NULL;
 
 	if (pdf_dict_get_inheritable(ctx, widget->obj, PDF_NAME(FT)) != PDF_NAME(Sig))
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation is not a signature widget");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation is not a signature widget");
 	if (pdf_widget_is_readonly(ctx, widget))
-		fz_throw(ctx, FZ_ERROR_GENERIC, "read only signature cannot be cleared");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "read only signature cannot be cleared");
 
 	begin_widget_op(ctx, widget, "Clear Signature");
 
@@ -569,7 +569,7 @@ char *pdf_signature_format_distinguished_name(fz_context *ctx, pdf_pkcs7_disting
 pdf_pkcs7_distinguished_name *pdf_signature_get_widget_signatory(fz_context *ctx, pdf_pkcs7_verifier *verifier, pdf_annot *widget)
 {
 	if (!widget->page)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation not bound to any page");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation not bound to any page");
 	return pdf_signature_get_signatory(ctx, verifier, widget->page->doc, widget->obj);
 }
 
@@ -580,7 +580,7 @@ pdf_pkcs7_distinguished_name *pdf_signature_get_signatory(fz_context *ctx, pdf_p
 	pdf_pkcs7_distinguished_name *dn;
 
 	if (pdf_dict_get_inheritable(ctx, signature, PDF_NAME(FT)) != PDF_NAME(Sig))
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation is not a signature widget");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation is not a signature widget");
 	if (!pdf_signature_is_signed(ctx, doc, signature))
 		return NULL;
 
@@ -601,7 +601,7 @@ pdf_pkcs7_distinguished_name *pdf_signature_get_signatory(fz_context *ctx, pdf_p
 pdf_signature_error pdf_check_widget_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier, pdf_annot *widget)
 {
 	if (!widget->page)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation not bound to any page");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation not bound to any page");
 	return pdf_check_digest(ctx, verifier, widget->page->doc, widget->obj);
 }
 
@@ -613,7 +613,7 @@ pdf_signature_error pdf_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifi
 	size_t contents_len;
 
 	if (pdf_dict_get_inheritable(ctx, signature, PDF_NAME(FT)) != PDF_NAME(Sig))
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation is not a signature widget");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation is not a signature widget");
 	if (!pdf_signature_is_signed(ctx, doc, signature))
 		return PDF_SIGNATURE_ERROR_NOT_SIGNED;
 
@@ -641,7 +641,7 @@ pdf_signature_error pdf_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifi
 pdf_signature_error pdf_check_widget_certificate(fz_context *ctx, pdf_pkcs7_verifier *verifier, pdf_annot *w)
 {
 	if (!w->page)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation not bound to any page");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation not bound to any page");
 	return pdf_check_certificate(ctx, verifier, w->page->doc, w->obj);
 }
 
@@ -652,7 +652,7 @@ pdf_signature_error pdf_check_certificate(fz_context *ctx, pdf_pkcs7_verifier *v
 	pdf_signature_error result = PDF_SIGNATURE_ERROR_UNKNOWN;
 
 	if (pdf_dict_get_inheritable(ctx, signature, PDF_NAME(FT)) != PDF_NAME(Sig))
-		fz_throw(ctx, FZ_ERROR_GENERIC, "annotation is not a signature widget");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation is not a signature widget");
 	if (!pdf_signature_is_signed(ctx, doc, signature))
 		return PDF_SIGNATURE_ERROR_NOT_SIGNED;
 

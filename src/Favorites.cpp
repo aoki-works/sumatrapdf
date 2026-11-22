@@ -56,7 +56,7 @@ FavTreeItem::~FavTreeItem() {
     DeleteVecMembers(children);
 }
 
-struct FavTreeModel : public TreeModel {
+struct FavTreeModel : TreeModel {
     ~FavTreeModel() override;
 
     TreeItem Root() override;
@@ -220,13 +220,8 @@ static void AddOrReplaceFav(const char* filePath, int pageNo, const char* name, 
     FileState* fav = GetFavByFilePath(filePath);
     if (!fav) {
         // we were asked to add a favorite for current file but couldn't find
-        // history for this file. should only happen if we're not remembering
-        // opened files
-        // TODO: is this invalid check because we could have opened a file,
-        // turned off the setting, turned on the setting and then
-        // tried to add the fav?
-        ReportIf(gGlobalPrefs->rememberOpenedFiles);
-        fav = NewDisplayState(filePath);
+        // history for this file
+        fav = NewFileState(filePath);
         gFileHistory.Append(fav);
     }
 
@@ -256,7 +251,7 @@ static void RemoveFav(const char* filePath, int pageNo) {
 
     if (!gGlobalPrefs->rememberOpenedFiles && 0 == fav->favorites->size()) {
         gFileHistory.Remove(fav);
-        DeleteDisplayState(fav);
+        DeleteFileState(fav);
     }
 }
 
@@ -273,7 +268,7 @@ static void RemoveAllFavForFile(const char* filePath) {
 
     if (!gGlobalPrefs->rememberOpenedFiles) {
         gFileHistory.Remove(fav);
-        DeleteDisplayState(fav);
+        DeleteFileState(fav);
     }
 }
 
@@ -577,12 +572,15 @@ static void GoToFavForTVItem(MainWindow* win, TreeCtrl* treeView, HTREEITEM hIte
 }
 #endif
 
-static FavTreeItem* MakeFavTopLevelItem(FileState* fav, bool isExpanded) {
+static FavTreeItem* MakeFavTopLevelItem(FileState* fs, bool isExpanded) {
+    if (!fs->favorites || fs->favorites->Size() == 0) {
+        return nullptr;
+    }
     auto* res = new FavTreeItem();
-    Favorite* fn = fav->favorites->at(0);
+    Favorite* fn = fs->favorites->at(0);
     res->favorite = fn;
 
-    bool isCollapsed = fav->favorites->size() == 1;
+    bool isCollapsed = fs->favorites->size() == 1;
     if (isCollapsed) {
         isExpanded = false;
     }
@@ -590,9 +588,9 @@ static FavTreeItem* MakeFavTopLevelItem(FileState* fav, bool isExpanded) {
 
     TempStr text = nullptr;
     if (isCollapsed) {
-        text = FavCompactReadableNameTemp(fav, fn);
+        text = FavCompactReadableNameTemp(fs, fn);
     } else {
-        char* fp = fav->filePath;
+        char* fp = fs->filePath;
         text = path::GetBaseNameTemp(fp);
     }
     res->text = str::Dup(text);
@@ -617,16 +615,19 @@ static FavTreeModel* BuildFavTreeModel(MainWindow* win) {
     StrVec filePathsSorted;
     GetSortedFilePaths(filePathsSorted);
     for (char* path : filePathsSorted) {
-        FileState* f = GetFavByFilePath(path);
-        ReportIf(!f);
-        if (!f) {
+        FileState* fs = GetFavByFilePath(path);
+        ReportIf(!fs);
+        if (!fs) {
             continue;
         }
-        bool isExpanded = win->expandedFavorites.Contains(f);
-        FavTreeItem* ti = MakeFavTopLevelItem(f, isExpanded);
+        bool isExpanded = win->expandedFavorites.Contains(fs);
+        FavTreeItem* ti = MakeFavTopLevelItem(fs, isExpanded);
+        if (!ti) {
+            continue;
+        }
         res->root->children.Append(ti);
-        if (f->favorites->size() > 1) {
-            MakeFavSecondLevel(ti, f);
+        if (fs->favorites->size() > 1) {
+            MakeFavSecondLevel(ti, fs);
         }
     }
     return res;
@@ -774,14 +775,13 @@ void RememberFavTreeExpansionStateForAllWindows() {
     }
 }
 
-#if 0
-static void FavTreeItemClicked(TreeClickEvent* ev) {
-    ev->didHandle = true;
-    MainWindow* win = FindMainWindowByHwnd(ev->w->hwnd);
-    ReportIf(!win);
-    GoToFavForTreeItem(win, ev->treeItem);
+static void FavTreeItemClicked(TreeView::ClickEvent* ev) {
+    if (ev->treeItem == ev->treeView->GetSelection()) {
+        MainWindow* win = FindMainWindowByHwnd(ev->treeView->hwnd);
+        ReportIf(!win);
+        GoToFavForTreeItem(win, ev->treeItem);
+    }
 }
-#endif
 
 static void FavTreeSelectionChanged(TreeView::SelectionChangedEvent* ev) {
     MainWindow* win = FindMainWindowByHwnd(ev->treeView->hwnd);
@@ -890,11 +890,12 @@ void CreateFavorites(MainWindow* win) {
 
     auto l = new LabelWithCloseWnd();
     {
-        LabelWithCloseCreateArgs args;
+        LabelWithCloseWnd::CreateArgs args;
         args.parent = win->hwndFavBox;
         args.cmdId = IDC_FAV_LABEL_WITH_CLOSE;
         // TODO: use the same font size as in GetTreeFont()?
         args.font = GetDefaultGuiFont(true, false);
+        args.isRtl = IsUIRtl();
         l->Create(args);
     }
 
@@ -908,12 +909,13 @@ void CreateFavorites(MainWindow* win) {
     args.font = GetAppTreeFont();
     args.fullRowSelect = true;
     args.exStyle = WS_EX_STATICEDGE;
+    args.isRtl = IsUIRtl();
 
     auto fn = MkFunc1Void(FavTreeContextMenu);
     treeView->onContextMenu = fn;
     treeView->onSelectionChanged = MkFunc1Void(FavTreeSelectionChanged);
     treeView->onKeyDown = MkFunc1Void(TocTreeKeyDown2);
-    // treeView->onClick = FavTreeItemClicked;
+    treeView->onClick = MkFunc1Void(FavTreeItemClicked);
     // treeView->onChar = TocTreeCharHandler;
     // treeView->onMouseWheel = TocTreeMouseWheelHandler;
 

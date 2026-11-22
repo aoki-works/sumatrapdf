@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -36,7 +36,7 @@ typedef struct
 	int funcs;
 } recolor_details;
 
-#define FUNSEGS 64 /* size of sampled mesh for function-based shadings */
+#define FUNSEGS 256 /* size of sampled mesh for function-based shadings */
 #define FUNBPS 8 /* Bits per sample in output functions */
 
 static void
@@ -171,7 +171,7 @@ fz_recolor_shade_type1(fz_context *ctx, pdf_obj *shade, pdf_function **func, rec
 }
 
 static void
-fz_recolor_shade_function(fz_context *ctx, pdf_obj *shade, float samples[256][FZ_MAX_COLORS+1], recolor_details *rd)
+fz_recolor_shade_function(fz_context *ctx, pdf_obj *shade, float *samples, int stride, recolor_details *rd)
 {
 	int i;
 	int n_in = fz_colorspace_n(ctx, rd->src_cs);
@@ -205,7 +205,7 @@ fz_recolor_shade_function(fz_context *ctx, pdf_obj *shade, float samples[256][FZ
 	for (t = 0; t < 256; t++)
 	{
 		for (i = 0; i < n_in; i++)
-			p[i] = samples[t][i];
+			p[i] = samples[t*stride+i];
 
 		rd->recolor(ctx, rd->opaque, rd->dst_cs, q, rd->src_cs, p);
 
@@ -621,10 +621,8 @@ fz_recolor_shade_type6(fz_context *ctx, pdf_obj *shade, recolor_details *rd)
 
 			for (i = startpt; i < 12; i++)
 			{
-				unsigned int x_bits = fz_read_bits(ctx, stream, bpcoord);
-				unsigned int y_bits = fz_read_bits(ctx, stream, bpcoord);
-				fz_write_bits(ctx, out, x_bits, bpcoord);
-				fz_write_bits(ctx, out, y_bits, bpcoord);
+				(void) fz_read_bits(ctx, stream, bpcoord);
+				(void) fz_read_bits(ctx, stream, bpcoord);
 			}
 
 			for (i = startcolor; i < 4; i++)
@@ -865,8 +863,6 @@ pdf_new_colorspace(fz_context *ctx, fz_colorspace *cs)
 	default:
 		fz_throw(ctx, FZ_ERROR_ARGUMENT, "Unimplemented colorspace");
 	}
-
-	return NULL;
 }
 
 pdf_obj *
@@ -881,7 +877,7 @@ pdf_recolor_shade(fz_context *ctx, pdf_obj *shade, pdf_shade_recolorer *reshade,
 	int type, i;
 	pdf_function *func[FZ_MAX_COLORS] = { NULL };
 	float d0, d1;
-	float samples[256][FZ_MAX_COLORS + 1];
+	float samples[256*(FZ_MAX_COLORS + 1)];
 	pdf_document *doc = pdf_get_bound_document(ctx, shade);
 
 	src_cs = pdf_load_colorspace(ctx, pdf_dict_get(ctx, shade, PDF_NAME(ColorSpace)));
@@ -908,7 +904,7 @@ pdf_recolor_shade(fz_context *ctx, pdf_obj *shade, pdf_shade_recolorer *reshade,
 		background = pdf_dict_get(ctx, shade, PDF_NAME(Background));
 		if (background)
 		{
-			int i, n = pdf_array_len(ctx, background);
+			int n = pdf_array_len(ctx, background);
 			float bg[FZ_MAX_COLORS];
 			float nbg[FZ_MAX_COLORS];
 
@@ -950,7 +946,7 @@ pdf_recolor_shade(fz_context *ctx, pdf_obj *shade, pdf_shade_recolorer *reshade,
 		}
 		else if (pdf_is_array(ctx, function))
 		{
-			int in, i;
+			int in;
 
 			rd.funcs = pdf_array_len(ctx, function);
 
@@ -989,7 +985,7 @@ pdf_recolor_shade(fz_context *ctx, pdf_obj *shade, pdf_shade_recolorer *reshade,
 		/* For all other function based shadings, we just rewrite the 1d function. */
 		if (rd.funcs)
 		{
-			fz_recolor_shade_function(ctx, rewritten, samples, &rd);
+			fz_recolor_shade_function(ctx, rewritten, samples, src_cs->n+1, &rd);
 			break;
 		}
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -83,10 +83,10 @@ fz_add_text_span(fz_context *ctx, fz_text *text, fz_font *font, int wmode, int b
 		text->head = text->tail = fz_new_text_span(ctx, font, wmode, bidi_level, markup_dir, language, trm);
 	}
 	else if (text->tail->font != font ||
-		text->tail->wmode != wmode ||
-		text->tail->bidi_level != bidi_level ||
-		text->tail->markup_dir != markup_dir ||
-		text->tail->language != language ||
+		text->tail->wmode != (unsigned int)wmode ||
+		text->tail->bidi_level != (unsigned int)bidi_level ||
+		text->tail->markup_dir != (unsigned int)markup_dir ||
+		text->tail->language != (unsigned int)language ||
 		text->tail->trm.a != trm.a ||
 		text->tail->trm.b != trm.b ||
 		text->tail->trm.c != trm.c ||
@@ -110,7 +110,7 @@ fz_grow_text_span(fz_context *ctx, fz_text_span *span, int n)
 }
 
 void
-fz_show_glyph_aux(fz_context *ctx, fz_text *text, fz_font *font, fz_matrix trm, int gid, int ucs, int cid, int wmode, int bidi_level, fz_bidi_direction markup_dir, fz_text_language lang)
+fz_show_glyph_aux(fz_context *ctx, fz_text *text, fz_font *font, fz_matrix trm, float adv, int gid, int ucs, int cid, int wmode, int bidi_level, fz_bidi_direction markup_dir, fz_text_language lang)
 {
 	fz_text_span *span;
 
@@ -126,13 +126,15 @@ fz_show_glyph_aux(fz_context *ctx, fz_text *text, fz_font *font, fz_matrix trm, 
 	span->items[span->len].cid = cid;
 	span->items[span->len].x = trm.e;
 	span->items[span->len].y = trm.f;
+	span->items[span->len].adv = adv;
 	span->len++;
 }
 
 void
 fz_show_glyph(fz_context *ctx, fz_text *text, fz_font *font, fz_matrix trm, int gid, int ucs, int wmode, int bidi_level, fz_bidi_direction markup_dir, fz_text_language lang)
 {
-	fz_show_glyph_aux(ctx, text, font, trm, gid, ucs, ucs, wmode, bidi_level, markup_dir, lang);
+	float adv = (gid >= 0) ? fz_advance_glyph(ctx, font, gid, wmode) : 0;
+	fz_show_glyph_aux(ctx, text, font, trm, adv, gid, ucs, ucs, wmode, bidi_level, markup_dir, lang);
 }
 
 fz_matrix
@@ -147,8 +149,11 @@ fz_show_string(fz_context *ctx, fz_text *text, fz_font *user_font, fz_matrix trm
 	{
 		s += fz_chartorune(&ucs, s);
 		gid = fz_encode_character_with_fallback(ctx, user_font, ucs, 0, language, &font);
-		fz_show_glyph(ctx, text, font, trm, gid, ucs, wmode, bidi_level, markup_dir, language);
-		adv = fz_advance_glyph(ctx, font, gid, wmode);
+		if (gid >= 0)
+			adv = fz_advance_glyph(ctx, font, gid, wmode);
+		else
+			adv = 0;
+		fz_show_glyph_aux(ctx, text, font, trm, adv, gid, ucs, ucs, wmode, bidi_level, markup_dir, language);
 		if (wmode == 0)
 			trm = fz_pre_translate(trm, adv, 0);
 		else
@@ -229,7 +234,7 @@ fz_text_language fz_text_language_from_string(const char *str)
 {
 	fz_text_language lang;
 
-	if (str == NULL)
+	if (str == NULL || strlen(str) == 0)
 		return FZ_LANG_UNSET;
 
 	if (!strcmp(str, "zh-Hant") ||
@@ -258,7 +263,7 @@ fz_text_language fz_text_language_from_string(const char *str)
 	else
 		return 0; /* There are no valid 1 char language codes */
 
-	/* 3nd char */
+	/* 3rd char */
 	if (str[2] >= 'a' && str[2] <= 'z')
 		lang += 27*27*(str[2] - 'a' + 1);
 	else if (str[2] >= 'A' && str[2] <= 'Z')
@@ -275,7 +280,12 @@ char *fz_string_from_text_language(char str[8], fz_text_language lang)
 
 	/* str is supposed to be at least 8 chars in size */
 	if (str == NULL)
-		return NULL;
+		return "";
+	if (lang == FZ_LANG_UNSET)
+	{
+		str[0] = 0;
+		return str;
+	}
 
 	if (lang == FZ_LANG_zh_Hant)
 		fz_strlcpy(str, "zh-Hant", 8);

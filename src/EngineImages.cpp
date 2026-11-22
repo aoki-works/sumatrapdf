@@ -86,12 +86,8 @@ class EngineImages : public EngineBase {
 
     ByteSlice GetFileData() override;
     bool SaveFileAs(const char* copyFileName) override;
-    PageText ExtractPageText(int) override {
-        return {};
-    }
-    bool HasClipOptimizations(int) override {
-        return false;
-    }
+    PageText ExtractPageText(int) override { return {}; }
+    bool HasClipOptimizations(int) override { return false; }
 
     Vec<IPageElement*> GetElements(int pageNo) override;
     IPageElement* GetElementAtPos(int pageNo, PointF pt) override;
@@ -383,17 +379,22 @@ void EngineImages::DropPage(ImagePage* page, bool forceRemove) {
 RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     // try to load bitmap for the image
     auto page = GetPage(pageNo, true);
-    if (!page)
-        return RectF{};
+    if (!page) return RectF{};
     defer {
         DropPage(page, false);
     };
 
     auto bmp = page->bmp;
-    if (!bmp)
-        return RectF{};
+    if (!bmp) return RectF{};
 
     const int w = bmp->GetWidth(), h = bmp->GetHeight();
+
+    // Handle degenerate cases where the image is too small for margin detection
+    // Minimum sensible dimension for margin cropping is about 10 pixels
+    if (w < 10 || h < 10) {
+        return RectF(0, 0, (float)w, (float)h);
+    }
+
     // don't need pixel-perfect margin, so scan 200 points at most
     const int deltaX = std::max(1, w / 200), deltaY = std::max(1, h / 200);
 
@@ -417,8 +418,7 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     {
         Gdiplus::Rect bmpRect(0, 0, w, h);
         Gdiplus::Status lock = bmp->LockBits(&bmpRect, Gdiplus::ImageLockModeRead, fmt, &bmpData);
-        if (lock != Gdiplus::Ok)
-            return RectF{};
+        if (lock != Gdiplus::Ok) return RectF{};
     }
 
     auto getPixel = [&bmpData, bytesPerPixel](int x, int y) -> uint32_t {
@@ -439,11 +439,9 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
         bool ok = true;
         for (int y = 0; y <= h - deltaY; y += deltaY) {
             ok = getPixel(r.x + deltaX, y) == marginColor;
-            if (!ok)
-                break;
+            if (!ok) break;
         }
-        if (!ok)
-            break;
+        if (!ok) break;
     }
 
     // right margin
@@ -452,11 +450,9 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
         bool ok = true;
         for (int y = 0; y <= h - deltaY; y += deltaY) {
             ok = getPixel((r.x + r.dx) - 1 - deltaX, y) == marginColor;
-            if (!ok)
-                break;
+            if (!ok) break;
         }
-        if (!ok)
-            break;
+        if (!ok) break;
     }
 
     // top margin
@@ -465,11 +461,9 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
         bool ok = true;
         for (int x = r.x; x <= r.x + r.dx - deltaX; x += deltaX) {
             ok = getPixel(x, r.y + deltaY) == marginColor;
-            if (!ok)
-                break;
+            if (!ok) break;
         }
-        if (!ok)
-            break;
+        if (!ok) break;
     }
 
     // bottom margin
@@ -478,11 +472,9 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
         bool ok = true;
         for (int x = r.x; x <= r.x + r.dx - deltaX; x += deltaX) {
             ok = getPixel(x, (r.y + r.dy) - 1 - deltaY) == marginColor;
-            if (!ok)
-                break;
+            if (!ok) break;
         }
-        if (!ok)
-            break;
+        if (!ok) break;
     }
     bmp->UnlockBits(&bmpData);
 
@@ -750,8 +742,12 @@ RectF EngineImage::LoadMediabox(int pageNo) {
 EngineBase* EngineImage::CreateFromFile(const char* path) {
     logf("EngineImage::CreateFromFile(%s)\n", path);
     EngineImage* engine = new EngineImage();
-    if (!engine->LoadSingleFile(path)) {
-        engine->Release();
+    bool ok = engine->LoadSingleFile(path);
+    // decoding might run a 3rd-party WIC codec (e.g. CopyTrans HEIC) that
+    // unmasks fp exceptions on this thread, which would crash later float math
+    MaskFpExceptions();
+    if (!ok) {
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -759,8 +755,10 @@ EngineBase* EngineImage::CreateFromFile(const char* path) {
 
 EngineBase* EngineImage::CreateFromStream(IStream* stream) {
     EngineImage* engine = new EngineImage();
-    if (!engine->LoadFromStream(stream)) {
-        engine->Release();
+    bool ok = engine->LoadFromStream(stream);
+    MaskFpExceptions();
+    if (!ok) {
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -768,10 +766,10 @@ EngineBase* EngineImage::CreateFromStream(IStream* stream) {
 
 // clang-format off
 static Kind imageEngineKinds[] = {
-    kindFilePng, kindFileJpeg, kindFileGif,
-    kindFileTiff, kindFileBmp, kindFileTga,
-    kindFileJxr, kindFileHdp, kindFileWdp,
-    kindFileWebp, kindFileJp2, kindFileHeic,
+    kindFilePng,  kindFileJpeg, kindFileGif,
+    kindFileTiff, kindFileBmp,  kindFileTga,
+    kindFileJxr,  kindFileHdp,  kindFileWdp,
+    kindFileWebp, kindFileJp2,  kindFileHeic,
     kindFileAvif
 };
 // clang-format on
@@ -779,7 +777,7 @@ static Kind imageEngineKinds[] = {
 bool IsEngineImageSupportedFileType(Kind kind) {
     // logf("IsEngineImageSupportedFileType(%s)\n", kind);
     int n = (int)dimof(imageEngineKinds);
-    return KindInArray(imageEngineKinds, n, kind);
+    return KindIndexOf(imageEngineKinds, n, kind) >= 0;
 }
 
 EngineBase* CreateEngineImageFromFile(const char* path) {
@@ -805,9 +803,7 @@ class EngineImageDir : public EngineImages {
         hasPageLabels = true;
     }
 
-    ~EngineImageDir() override {
-        delete tocTree;
-    }
+    ~EngineImageDir() override { delete tocTree; }
 
     EngineBase* Clone() override {
         const char* path = FilePath();
@@ -817,14 +813,10 @@ class EngineImageDir : public EngineImages {
         return nullptr;
     }
 
-    ByteSlice GetFileData() override {
-        return {};
-    }
+    ByteSlice GetFileData() override { return {}; }
     bool SaveFileAs(const char* copyFileName) override;
 
-    TempStr GetPropertyTemp(const char*) override {
-        return nullptr;
-    }
+    TempStr GetPropertyTemp(const char*) override { return nullptr; }
 
     TempStr GetPageLabeTemp(int pageNo) const override;
     int GetPageByLabel(const char* label) const override;
@@ -842,19 +834,17 @@ class EngineImageDir : public EngineImages {
     TocTree* tocTree = nullptr;
 };
 
-static void LoadImageDirCb(EngineImageDir* e, VisitDirData* d) {
-    auto path = d->filePath;
-    Kind kind = GuessFileTypeFromName(path);
-    if (IsEngineImageSupportedFileType(e->kind)) {
-        e->pageFileNames.Append(path);
-    }
-}
-
 static bool LoadImageDir(EngineImageDir* e, const char* dir) {
     e->SetFilePath(dir);
 
-    auto fn = MkFunc1(LoadImageDirCb, e);
-    DirTraverse(dir, false, fn);
+    DirIter di{dir};
+    for (DirIterEntry* de : di) {
+        auto path = de->filePath;
+        Kind kind = GuessFileTypeFromName(path);
+        if (IsEngineImageSupportedFileType(kind)) {
+            e->pageFileNames.Append(path);
+        }
+    }
 
     int nFiles = e->pageFileNames.Size();
     if (nFiles == 0) {
@@ -977,7 +967,7 @@ EngineBase* EngineImageDir::CreateFromFile(const char* fileName) {
     ReportIf(!dir::Exists(fileName));
     EngineImageDir* engine = new EngineImageDir();
     if (!LoadImageDir(engine, fileName)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -1374,8 +1364,17 @@ EngineBase* EngineCbx::CreateFromFile(const char* path) {
     auto timeStart = TimeGet();
     // we sniff the type from content first because the
     // files can be mis-named e.g. .cbr archive with .cbz ext
+    // we only need the archive format (zip/rar/7z), not the sub-type
+    // (epub/xps/fb2z), so use the ByteSlice overload to avoid
+    // opening a full archive just for type detection
 
-    Kind kind = GuessFileTypeFromContent(path);
+    char buf[2048 + 1]{};
+    int n = file::ReadN(path, buf, dimof(buf) - 1);
+    Kind kind = nullptr;
+    if (n > 0) {
+        ByteSlice d = {(u8*)buf, (size_t)n};
+        kind = GuessFileTypeFromContent(d);
+    }
     MultiFormatArchive* archive = nullptr;
     if (kind == kindFileZip) {
         archive = OpenZipArchive(path, false);
@@ -1400,45 +1399,45 @@ EngineBase* EngineCbx::CreateFromFile(const char* path) {
     if (engine->LoadFromFile(path)) {
         return engine;
     }
-    engine->Release();
+    SafeEngineRelease(&engine);
     return nullptr;
 }
 
 EngineBase* EngineCbx::CreateFromStream(IStream* stream) {
     auto* archive = OpenZipArchive(stream, false);
     if (archive) {
-        auto* engine = new EngineCbx(archive);
+        EngineCbx* engine = new EngineCbx(archive);
         if (engine->LoadFromStream(stream)) {
             return engine;
         }
-        engine->Release();
+        SafeEngineRelease(&engine);
     }
 
     archive = OpenRarArchive(stream);
     if (archive) {
-        auto* engine = new EngineCbx(archive);
+        EngineCbx* engine = new EngineCbx(archive);
         if (engine->LoadFromStream(stream)) {
             return engine;
         }
-        engine->Release();
+        SafeEngineRelease(&engine);
     }
 
     archive = Open7zArchive(stream);
     if (archive) {
-        auto* engine = new EngineCbx(archive);
+        EngineCbx* engine = new EngineCbx(archive);
         if (engine->LoadFromStream(stream)) {
             return engine;
         }
-        engine->Release();
+        SafeEngineRelease(&engine);
     }
 
     archive = OpenTarArchive(stream);
     if (archive) {
-        auto* engine = new EngineCbx(archive);
+        EngineCbx* engine = new EngineCbx(archive);
         if (engine->LoadFromStream(stream)) {
             return engine;
         }
-        engine->Release();
+        SafeEngineRelease(&engine);
     }
 
     return nullptr;
@@ -1450,7 +1449,7 @@ static Kind cbxKinds[] = {
 
 bool IsEngineCbxSupportedFileType(Kind kind) {
     int n = dimof(cbxKinds);
-    return KindInArray(cbxKinds, n, kind);
+    return KindIndexOf(cbxKinds, n, kind) >= 0;
 }
 
 EngineBase* CreateEngineCbxFromFile(const char* path) {

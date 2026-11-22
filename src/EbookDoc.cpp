@@ -82,23 +82,25 @@ static bool IsValidUtf8(const char* string) {
 }
 
 static TempStr DecodeTextToUtf8Temp(const char* s, bool isXML = false) {
-    WCHAR* ws = (WCHAR*)s;
+    if (str::StartsWith(s, UTF8_BOM)) {
+        return str::DupTemp(s + 3);
+    }
+    if (str::StartsWith(s, UTF16_BOM)) {
+        s += 2;
+        WCHAR* ws = str::CastToWCHAR(s);
+        return ToUtf8Temp(ws);
+    }
     if (str::StartsWith(s, UTF16BE_BOM)) {
         // convert from utf16 big endian to utf16
-        ws += 1; // skip bom
-        int nChars = str::Leni(ws);
-        char* tmp = (char*)ws;
-        for (int i = 0; i < nChars; i++) {
+        s += 2;
+        int n = str::Leni((WCHAR*)s);
+        char* tmp = (char*)s;
+        for (int i = 0; i < n; i++) {
             int idx = i * 2;
             std::swap(tmp[idx], tmp[idx + 1]);
         }
+        WCHAR* ws = str::CastToWCHAR(s);
         return ToUtf8Temp(ws);
-    }
-    if (str::StartsWith(s, UTF16_BOM)) {
-        return ToUtf8Temp(ws + 1);
-    }
-    if (str::StartsWith(s, UTF8_BOM)) {
-        return str::DupTemp(s + 3);
     }
     uint codePage = isXML ? GetCodepageFromPI(s) : CP_ACP;
     if (CP_ACP == codePage && IsValidUtf8(s)) {
@@ -764,8 +766,7 @@ EpubDoc* EpubDoc::CreateFromStream(IStream* stream) {
 const char* FB2_MAIN_NS = "http://www.gribuser.ru/xml/fictionbook/2.0";
 const char* FB2_XLINK_NS = "http://www.w3.org/1999/xlink";
 
-Fb2Doc::Fb2Doc(const char* fileName) : fileName(str::Dup(fileName)) {
-}
+Fb2Doc::Fb2Doc(const char* fileName) : fileName(str::Dup(fileName)) {}
 
 Fb2Doc::Fb2Doc(IStream* stream) : stream(stream) {
     stream->AddRef();
@@ -1083,8 +1084,7 @@ PalmDoc::PalmDoc(const char* path) {
     this->fileName = str::Dup(path);
 }
 
-PalmDoc::~PalmDoc() {
-}
+PalmDoc::~PalmDoc() {}
 
 #define PDB_TOC_ENTRY_MARK "ToC!Entry!"
 
@@ -1250,8 +1250,7 @@ PalmDoc* PalmDoc::CreateFromFile(const char* path) {
 
 /* ********** Plain HTML ********** */
 
-HtmlDoc::HtmlDoc(const char* path) : fileName(str::Dup(path)) {
-}
+HtmlDoc::HtmlDoc(const char* path) : fileName(str::Dup(path)) {}
 
 HtmlDoc::~HtmlDoc() {
     for (auto&& img : images) {
@@ -1381,15 +1380,15 @@ TxtDoc::TxtDoc(const char* fileName) {
 // cf. http://www.cix.co.uk/~gidds/Software/TCR.html
 #define TCR_HEADER "!!8-Bit!!"
 
-static char* DecompressTcrText(const char* data, size_t dataLen) {
+static TempStr DecompressTcrTextTemp(const char* data, size_t dataLen) {
     ReportIf(!str::StartsWith(data, TCR_HEADER));
     const char* curr = data + str::Len(TCR_HEADER);
     const char* end = data + dataLen;
 
-    const char* dict[256] = {0};
+    const char* dict[256] = {};
     for (int n = 0; n < (int)dimof(dict); n++) {
         if (curr >= end) {
-            return str::Dup(data);
+            return str::DupTemp(data);
         }
         dict[n] = curr;
         curr += 1 + (u8)*curr;
@@ -1409,7 +1408,7 @@ static char* DecompressTcrText(const char* data, size_t dataLen) {
         }
     }
 
-    return text.StealData();
+    return text.StealData(GetTempAllocator());
 }
 
 static const char* TextFindLinkEnd(str::Str& htmlData, const char* curr, char prevChar, bool fromWww = false) {
@@ -1528,21 +1527,17 @@ bool TxtDoc::Load() {
         return false;
     }
 
-    AutoFreeStr toFree;
     char* text = (char*)fileContent.Get();
     if (str::EndsWithI(fileName, ".tcr") && str::StartsWith(text, TCR_HEADER)) {
-        char* s = DecompressTcrText(fileContent, fileContent.size());
-        if (!s) {
+        text = DecompressTcrTextTemp(fileContent, fileContent.size());
+        if (!text) {
             return false;
         }
-        text = s;
-        toFree = s;
     }
-    TempStr s = DecodeTextToUtf8Temp(text);
-    if (!s) {
+    text = DecodeTextToUtf8Temp(text);
+    if (!text) {
         return false;
     }
-    text = s;
 
     int rfc;
     isRFC = str::Parse(path::GetBaseNameTemp(fileName), "rfc%d.txt%$", &rfc) != nullptr;

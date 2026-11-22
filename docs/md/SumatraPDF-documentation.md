@@ -1,4 +1,4 @@
-[SumatraPDF](https://www.sumatrapdfreader.org/) is a free [PDF, EPUB, MOBI, CHM, XPS, DjVu, CBZ and CBR](Supported-document-formats.md) reader for Windows. It's small and starts up fast. Simplicity of user interface is important to us.
+[SumatraPDF](https://www.sumatrapdfreader.org/) is a free [PDF, EPUB, MOBI, CHM, XPS, DjVu, CBZ and CBR](Supported-document-formats.md) reader for Windows. It's small, fast, customizable and full of features.
 
 :columns
 ## Documentation for users
@@ -7,17 +7,19 @@
 
 [Keyboard shortcuts](Keyboard-shortcuts.md)
 
-[Scrolling, zooming, navigating](Scrolling-and-zooming.md)
-
 [Customizing keyboard shortcuts](Customizing-keyboard-shortcuts.md)
 
-[Customizing toolbar](Customize-toolbar.md)
+[Scrolling, zooming, navigating](Scrolling-and-zooming.md)
 
 [Commands](Commands.md)
 
 [Command-line arguments](Command-line-arguments.md)
 
 [Advanced options / settings](Advanced-options-settings.md)
+
+[Customizing toolbar](Customize-toolbar.md)
+
+[Customizing UI colors / theme](Customize-theme-colors.md)
 
 [Customize external viewers](Customize-external-viewers.md)
 
@@ -43,43 +45,6 @@
 
 [Version history](Version-history.md)
 
-## Misc
-
-[Contribute translation](Contribute-translation.md)
-
-[How to submit bug reports](How-to-submit-bug-reports.md)
-
-[Submit crash report](Submit-crash-report.md)
-
-[Reporting printing bugs](Reporting-printing-bugs.md)
-
-[Update check doesnt work?](Update-check-doesnt-work.md)
-
-[Corrupted installation](Corrupted-installation.md)
-
-[Why only Windows?](Why-only-Windows.md)
-
-## Information for developers
-
-[Contribute to SumatraPDF](Contribute-to-SumatraPDF.md)
-
-[Logview](Logview.md)
-
-[Build system](Build-system.md)
-
-[Debugging Sumatra](Debugging-Sumatra.md)
-
-[How we store settings](How-we-store-settings.md)
-
-[Using DrMemory](Using-DrMemory.md)
-
-[Using OpenCppCoverage](Using-OpenCppCoverage.md)
-
-[Is there a virus in Sumatra sources?](Is-there-a-virus-in-Sumatra-sources.md)
-
-[Accessibility and Text-to-Speech](Accessibility-and-Text-to-Speech.md)
-
-[Source code downloads](Source-code-downloads.md)
 :columns
 
 ## Downloads
@@ -89,7 +54,7 @@
 
 ## Feedback
 
-Found a bug? Have feature request? Submit via [issue tracker](https://github.com/sumatrapdfreader/sumatrapdf/issues) and  [vote for features](https://sumatrapdf.canny.io/feature-requests) you want to see next.
+Found a bug? Have feature request? Submit via [issue tracker](https://github.com/sumatrapdfreader/sumatrapdf/issues) and [vote for features](https://sumatrapdf.userjot.com) you want to see next.
 
 Have feedback or question? Discuss in a [forum](https://github.com/sumatrapdfreader/sumatrapdf/discussions).
 

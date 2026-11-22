@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -532,7 +532,7 @@ fz_append_display_node(
 			ctm_flags |= CTM_CHANGE_EF, size += SIZE_IN_NODES(2*sizeof(float));
 		node.ctm = ctm_flags;
 	}
-	if (stroke && (writer->stroke == NULL || stroke != writer->stroke))
+	if (stroke && (writer->stroke == NULL || !fz_stroke_state_eq(ctx, stroke, writer->stroke)))
 	{
 		pad_size_for_pointer(list, &size);
 		stroke_off = size;
@@ -612,7 +612,7 @@ fz_append_display_node(
 	{
 		fz_try(ctx)
 		{
-			my_stroke = fz_keep_stroke_state(ctx, stroke);
+			my_stroke = fz_clone_stroke_state(ctx, stroke);
 		}
 		fz_catch(ctx)
 		{
@@ -727,7 +727,7 @@ fz_append_display_node(
 		fz_stroke_state **out_stroke = (fz_stroke_state **)(void *)(&node_ptr[stroke_off]);
 		*out_stroke = my_stroke;
 		fz_drop_stroke_state(ctx, writer->stroke);
-		/* Can never fail as my_stroke was kept above */
+		/* Can never fail as my_stroke was cloned above */
 		writer->stroke = fz_keep_stroke_state(ctx, my_stroke);
 	}
 	if (private_data_len)
@@ -1233,10 +1233,11 @@ typedef struct
 	float ystep;
 	fz_rect view;
 	int id;
+	int doc_id;
 } fz_list_tile_data;
 
 static int
-fz_list_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id)
+fz_list_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id, int doc_id)
 {
 	fz_list_tile_data tile;
 
@@ -1244,6 +1245,7 @@ fz_list_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, 
 	tile.ystep = ystep;
 	tile.view = view;
 	tile.id = id;
+	tile.doc_id = doc_id;
 	fz_append_display_node(
 		ctx,
 		dev,
@@ -1918,6 +1920,10 @@ fz_run_display_list(fz_context *ctx, fz_display_list *list, fz_device *dev, fz_m
 			empty = fz_is_empty_rect(fz_intersect_rect(trans_rect, scissor));
 		}
 
+		/* clipped starts out as 0. It only goes non-zero here if we move inside
+		 * an 'empty' region. Whenever clipped is non zero, or we are in an empty
+		 * region, we therefore may need to increment clipped according to the
+		 * nesting. */
 		if (clipped || empty)
 		{
 			switch (n.cmd)
@@ -1931,6 +1937,13 @@ fz_run_display_list(fz_context *ctx, fz_display_list *list, fz_device *dev, fz_m
 			case FZ_CMD_BEGIN_GROUP:
 				clipped++;
 				continue;
+			case FZ_CMD_BEGIN_STRUCTURE:
+			case FZ_CMD_END_STRUCTURE:
+			case FZ_CMD_BEGIN_METATEXT:
+			case FZ_CMD_END_METATEXT:
+				/* These may not nest as nicely as we'd like. Just ignore them for
+				 * the purposes of clipping. */
+				break;
 			case FZ_CMD_POP_CLIP:
 			case FZ_CMD_END_GROUP:
 				if (!clipped)
@@ -2033,7 +2046,7 @@ visible:
 				data = (fz_list_tile_data *)node;
 				tiled++;
 				tile_rect = data->view;
-				cached = fz_begin_tile_id(ctx, dev, rect, tile_rect, data->xstep, data->ystep, trans_ctm, data->id);
+				cached = fz_begin_tile_tid(ctx, dev, rect, tile_rect, data->xstep, data->ystep, trans_ctm, data->id, data->doc_id);
 				if (cached)
 					tile_skip_depth = 1;
 				break;

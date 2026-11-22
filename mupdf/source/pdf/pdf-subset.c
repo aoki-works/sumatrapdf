@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -34,17 +34,12 @@ typedef struct gstate
 	pdf_font_desc *font;
 } gstate;
 
-typedef struct resources_stack
-{
-	struct resources_stack *next;
-	pdf_obj *res;
-} resources_stack;
-
 typedef struct
 {
+	/* We have one of these records for each fontfile. */
 	int num;
 	int gen;
-	int is_cff;
+	int is_ttf;
 	int is_cidfont;
 	pdf_obj *fontfile;
 	unsigned char digest[16];
@@ -68,7 +63,6 @@ typedef struct
 typedef struct
 {
 	pdf_processor super;
-	resources_stack *rstack;
 	fonts_usage_t *usage;
 	gstate *gs;
 } pdf_font_analysis_processor;
@@ -93,50 +87,8 @@ drop_processor(fz_context *ctx, pdf_processor *proc)
 {
 	pdf_font_analysis_processor *p = (pdf_font_analysis_processor*)proc;
 
-	while (p->rstack)
-	{
-		resources_stack *stk = p->rstack;
-		p->rstack = stk->next;
-		pdf_drop_obj(ctx, stk->res);
-		fz_free(ctx, stk);
-	}
-
 	while (p->gs)
 		pop_gstate(ctx, p);
-}
-
-static void
-push_resources(fz_context *ctx, pdf_processor *proc, pdf_obj *res)
-{
-	pdf_font_analysis_processor *p = (pdf_font_analysis_processor *)proc;
-	resources_stack *stk = fz_malloc_struct(ctx, resources_stack);
-
-	stk->next = p->rstack;
-	p->rstack = stk;
-	fz_try(ctx)
-	{
-		stk->res = pdf_keep_obj(ctx, res);
-	}
-	fz_catch(ctx)
-	{
-		pdf_drop_obj(ctx, stk->res);
-		p->rstack = stk->next;
-		fz_free(ctx, stk);
-		fz_rethrow(ctx);
-	}
-}
-
-static pdf_obj *
-pop_resources(fz_context *ctx, pdf_processor *proc)
-{
-	pdf_font_analysis_processor *p = (pdf_font_analysis_processor *)proc;
-	resources_stack *stk = p->rstack;
-	pdf_obj *res = p->rstack->res;
-
-	p->rstack = stk->next;
-	fz_free(ctx, stk);
-
-	return res;
 }
 
 static void
@@ -169,77 +121,81 @@ static void
 font_analysis_Tf(fz_context *ctx, pdf_processor *proc, const char *name, pdf_font_desc *font, float size)
 {
 	pdf_font_analysis_processor *p = (pdf_font_analysis_processor*)proc;
-	pdf_obj *obj = pdf_dict_gets(ctx, pdf_dict_get(ctx, p->rstack->res, PDF_NAME(Font)), name);
+	pdf_obj *dict = pdf_lookup_resource(ctx, proc->rstack, PDF_NAME(Font), name);
 	pdf_obj *subtype, *fontdesc;
-	pdf_obj *key = NULL;
 	pdf_obj *fontfile = NULL;
+	pdf_obj *key;
 	int num, gen, i;
-	int is_cff = 0;
-	int cidfont = 0;
+	int is_cidfont = 0;
+	int is_ttf = 0;
 	unsigned char digest[16];
 
-	if (obj == NULL)
+	p->gs->current_font = -1; /* unknown font! */
+
+	if (dict == NULL)
 		return;
 
 	/* We can have multiple fonts that rely on the same underlying fontfile
 	 * object. Therefore, resolve down to that. */
-	subtype = pdf_dict_get(ctx, obj, PDF_NAME(Subtype));
+	subtype = pdf_dict_get(ctx, dict, PDF_NAME(Subtype));
 
-	if (pdf_name_eq(ctx, subtype, PDF_NAME(TrueType)))
+	if (subtype == PDF_NAME(Type1) || subtype == PDF_NAME(MMType1))
 	{
-		fontdesc = pdf_dict_get(ctx, obj, PDF_NAME(FontDescriptor));
+		// fontfile subtype should be Type1C for us to be able to subset it
+		key = PDF_NAME(FontFile);
+		fontdesc = pdf_dict_get(ctx, dict, PDF_NAME(FontDescriptor));
+		fontfile = pdf_dict_get(ctx, fontdesc, PDF_NAME(FontFile));
+		is_cidfont = 0;
+		is_ttf = 0;
+	}
+	else if (subtype == PDF_NAME(TrueType))
+	{
 		key = PDF_NAME(FontFile2);
-		fontfile = pdf_dict_get(ctx, fontdesc, key);
-		cidfont = 0;
+		fontdesc = pdf_dict_get(ctx, dict, PDF_NAME(FontDescriptor));
+		fontfile = pdf_dict_get(ctx, fontdesc, PDF_NAME(FontFile2));
+		is_cidfont = 0;
+		is_ttf = 1;
 	}
 	else if (pdf_name_eq(ctx, subtype, PDF_NAME(Type0)))
 	{
-		obj = pdf_array_get(ctx, pdf_dict_get(ctx, obj, PDF_NAME(DescendantFonts)), 0);
-		fontdesc = pdf_dict_get(ctx, obj, PDF_NAME(FontDescriptor));
-		key = PDF_NAME(FontFile2);
-		fontfile = pdf_dict_get(ctx, fontdesc, key);
-		cidfont = 1; // fontsub7a
-		if (!fontfile)
+		/* In this case, we keep dict pointing to the parent font, not the descendant font. */
+		pdf_obj *ddict = pdf_array_get(ctx, pdf_dict_get(ctx, dict, PDF_NAME(DescendantFonts)), 0);
+		subtype = pdf_dict_get(ctx, ddict, PDF_NAME(Subtype));
+		fontdesc = pdf_dict_get(ctx, ddict, PDF_NAME(FontDescriptor));
+		if (subtype == PDF_NAME(CIDFontType0))
 		{
+			// fontfile subtype is either CIDFontType0C or OpenType
 			key = PDF_NAME(FontFile3);
-			fontfile = pdf_dict_get(ctx, fontdesc, key);
+			fontfile = pdf_dict_get(ctx, fontdesc, PDF_NAME(FontFile3));
 			subtype = pdf_dict_get(ctx, fontfile, PDF_NAME(Subtype));
-			if (pdf_name_eq(ctx, subtype, PDF_NAME(OpenType)))
+			if (subtype == PDF_NAME(CIDFontType0C))
 			{
-				cidfont = 0; // fontsub2a
+				is_cidfont = 1;
+				is_ttf = 0;
 			}
-			else if (pdf_name_eq(ctx, subtype, PDF_NAME(CIDFontType0C)))
+			else if (subtype == PDF_NAME(OpenType))
 			{
-				is_cff = 1;
+				is_cidfont = 1;
+				is_ttf = 1;
 			}
 			else
 			{
-				is_cff = 1;
-				cidfont = 0; // fontsub1a
+				fontfile = NULL;
 			}
 		}
-	}
-	else if (pdf_name_eq(ctx, subtype, PDF_NAME(Type1)))
-	{
-		fontdesc = pdf_dict_get(ctx, obj, PDF_NAME(FontDescriptor));
-		key = PDF_NAME(FontFile3);
-		fontfile = pdf_dict_get(ctx, fontdesc, key);
-		is_cff = 1;
-		cidfont = 0;
-	}
-	else
-	{
-#ifdef DEBUG_SUBSETTING
-		fz_write_printf(ctx, fz_stddbg(ctx), "Unknown font of subtype ");
-		pdf_debug_obj(ctx, subtype);
-#endif
+		else if (subtype == PDF_NAME(CIDFontType2))
+		{
+			key = PDF_NAME(FontFile2);
+			fontfile = pdf_dict_get(ctx, fontdesc, PDF_NAME(FontFile2));
+			is_cidfont = 1;
+			is_ttf = 1;
+		}
 	}
 
 	if (!fontfile)
 	{
 #ifdef DEBUG_SUBSETTING
-		fz_write_printf(ctx, fz_stddbg(ctx), "No key found for font of subtype ");
-		pdf_debug_obj(ctx, subtype);
+		fz_write_printf(ctx, fz_stddbg(ctx), "No embedded file found for font of subtype %s\n", pdf_to_name(ctx, subtype));
 #endif
 		return;
 	}
@@ -280,7 +236,7 @@ font_analysis_Tf(fz_context *ctx, pdf_processor *proc, const char *name, pdf_fon
 
 		for (j = 0; j < p->usage->font[i].len; j++)
 		{
-			if (pdf_objcmp(ctx, p->usage->font[i].font[j], obj) == 0)
+			if (pdf_objcmp(ctx, p->usage->font[i].font[j], dict) == 0)
 				return;
 		}
 
@@ -290,7 +246,7 @@ font_analysis_Tf(fz_context *ctx, pdf_processor *proc, const char *name, pdf_fon
 			p->usage->font[i].font = fz_realloc(ctx, p->usage->font[i].font, sizeof(*p->usage->font[i].font) * newmax);
 			p->usage->font[i].max = newmax;
 		}
-		p->usage->font[i].font[j] = pdf_keep_obj(ctx, obj);
+		p->usage->font[i].font[j] = pdf_keep_obj(ctx, dict);
 		p->usage->font[i].len++;
 
 		return;
@@ -306,8 +262,8 @@ font_analysis_Tf(fz_context *ctx, pdf_processor *proc, const char *name, pdf_fon
 		p->usage->max = n;
 	}
 
-	p->usage->font[i].is_cff = is_cff;
-	p->usage->font[i].is_cidfont = cidfont;
+	p->usage->font[i].is_ttf = is_ttf;
+	p->usage->font[i].is_cidfont = is_cidfont;
 	p->usage->font[i].fontfile = pdf_keep_obj(ctx, fontfile);
 	p->usage->font[i].num = num;
 	p->usage->font[i].gen = gen;
@@ -326,7 +282,7 @@ font_analysis_Tf(fz_context *ctx, pdf_processor *proc, const char *name, pdf_fon
 	p->usage->font[i].font = fz_malloc(ctx, sizeof(*p->usage->font[i].font) * 4);
 	p->usage->font[i].len = 1;
 	p->usage->font[i].max = 4;
-	p->usage->font[i].font[0] = pdf_keep_obj(ctx, obj);
+	p->usage->font[i].font[0] = pdf_keep_obj(ctx, dict);
 }
 
 static void
@@ -342,11 +298,13 @@ show_string(fz_context *ctx, pdf_font_analysis_processor *p, unsigned char *buf,
 	gstate *gs = p->gs;
 	pdf_font_desc *fontdesc = gs->font;
 	size_t pos = 0;
-	font_usage_t *font = &p->usage->font[gs->current_font];
+	font_usage_t *font;
 
-	/* e.g. for non-embedded base14 fonts. */
-	if (fontdesc == NULL)
+	// Not an embedded font!
+	if (gs->current_font < 0 || fontdesc == NULL)
 		return;
+
+	font = &p->usage->font[gs->current_font];
 
 	while (pos < len)
 	{
@@ -436,10 +394,6 @@ font_analysis_Do_form(fz_context *ctx, pdf_processor *proc, const char *name, pd
 	pdf_font_analysis_processor *pr = (pdf_font_analysis_processor *)proc;
 	pdf_document *doc = pdf_get_bound_document(ctx, xobj);
 	pdf_obj *resources = pdf_xobject_resources(ctx, xobj);
-
-	if (!resources)
-		resources = pr->rstack->res;
-
 	pdf_process_contents(ctx, (pdf_processor*)pr, doc, resources, xobj, NULL, NULL);
 }
 
@@ -449,8 +403,6 @@ pdf_new_font_analysis_processor(fz_context *ctx, fonts_usage_t *usage)
 	pdf_font_analysis_processor *proc = (pdf_font_analysis_processor *)pdf_new_processor(ctx, sizeof *proc);
 
 	proc->super.drop_processor = drop_processor;
-	proc->super.push_resources = push_resources;
-	proc->super.pop_resources = pop_resources;
 
 	proc->super.op_Do_form = font_analysis_Do_form;
 
@@ -471,6 +423,8 @@ pdf_new_font_analysis_processor(fz_context *ctx, fonts_usage_t *usage)
 		fz_rethrow(ctx);
 	}
 
+	proc->gs->current_font = -1; // no font set yet
+
 	proc->usage = usage;
 
 	return &proc->super;
@@ -482,14 +436,17 @@ examine_page(fz_context *ctx, pdf_document *doc, pdf_page *page, fonts_usage_t *
 	pdf_processor *proc = pdf_new_font_analysis_processor(ctx, usage);
 	pdf_obj *contents = pdf_page_contents(ctx, page);
 	pdf_obj *resources = pdf_page_resources(ctx, page);
-	pdf_annot *annot;
+	pdf_annot *annot, *widget;
 
 	fz_try(ctx)
 	{
 		pdf_process_contents(ctx, proc, doc, resources, contents, NULL, NULL);
 
+		pdf_processor_push_resources(ctx, proc, resources);
 		for (annot = pdf_first_annot(ctx, page); annot; annot = pdf_next_annot(ctx, annot))
 			pdf_process_annot(ctx, proc, annot, NULL);
+		for (widget = pdf_first_widget(ctx, page); widget; widget = pdf_next_widget(ctx, widget))
+			pdf_process_annot(ctx, proc, widget, NULL);
 		pdf_close_processor(ctx, proc);
 	}
 	fz_always(ctx)
@@ -621,23 +578,32 @@ prefix_font_name(fz_context *ctx, pdf_document *doc, pdf_obj *font, pdf_obj *fil
 {
 	fz_buffer *buf;
 	uint32_t digest[4], v;
-	pdf_obj *fontdesc = get_fontdesc(ctx, font);
-	const char *name = pdf_dict_get_name(ctx, fontdesc, PDF_NAME(FontName));
+	pdf_obj *descendant;
+	pdf_obj *fontdesc;
+	const char *fontdesc_name;
 	char new_name[256];
 	size_t len;
 
-	/* If there is no name, just exit. Possibly should throw here. */
-	if (name == NULL)
-		return;
-
-	len = strlen(name);
-	if (len > 6 && name[6] == '+')
-		return; /* Already a subset name */
+	descendant = pdf_array_get(ctx, pdf_dict_get(ctx, font, PDF_NAME(DescendantFonts)), 0);
+	if (descendant)
+		fontdesc = get_fontdesc(ctx, descendant);
+	else
+		fontdesc = get_fontdesc(ctx, font);
+	fontdesc_name = pdf_dict_get_name(ctx, fontdesc, PDF_NAME(FontName));
 
 	buf = pdf_load_stream(ctx, file);
 	fz_md5_buffer(ctx, buf, (uint8_t *)digest);
 	fz_drop_buffer(ctx, buf);
 
+	len = fontdesc_name == NULL ? 0 : strlen(fontdesc_name);
+	if (len >= 6 && fontdesc_name[6] == '+')
+	{
+		/* Already prefixed. */
+		memcpy(new_name, fontdesc_name, len > sizeof(new_name)-1 ? sizeof(new_name)-1 : len+1);
+	}
+	else
+	{
+		/* Invent a prefix */
 	v = digest[0] ^ digest[1] ^ digest[2] ^ digest[3];
 	new_name[0] = 'A' + (v % 26);
 	v /= 26;
@@ -652,10 +618,20 @@ prefix_font_name(fz_context *ctx, pdf_document *doc, pdf_obj *font, pdf_obj *fil
 	new_name[5] = 'A' + (v % 26);
 	new_name[6] = '+';
 
-	memcpy(new_name+7, name, len > sizeof(new_name)-8 ? sizeof(new_name)-8 : len+1);
+		if (fontdesc_name)
+			memcpy(new_name+7, fontdesc_name, len > sizeof(new_name)-8 ? sizeof(new_name)-8 : len+1);
+		else
+			memcpy(new_name+7, "Anonymous", 10);
 	new_name[sizeof(new_name)-1] = 0;
 
 	pdf_dict_put_name(ctx, fontdesc, PDF_NAME(FontName), new_name);
+	}
+
+	/* Always set font_name to the same as fontdesc. */
+	pdf_dict_put_name(ctx, font, PDF_NAME(BaseFont), new_name);
+
+	if (descendant)
+		pdf_dict_put_name(ctx, descendant, PDF_NAME(BaseFont), new_name);
 }
 
 static int
@@ -788,10 +764,10 @@ pdf_subset_fonts(fz_context *ctx, pdf_document *doc, int len, const int *pages)
 			 * This will leave this font alone. */
 			fz_try(ctx)
 			{
-				if (font->is_cff)
-					subset_cff(ctx, doc, font, font->fontfile, symbolic, font->is_cidfont);
-				else
+				if (font->is_ttf)
 					subset_ttf(ctx, doc, font, font->fontfile, symbolic, font->is_cidfont);
+				else if (font->is_cidfont)
+					subset_cff(ctx, doc, font, font->fontfile, symbolic, font->is_cidfont);
 			}
 			fz_catch(ctx)
 			{

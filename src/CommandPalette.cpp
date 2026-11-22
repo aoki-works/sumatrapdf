@@ -3,6 +3,7 @@
 
 #include "utils/BaseUtil.h"
 #include "utils/WinUtil.h"
+#include "utils/Dpi.h"
 #include "utils/UITask.h"
 #include "utils/FileUtil.h"
 
@@ -16,6 +17,7 @@
 #include "EngineBase.h"
 #include "EngineAll.h"
 #include "GlobalPrefs.h"
+#include "DisplayMode.h"
 #include "DisplayModel.h"
 #include "MainWindow.h"
 #include "Theme.h"
@@ -23,11 +25,15 @@
 #include "SumatraConfig.h"
 #include "Commands.h"
 #include "CommandPalette.h"
+#include "Accelerators.h"
 #include "SumatraPDF.h"
 #include "Tabs.h"
 #include "ExternalViewers.h"
 #include "Annotation.h"
 #include "FileHistory.h"
+#include "DarkModeSubclass.h"
+#include "Notifications.h"
+#include "Translations.h"
 
 #include "utils/Log.h"
 
@@ -91,6 +97,7 @@ static i32 gDocumentNotOpenWhitelist[] = {
     CmdDebugStartStressTest,
     CmdDebugTestApp,
     CmdDebugTogglePredictiveRender,
+    CmdDebugToggleRtl,
     CmdFavoriteToggle,
     CmdToggleFullscreen,
     CmdToggleMenuBar,
@@ -118,6 +125,8 @@ static i32 gCommandsNoActivate[] = {
     CmdHelpVisitWebsite,
     CmdOpenFile,
     CmdProperties,
+    CmdNewWindow,
+    CmdDuplicateInNewWindow,
     // TOOD: probably more
     0,
 };
@@ -179,12 +188,9 @@ struct ListBoxModelCP : ListBoxModel {
 
     ListBoxModelCP() = default;
     ~ListBoxModelCP() override = default;
-    int ItemsCount() override {
-        return strings.Size();
-    }
-    const char* Item(int i) override {
-        return strings.At(i);
-    }
+    int ItemsCount() override { return strings.Size(); }
+    const char* Item(int i) override { return strings.At(i); }
+    ItemDataCP* Data(int i) { return strings.AtData(i); }
 };
 
 struct CommandPaletteWnd : Wnd {
@@ -198,6 +204,8 @@ struct CommandPaletteWnd : Wnd {
     StrVecCP commands;
     ListBox* listBox = nullptr;
     Static* staticInfo = nullptr;
+
+    StrVec filterWords;
 
     int currTabIdx = 0;
     bool smartTabMode = false;
@@ -213,6 +221,14 @@ struct CommandPaletteWnd : Wnd {
     void QueryChanged();
 
     void ExecuteCurrentSelection();
+    bool AdvanceSelection(int dir);
+    void SwitchToCommands();
+    void SwitchToTabs();
+    void SwitchToEverything();
+    void SwitchToFileHistory();
+    void OnSelectionChange();
+    void OnListDoubleClick();
+    void DrawListBoxItem(ListBox::DrawItemEvent* ev);
 };
 
 struct CommandPaletteBuildCtx {
@@ -236,6 +252,13 @@ struct CommandPaletteBuildCtx {
 
     ~CommandPaletteBuildCtx() = default;
 };
+
+static const char* SkipWS(const char* s) {
+    while (str::IsWs(*s)) {
+        s++;
+    }
+    return s;
+}
 
 static bool AllowCommand(const CommandPaletteBuildCtx& ctx, i32 cmdId) {
     if (cmdId <= CmdFirst) {
@@ -322,7 +345,6 @@ static bool AllowCommand(const CommandPaletteBuildCtx& ctx, i32 cmdId) {
     }
 
     if (!ctx.annotationUnderCursor) {
-        //        if ((cmdId == CmdSelectAnnotation) || (cmdId == CmdDeleteAnnotation)) {
         if (cmdId == CmdDeleteAnnotation) {
             return false;
         }
@@ -389,6 +411,103 @@ static TempStr RemovePrefixFromString(const char* s) {
     return str::ReplaceTemp(s, "&", "");
 }
 
+static const char* UpdateCommandNameTemp(MainWindow* win, int cmdId, const char* s) {
+    bool isToggle = false;
+    bool newIsOn = false;
+    switch (cmdId) {
+        case CmdToggleInverseSearch: {
+            extern bool gDisableInteractiveInverseSearch;
+            isToggle = true;
+            newIsOn = !gDisableInteractiveInverseSearch;
+        } break;
+        case CmdToggleFrequentlyRead: {
+            isToggle = true;
+            newIsOn = !gGlobalPrefs->showStartPage;
+        } break;
+        case CmdToggleFullscreen: {
+            isToggle = true;
+            newIsOn = !(win->isFullScreen || win->presentation);
+        } break;
+        case CmdToggleToolbar: {
+            isToggle = true;
+            newIsOn = !gGlobalPrefs->showToolbar;
+        } break;
+        case CmdToggleScrollbars: {
+            isToggle = true;
+            // hideScrollbars is inverted: true means hidden, toggling will show them
+            newIsOn = gGlobalPrefs->fixedPageUI.hideScrollbars;
+        } break;
+        case CmdToggleMenuBar: {
+            isToggle = true;
+            // isMenuHidden: true means hidden, toggling will show it
+            newIsOn = win->isMenuHidden;
+        } break;
+        case CmdToggleBookmarks:
+        case CmdToggleTableOfContents: {
+            isToggle = true;
+            newIsOn = !win->tocVisible;
+        } break;
+        case CmdTogglePresentationMode: {
+            isToggle = true;
+            newIsOn = !win->presentation;
+        } break;
+        case CmdToggleLinks: {
+            isToggle = true;
+            newIsOn = !gGlobalPrefs->showLinks;
+        } break;
+        case CmdToggleShowAnnotations: {
+            WindowTab* tab = win->CurrentTab();
+            if (tab) {
+                isToggle = true;
+                newIsOn = tab->hideAnnotations;
+            }
+        } break;
+        case CmdToggleContinuousView: {
+            if (win->ctrl) {
+                isToggle = true;
+                newIsOn = !IsContinuous(win->ctrl->GetDisplayMode());
+            }
+        } break;
+        case CmdToggleMangaMode: {
+            DisplayModel* dm = win->AsFixed();
+            if (dm) {
+                isToggle = true;
+                newIsOn = !dm->GetDisplayR2L();
+            }
+        } break;
+        case CmdFindToggleMatchCase: {
+            isToggle = true;
+            newIsOn = !win->findMatchCase;
+        } break;
+        case CmdFavoriteToggle: {
+            isToggle = true;
+            newIsOn = !gGlobalPrefs->showFavorites;
+        } break;
+        case CmdToggleAntiAlias: {
+            isToggle = true;
+            newIsOn = gGlobalPrefs->disableAntiAlias;
+        } break;
+        case CmdToggleZoom: {
+            // TODO: this toggles via different values
+        } break;
+        case CmdToggleCursorPosition: {
+            // TODO: this toggles 3 states
+            //    isToggle = true;
+            //    auto notif = GetNotificationForGroup(win->hwndCanvas, kNotifCursorPos);
+            //    newIsOn = !notif;
+        } break;
+        case CmdTogglePageInfo: {
+            auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifPageInfo);
+            isToggle = true;
+            newIsOn = !wnd;
+        } break;
+    }
+    if (isToggle) {
+        s = (const char*)str::JoinTemp(s, newIsOn ? ": on" : ": off");
+    }
+    return s;
+}
+
 void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
     CommandPaletteBuildCtx ctx;
     ctx.isDocLoaded = mainWin->IsDocLoaded();
@@ -406,7 +525,15 @@ void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
     for (int i = 0; i < nTabs; i++) {
         WindowTab* t = mainWin->GetTab(i);
         if (t->IsAboutTab()) {
-            ReportIf(i > 0);
+            if (i > 0) {
+                logf("CommandPaletteWnd::CollectStrings: unexpected about tab at idx: %d out of %d\n", i, nTabs);
+                for (int j = 0; j < nTabs; j++) {
+                    if (!t->IsAboutTab()) {
+                        logf("i: %d path: %s\n", j, t->filePath ? t->filePath : "");
+                    }
+                }
+                ReportIf(i > 0);
+            }
             nFirstDocTab = 1;
             continue;
         }
@@ -452,12 +579,13 @@ void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
 
     // append paths of opened files
     currTabIdx = 0;
+    tabs.Reset();
     for (MainWindow* w : gWindows) {
         for (WindowTab* tab : w->Tabs()) {
             ItemDataCP data;
             data.tab = tab;
             if (tab->IsAboutTab()) {
-                tabs.Append("Home", data);
+                tabs.Append(_TRA("Home"), data);
                 continue;
             }
             auto name = path::GetBaseNameTemp(tab->filePath);
@@ -471,6 +599,7 @@ void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
 
     // append paths of files from history, excluding
     // already appended (from opened files)
+    fileHistory.Reset();
     for (FileState* fs : *gGlobalPrefs->fileStates) {
         char* s = fs->filePath;
         s = ConvertPathForDisplayTemp(s);
@@ -486,7 +615,9 @@ void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
             ReportIf(str::Leni(name) == 0);
             ItemDataCP data;
             data.cmdId = (i32)cmdId;
-            tempCommands.Append(name, data);
+            auto nameTranslated = trans::GetTranslation(name);
+            auto nameUpdated = UpdateCommandNameTemp(mainWin, cmdId, (TempStr)nameTranslated);
+            tempCommands.Append(nameUpdated, data);
         }
     }
 
@@ -509,6 +640,7 @@ void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
     // we want the commands sorted
     SortNoCase(&tempCommands);
     int n = tempCommands.Size();
+    commands.Reset();
     for (int i = 0; i < n; i++) {
         commands.AppendFrom(&tempCommands, i);
     }
@@ -520,19 +652,24 @@ static void EditSetTextAndFocus(Edit* e, const char* s) {
     HwndSetFocus(e->hwnd);
 }
 
-static void SwitchToCommands(CommandPaletteWnd* wnd) {
-    EditSetTextAndFocus(wnd->editQuery, kPalettePrefixCommands);
+void CommandPaletteWnd::SwitchToCommands() {
+    EditSetTextAndFocus(editQuery, kPalettePrefixCommands);
 }
 
-static void SwitchToTabs(CommandPaletteWnd* wnd) {
-    EditSetTextAndFocus(wnd->editQuery, kPalettePrefixTabs);
+void CommandPaletteWnd::SwitchToTabs() {
+    EditSetTextAndFocus(editQuery, kPalettePrefixTabs);
 }
 
-static void SwitchToFileHistory(CommandPaletteWnd* wnd) {
-    EditSetTextAndFocus(wnd->editQuery, kPalettePrefixFileHistory);
+void CommandPaletteWnd::SwitchToEverything() {
+    EditSetTextAndFocus(editQuery, kPalettePrefixEverything);
 }
 
-static CommandPaletteWnd* gCommandPaletteWnd = nullptr;
+void CommandPaletteWnd::SwitchToFileHistory() {
+    EditSetTextAndFocus(editQuery, kPalettePrefixFileHistory);
+}
+
+CommandPaletteWnd* gCommandPaletteWnd = nullptr;
+HWND gCommandPaletteHwnd = nullptr;
 static HWND gHwndToActivateOnClose = nullptr;
 
 void SafeDeleteCommandPaletteWnd() {
@@ -542,6 +679,7 @@ void SafeDeleteCommandPaletteWnd() {
 
     auto tmp = gCommandPaletteWnd;
     gCommandPaletteWnd = nullptr;
+    gCommandPaletteHwnd = nullptr;
     delete tmp;
     if (gHwndToActivateOnClose) {
         SetActiveWindow(gHwndToActivateOnClose);
@@ -553,38 +691,74 @@ static void ScheduleDelete() {
     if (!gCommandPaletteWnd) {
         return;
     }
-    HighlightTab(gCommandPaletteWnd->win, nullptr);
+    if (IsMainWindowValid(gCommandPaletteWnd->win)) {
+        HighlightTab(gCommandPaletteWnd->win, nullptr);
+    }
     auto fn = MkFunc0Void(SafeDeleteCommandPaletteWnd);
     uitask::Post(fn, "SafeDeleteCommandPaletteWnd");
 }
 
-LRESULT CommandPaletteWnd::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+LRESULT CommandPaletteWnd::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_ACTIVATE:
-            if (wparam == WA_INACTIVE) {
+            if (wp == WA_INACTIVE) {
                 ScheduleDelete();
                 return 0;
             }
             break;
+        case WM_COMMAND: {
+            int cmdId = LOWORD(wp);
+            CustomCommand* cmd = FindCustomCommand(cmdId);
+            if (cmd != nullptr) {
+                cmdId = cmd->origId;
+            }
+            switch (cmdId) {
+                case CmdNextTabSmart:
+                case CmdPrevTabSmart: {
+                    int dir = cmdId == CmdNextTabSmart ? 1 : -1;
+                    return AdvanceSelection(dir);
+                }
+            }
+        }
     }
 
-    return WndProcDefault(hwnd, msg, wparam, lparam);
+    return WndProcDefault(hwnd, msg, wp, lp);
 }
 
-static void SelectionChange(CommandPaletteWnd* wnd) {
-    int idx = wnd->listBox->GetCurrentSelection();
-    logf("Selection changed: %d\n", idx);
-    if (!wnd->smartTabMode) {
+void CommandPaletteWnd::OnSelectionChange() {
+    int idx = listBox->GetCurrentSelection();
+    // logf("Selection changed: %d\n", idx);
+    if (!smartTabMode) {
         return;
     }
-    auto m = (ListBoxModelCP*)wnd->listBox->model;
+    auto m = (ListBoxModelCP*)listBox->model;
     ItemDataCP* data = m->strings.AtData(idx);
-    HighlightTab(wnd->win, data->tab);
+    HighlightTab(win, data->tab);
 }
 
 static void SetCurrentSelection(CommandPaletteWnd* wnd, int idx) {
     wnd->listBox->SetCurrentSelection(idx);
-    SelectionChange(wnd);
+    wnd->OnSelectionChange();
+}
+
+bool CommandPaletteWnd::AdvanceSelection(int dir) {
+    if (dir == 0) {
+        return false;
+    }
+    int n = listBox->GetCount();
+    if (n == 0) {
+        return false;
+    }
+    int currSel = listBox->GetCurrentSelection();
+    int sel = currSel + dir;
+    if (sel < 0) {
+        sel = n - 1;
+    }
+    if (sel >= n) {
+        sel = 0;
+    }
+    SetCurrentSelection(this, sel);
+    return true;
 }
 
 bool CommandPaletteWnd::PreTranslateMessage(MSG& msg) {
@@ -600,6 +774,40 @@ bool CommandPaletteWnd::PreTranslateMessage(MSG& msg) {
             return true;
         }
 
+        if (msg.wParam == VK_DELETE) {
+            const char* filter = editQuery->GetTextTemp();
+            filter = SkipWS(filter);
+            if (str::StartsWith(filter, kPalettePrefixFileHistory)) {
+                int n = listBox->GetCount();
+                if (n == 0) {
+                    return false;
+                }
+                int currSel = listBox->GetCurrentSelection();
+                auto m = (ListBoxModelCP*)listBox->model;
+                auto d = m->Data(currSel);
+                FileState* fs = gFileHistory.FindByPath(d->filePath);
+                if (!fs) {
+                    return true;
+                }
+                gFileHistory.Remove(fs);
+                CollectStrings(this->win);
+                this->QueryChanged();
+
+                // restore selection for fluid use
+                n = listBox->GetCount();
+                if (n == 0) {
+                    return true;
+                }
+                int lastIdx = n - 1;
+                if (currSel > lastIdx) {
+                    currSel = lastIdx;
+                }
+                listBox->SetCurrentSelection(currSel);
+                return true;
+            }
+            return true;
+        }
+
         if (msg.wParam == VK_UP) {
             dir = -1;
         } else if (msg.wParam == VK_DOWN) {
@@ -612,23 +820,7 @@ bool CommandPaletteWnd::PreTranslateMessage(MSG& msg) {
                 dir = IsShiftPressed() ? -1 : 1;
             }
         }
-        if (dir == 0) {
-            return false;
-        }
-        int n = listBox->GetCount();
-        if (n == 0) {
-            return false;
-        }
-        int currSel = listBox->GetCurrentSelection();
-        int sel = currSel + dir;
-        if (sel < 0) {
-            sel = n - 1;
-        }
-        if (sel >= n) {
-            sel = 0;
-        }
-        SetCurrentSelection(this, sel);
-        return true;
+        return AdvanceSelection(dir);
     }
 
     if (smartTabMode) {
@@ -645,14 +837,19 @@ bool CommandPaletteWnd::PreTranslateMessage(MSG& msg) {
     return false;
 }
 
-// filter is one or more words separated by whitespace
-// filter matches if all words match, ignoring the case
-static bool FilterMatches(const char* str, const char* filter) {
-    // empty filter matches all
-    if (str::IsEmptyOrWhiteSpace(filter)) {
-        return true;
+// all words must be present in str, ignoring the case
+static bool FilterMatches(const char* str, const StrVec& words) {
+    int nWords = words.Size();
+    for (int i = 0; i < nWords; i++) {
+        auto word = words.At(i);
+        if (!str::ContainsI(str, word)) {
+            return false;
+        }
     }
-    StrVec words;
+    return true;
+}
+
+static void SplitFilterToWords(const char* filter, StrVec& words) {
     char* s = str::DupTemp(filter);
     char* wordStart = s;
     bool wasWs = false;
@@ -670,52 +867,57 @@ static bool FilterMatches(const char* str, const char* filter) {
     if (str::Leni(wordStart) > 0) {
         AppendIfNotExists(&words, wordStart);
     }
-    // all words must be present
-    int nWords = words.Size();
-    for (int i = 0; i < nWords; i++) {
-        auto word = words.At(i);
-        if (!str::ContainsI(str, word)) {
-            return false;
-        }
-    }
-    return true;
 }
 
-static void FilterStrings(StrVecCP& strs, const char* filter, StrVecCP& matchedOut) {
+static void FilterStrings(StrVecCP& strs, const StrVec& words, StrVecCP& matchedOut) {
     int n = strs.Size();
     for (int i = 0; i < n; i++) {
         const char* s = strs.At(i);
-        if (!FilterMatches(s, filter)) {
+        if (!FilterMatches(s, words)) {
             continue;
         }
         matchedOut.AppendFrom(&strs, i);
     }
 }
 
-const char* SkipWS(const char* s) {
-    while (str::IsWs(*s)) {
-        s++;
-    }
-    return s;
-}
-
 void CommandPaletteWnd::FilterStringsForQuery(const char* filter, StrVecCP& strings) {
     // for efficiency, reusing existing model
     strings.Reset();
-    if (str::StartsWith(filter, kPalettePrefixTabs)) {
-        filter++;
-        FilterStrings(tabs, filter, strings);
-        return;
+    if (!filter) {
+        filter = "";
     }
-    if (str::StartsWith(filter, kPalettePrefixFileHistory)) {
+
+    // strip prefix and remember which lists to search
+    bool searchTabs = false, searchHistory = false, searchCommands = false;
+    if (str::StartsWith(filter, kPalettePrefixEverything)) {
         filter++;
-        FilterStrings(fileHistory, filter, strings);
-        return;
-    }
-    if (str::StartsWith(filter, kPalettePrefixCommands)) {
+        searchTabs = searchHistory = searchCommands = true;
+    } else if (str::StartsWith(filter, kPalettePrefixTabs)) {
         filter++;
+        searchTabs = true;
+    } else if (str::StartsWith(filter, kPalettePrefixFileHistory)) {
+        filter++;
+        searchHistory = true;
+    } else {
+        if (str::StartsWith(filter, kPalettePrefixCommands)) {
+            filter++;
+        }
+        searchCommands = true;
     }
-    FilterStrings(commands, filter, strings);
+
+    // split filter into words once
+    filterWords.Reset();
+    SplitFilterToWords(filter, filterWords);
+
+    if (searchTabs) {
+        FilterStrings(tabs, filterWords, strings);
+    }
+    if (searchHistory) {
+        FilterStrings(fileHistory, filterWords, strings);
+    }
+    if (searchCommands) {
+        FilterStrings(commands, filterWords, strings);
+    }
 }
 
 void CommandPaletteWnd::QueryChanged() {
@@ -747,10 +949,6 @@ void CommandPaletteWnd::QueryChanged() {
     SetCurrentSelection(this, 0);
 }
 
-static void CommandPaletteQueryChanged(CommandPaletteWnd* self) {
-    self->QueryChanged();
-}
-
 void CommandPaletteWnd::ExecuteCurrentSelection() {
     int idx = listBox->GetCurrentSelection();
     if (idx < 0) {
@@ -771,7 +969,13 @@ void CommandPaletteWnd::ExecuteCurrentSelection() {
 
     WindowTab* tab = data->tab;
     if (tab != nullptr) {
-        MainWindow* mainWin = tab->win;
+        // tab snapshot was taken when palette opened; tab may have been
+        // closed since then (e.g. file watcher reload, DDE), so validate
+        MainWindow* mainWin = FindMainWindowByTab(tab);
+        if (!mainWin) {
+            ScheduleDelete();
+            return;
+        }
         if (mainWin->CurrentTab() != tab) {
             SelectTabInWindow(tab);
         }
@@ -792,8 +996,8 @@ void CommandPaletteWnd::ExecuteCurrentSelection() {
     ScheduleDelete();
 }
 
-static void ListDoubleClick(CommandPaletteWnd* w) {
-    w->ExecuteCurrentSelection();
+void CommandPaletteWnd::OnListDoubleClick() {
+    ExecuteCurrentSelection();
 }
 
 void OnDestroy(Wnd::DestroyEvent*) {
@@ -812,11 +1016,184 @@ static void PositionCommandPalette(HWND hwnd, HWND hwndRelative) {
     SetWindowPos(hwnd, nullptr, r2.x, r2.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
 
+void CommandPaletteWnd::DrawListBoxItem(ListBox::DrawItemEvent* ev) {
+    ListBox* lb = ev->listBox;
+    auto m = (ListBoxModelCP*)lb->model;
+    if (ev->itemIndex < 0 || ev->itemIndex >= m->ItemsCount()) {
+        return;
+    }
+
+    HDC hdc = ev->hdc;
+    RECT rc = ev->itemRect;
+
+    // set colors based on selection state
+    COLORREF colBg = IsSpecialColor(lb->bgColor) ? GetSysColor(COLOR_WINDOW) : lb->bgColor;
+    COLORREF colText = IsSpecialColor(lb->textColor) ? GetSysColor(COLOR_WINDOWTEXT) : lb->textColor;
+    if (ev->selected) {
+        colBg = GetSysColor(COLOR_HIGHLIGHT);
+        colText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+    }
+
+    // fill background
+    SetBkColor(hdc, colBg);
+    ExtTextOutW(hdc, 0, 0, ETO_OPAQUE, &rc, nullptr, 0, nullptr);
+
+    // For RTL: remove LAYOUT_RTL from DC so we can position text manually.
+    // The item rect spans full width so coordinates are the same mirrored or not.
+    bool isRtl = HwndIsRtl(lb->hwnd);
+    if (isRtl) {
+        SetLayout(hdc, 0); // LAYOUT_LTR
+    }
+
+    // get item text and data
+    const char* itemText = m->Item(ev->itemIndex);
+    ItemDataCP* data = m->Data(ev->itemIndex);
+
+    // get accelerator string for commands
+    TempStr accelStr = nullptr;
+    if (data->cmdId != 0) {
+        // AppendAccelKeyToMenuStringTemp returns "\tCtrl + X" or original string if no accel
+        TempStr withAccel = AppendAccelKeyToMenuStringTemp((TempStr) "", data->cmdId);
+        if (withAccel && withAccel[0] == '\t') {
+            accelStr = withAccel + 1; // skip the tab character
+        }
+    }
+
+    // set text color and background mode
+    SetTextColor(hdc, colText);
+    SetBkMode(hdc, TRANSPARENT);
+
+    // select font
+    HFONT oldFont = nullptr;
+    if (lb->font) {
+        oldFont = SelectFont(hdc, lb->font);
+    }
+
+    // add some padding
+    int padX = DpiScale(lb->hwnd, 4);
+    rc.left += padX;
+    rc.right -= padX;
+
+    // draw command name on the left, highlighting matched words
+    int nWords = filterWords.Size();
+    if (nWords == 0) {
+        WCHAR* itemTextW = ToWStrTemp(itemText);
+        uint fmt = DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+        fmt |= isRtl ? (DT_RIGHT | DT_RTLREADING) : DT_LEFT;
+        DrawTextW(hdc, itemTextW, -1, &rc, fmt);
+    } else {
+        // find all match ranges in itemText
+        int textLen = str::Leni(itemText);
+        // marks which chars are part of a match
+        u8* highlighted = AllocArrayTemp<u8>(textLen);
+        const StrVec& words = filterWords;
+        for (int w = 0; w < nWords; w++) {
+            const char* word = words.At(w);
+            int wordLen = str::Leni(word);
+            if (wordLen == 0) {
+                continue;
+            }
+            const char* p = itemText;
+            while ((p = str::FindI(p, word)) != nullptr) {
+                int off = (int)(p - itemText);
+                for (int k = 0; k < wordLen && off + k < textLen; k++) {
+                    highlighted[off + k] = 1;
+                }
+                p += wordLen;
+            }
+        }
+
+        // collect contiguous highlighted ranges (up to 16)
+        struct ByteRange {
+            int start;
+            int end;
+        };
+        ByteRange byteRanges[16];
+        int nRanges = 0;
+        {
+            int pos = 0;
+            while (pos < textLen && nRanges < 16) {
+                if (highlighted[pos]) {
+                    int start = pos;
+                    while (pos < textLen && highlighted[pos]) {
+                        pos++;
+                    }
+                    byteRanges[nRanges++] = {start, pos};
+                } else {
+                    pos++;
+                }
+            }
+        }
+
+        WCHAR* itemTextW = ToWStrTemp(itemText);
+        int itemTextWLen = str::Leni(itemTextW);
+
+        // measure total string width for RTL positioning
+        int strOriginX = rc.left;
+        if (isRtl) {
+            SIZE szTotal;
+            GetTextExtentPoint32W(hdc, itemTextW, itemTextWLen, &szTotal);
+            strOriginX = rc.right - szTotal.cx;
+        }
+
+        // compute pixel rectangles for each highlighted range
+        RECT highlightRects[16];
+        for (int i = 0; i < nRanges; i++) {
+            WCHAR* prefixToStart = ToWStrTemp(itemText, (size_t)byteRanges[i].start);
+            int wStart = str::Leni(prefixToStart);
+            WCHAR* prefixToEnd = ToWStrTemp(itemText, (size_t)byteRanges[i].end);
+            int wEnd = str::Leni(prefixToEnd);
+
+            SIZE szStart, szEnd;
+            GetTextExtentPoint32W(hdc, itemTextW, wStart, &szStart);
+            GetTextExtentPoint32W(hdc, itemTextW, wEnd, &szEnd);
+
+            highlightRects[i].top = rc.top;
+            highlightRects[i].bottom = rc.bottom;
+            highlightRects[i].left = strOriginX + szStart.cx;
+            highlightRects[i].right = strOriginX + szEnd.cx;
+        }
+
+        // draw yellow background rectangles for matches (skip when selected)
+        if (!ev->selected) {
+            HBRUSH hbrHighlight = CreateSolidBrush(RGB(255, 255, 0));
+            for (int i = 0; i < nRanges; i++) {
+                FillRect(hdc, &highlightRects[i], hbrHighlight);
+            }
+            DeleteObject(hbrHighlight);
+        }
+
+        // draw the whole string at once over the highlights
+        uint fmt = DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+        fmt |= isRtl ? (DT_RIGHT | DT_RTLREADING) : DT_LEFT;
+        DrawTextW(hdc, itemTextW, -1, &rc, fmt);
+    }
+
+    // draw accelerator on the opposite side from the command name
+    if (accelStr && accelStr[0]) {
+        WCHAR* accelStrW = ToWStrTemp(accelStr);
+        uint fmtAccel = DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX;
+        if (isRtl) {
+            rc.left += DpiScale(lb->hwnd, 8);
+            fmtAccel |= DT_LEFT | DT_RTLREADING;
+        } else {
+            rc.right -= DpiScale(lb->hwnd, 8);
+            fmtAccel |= DT_RIGHT;
+        }
+        DrawTextW(hdc, accelStrW, -1, &rc, fmtAccel);
+    }
+
+    if (oldFont) {
+        SelectFont(hdc, oldFont);
+    }
+}
+
 static Static* CreateStatic(HWND parent, HFONT font, const char* s) {
     Static::CreateArgs args;
     args.parent = parent;
     args.font = font;
     args.text = s;
+    args.isRtl = IsUIRtl();
     auto c = new Static();
     auto wnd = c->Create(args);
     ReportIf(!wnd);
@@ -855,12 +1232,13 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
         args.cueText = "enter search term";
         args.text = prefix;
         args.font = font;
+        args.isRtl = IsUIRtl();
         auto c = new Edit();
         c->SetColors(colTxt, colBg);
         c->maxDx = 150;
         HWND ok = c->Create(args);
         ReportIf(!ok);
-        c->onTextChanged = MkFunc0(CommandPaletteQueryChanged, this);
+        c->onTextChanged = MkMethod0<CommandPaletteWnd, &CommandPaletteWnd::QueryChanged>(this);
         editQuery = c;
         vbox->AddChild(c);
     }
@@ -869,25 +1247,32 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
         auto hbox = new HBox();
         hbox->alignMain = MainAxisAlign::MainCenter;
         hbox->alignCross = CrossAxisAlign::CrossCenter;
-        auto pad = Insets{0, 4, 0, 4};
+        auto pad = Insets{0, 8, 0, 8};
         {
-            auto c = CreateStatic(hwnd, font, "# File History");
+            auto c = CreateStatic(hwnd, font, _TRA("# File History"));
             c->SetColors(colTxt, colBg);
-            c->onClick = MkFunc0(SwitchToFileHistory, this);
+            c->onClick = MkMethod0<CommandPaletteWnd, &CommandPaletteWnd::SwitchToFileHistory>(this);
             auto p = new Padding(c, pad);
             hbox->AddChild(p);
         }
         {
-            auto c = CreateStatic(hwnd, font, "> Commands");
+            auto c = CreateStatic(hwnd, font, _TRA("> Commands"));
             c->SetColors(colTxt, colBg);
-            c->onClick = MkFunc0(SwitchToCommands, this);
+            c->onClick = MkMethod0<CommandPaletteWnd, &CommandPaletteWnd::SwitchToCommands>(this);
             auto p = new Padding(c, pad);
             hbox->AddChild(p);
         }
         {
-            auto c = CreateStatic(hwnd, font, "@ Tabs");
+            auto c = CreateStatic(hwnd, font, _TRA("@ Tabs"));
             c->SetColors(colTxt, colBg);
-            c->onClick = MkFunc0(SwitchToTabs, this);
+            c->onClick = MkMethod0<CommandPaletteWnd, &CommandPaletteWnd::SwitchToTabs>(this);
+            auto p = new Padding(c, pad);
+            hbox->AddChild(p);
+        }
+        {
+            auto c = CreateStatic(hwnd, font, _TRA(": Everything"));
+            c->SetColors(colTxt, colBg);
+            c->onClick = MkMethod0<CommandPaletteWnd, &CommandPaletteWnd::SwitchToTabs>(this);
             auto p = new Padding(c, pad);
             hbox->AddChild(p);
         }
@@ -898,17 +1283,23 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
         ListBox::CreateArgs args;
         args.parent = hwnd;
         args.font = font;
+        args.isRtl = IsUIRtl();
         auto c = new ListBox();
-        c->onDoubleClick = MkFunc0(ListDoubleClick, this);
+        c->onDoubleClick = MkMethod0<CommandPaletteWnd, &CommandPaletteWnd::OnListDoubleClick>(this);
+        c->onDrawItem =
+            MkMethod1<CommandPaletteWnd, ListBox::DrawItemEvent*, &CommandPaletteWnd::DrawListBoxItem>(this);
         c->idealSizeLines = 32;
         c->SetInsetsPt(4, 0);
         c->Create(args);
         c->SetColors(colTxt, colBg);
-        c->onSelectionChanged = MkFunc0(SelectionChange, this);
+        c->onSelectionChanged = MkMethod0<CommandPaletteWnd, &CommandPaletteWnd::OnSelectionChange>(this);
         auto m = new ListBoxModelCP();
         FilterStringsForQuery(prefix, m->strings);
         c->SetModel(m);
         listBox = c;
+        if (UseDarkModeLib()) {
+            DarkMode::setDarkScrollBar(listBox->hwnd);
+        }
         vbox->AddChild(c, 1);
     }
     {
@@ -940,11 +1331,11 @@ bool CommandPaletteWnd::Create(MainWindow* win, const char* prefix, int smartTab
     }
 
     SetIsVisible(true);
-    ::SetFocus(editQuery->hwnd);
+    HwndSetFocus(editQuery->hwnd);
     return true;
 }
 
-void RunCommandPallette(MainWindow* win, const char* prefix, int smartTabAdvance) {
+void RunCommandPalette(MainWindow* win, const char* prefix, int smartTabAdvance) {
     ReportIf(gCommandPaletteWnd);
 
     auto wnd = new CommandPaletteWnd();
@@ -955,5 +1346,20 @@ void RunCommandPallette(MainWindow* win, const char* prefix, int smartTabAdvance
     bool ok = wnd->Create(win, prefix, smartTabAdvance);
     ReportIf(!ok);
     gCommandPaletteWnd = wnd;
+    gCommandPaletteHwnd = wnd->hwnd;
+    logf("gCommandPaletteHwnd: 0x%p\n", gCommandPaletteHwnd);
     gHwndToActivateOnClose = win->hwndFrame;
+}
+
+HWND CommandPaletteHwndForAccelerator(HWND hwnd) {
+    if (!gCommandPaletteWnd) return nullptr;
+    auto wnd = gCommandPaletteWnd;
+    HWND wHwnd = wnd->hwnd;
+    if (hwnd == wHwnd) return wHwnd;
+    if (wnd->editQuery && wnd->editQuery->hwnd == hwnd) {
+        return wHwnd;
+    }
+    if (!wnd->listBox) return nullptr;
+    if (hwnd == wnd->listBox->hwnd) return wHwnd;
+    return nullptr;
 }

@@ -16,15 +16,22 @@
 
 GlobalPrefs* gGlobalPrefs = nullptr;
 
-FileState* NewDisplayState(const char* filePath) {
+FileState* NewFileState(const char* filePath) {
     FileState* fs = (FileState*)DeserializeStruct(&gFileStateInfo, nullptr);
     SetFileStatePath(fs, filePath);
     return fs;
 }
 
-void DeleteDisplayState(FileState* fs) {
+void DeleteFileState(FileState* fs) {
     delete fs->thumbnail;
     FreeStruct(&gFileStateInfo, fs);
+}
+
+void DeleteFileStates(Vec<FileState*>* a) {
+    for (auto fs : *a) {
+        DeleteFileState(fs);
+    }
+    delete a;
 }
 
 Favorite* NewFavorite(int pageNo, const char* name, const char* pageLabel) {
@@ -99,13 +106,17 @@ TabState* NewTabState(FileState* fs) {
     return state;
 }
 
-void ResetSessionState(Vec<SessionData*>* sessionData) {
+void FreeSessionData(SessionData* data) {
+    FreeStruct(&gSessionDataInfo, data);
+}
+
+void FreeSessionDataVec(Vec<SessionData*>* sessionData) {
     ReportIf(!sessionData);
     if (!sessionData) {
         return;
     }
     for (SessionData* data : *sessionData) {
-        FreeStruct(&gSessionDataInfo, data);
+        FreeSessionData(data);
     }
     sessionData->Reset();
 }
@@ -118,6 +129,17 @@ ParsedColor* GetParsedColor(const char* s, ParsedColor& parsed) {
     return &parsed;
 }
 
+COLORREF GetParsedCOLORREF(const char* s, ParsedColor& parsed, COLORREF def) {
+    if (parsed.wasParsed) {
+        return parsed.col;
+    }
+    ParseColor(parsed, s);
+    if (parsed.wasParsed) {
+        return parsed.col;
+    }
+    return def;
+}
+
 void SetFileStatePath(FileState* fs, const char* path) {
     if (fs->filePath && str::EqI(fs->filePath, path)) {
         return;
@@ -128,4 +150,15 @@ void SetFileStatePath(FileState* fs, const char* path) {
 void SetFileStatePath(FileState* fs, const WCHAR* path) {
     char* pathA = ToUtf8Temp(path);
     SetFileStatePath(fs, pathA);
+}
+
+Themes* ParseThemes(const char* data) {
+    return (Themes*)DeserializeStruct(&gThemesInfo, data);
+}
+
+void FreeParsedThemes(Themes* themes) {
+    if (!themes) {
+        return;
+    }
+    FreeStruct(&gThemesInfo, themes);
 }

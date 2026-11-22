@@ -94,7 +94,7 @@ static void ParseTranslationsTxt(const StrSpan& d, const char* langCode) {
     int i = 2; // skip first 2 header lines
     while (i < nLines) {
         orig = lines[i];
-        ReportIf(*orig != ':');
+        ReportDebugIf(*orig != ':');
         orig += 1; // skip the ':' at the beginning
         i++;
         trans = nullptr;
@@ -120,13 +120,13 @@ static void ParseTranslationsTxt(const StrSpan& d, const char* langCode) {
         c->Append(unescaped);
     }
     int nTrans = c->Size();
-    ReportIf(nTrans != nStrings * 2);
+    ReportDebugIf(nTrans != nStrings * 2);
     if (nUntranslated > 0 && !str::Eq(langCode, "en:")) {
         logf("Untranslated strings: %d for lang '%s'\n", nUntranslated, langCode);
     }
 }
 
-// don't free
+// don't free the result
 const char* GetTranslation(const char* s) {
     if (gCurrLangIdx == 0) {
         // 0 is english, no translation needed
@@ -134,7 +134,7 @@ const char* GetTranslation(const char* s) {
     }
     auto c = gTranslationCache;
     int n = c->Size();
-    ReportIf(n % 2 != 0);
+    ReportDebugIf(n % 2 != 0);
     n = n / 2;
     int sLen = str::Leni(s);
     for (int i = 0; i < n; i++) {
@@ -146,10 +146,16 @@ const char* GetTranslation(const char* s) {
                 logf("Didn't find translation for '%s'\n", s);
                 return s;
             }
+            // special case of "Change Language"
+            // if we accidentally change language, we want be able to
+            // change it back so add ("Change Language") to translation
+            if (str::ContainsI(s, "Change Language") && !str::ContainsI(tr, "Change Language")) {
+                tr = (char*)str::JoinTemp(tr, " (Change Language)");
+            }
             return tr;
         }
     }
-    ReportIf(true);
+    ReportDebugIf(true);
     return s;
 }
 
@@ -172,7 +178,7 @@ void SetCurrentLangByCode(const char* langCode) {
         // set to English
         idx = 0;
     }
-    ReportIf(-1 == idx);
+    ReportDebugIf(-1 == idx);
     gCurrLangIdx = idx;
     gCurrLangCode = GetLangCodeByIdx(idx);
     if (idx == 0 && !gIsDebugBuild) {
@@ -181,6 +187,9 @@ void SetCurrentLangByCode(const char* langCode) {
         return;
     }
     StrSpan d = LoadDataResource(2);
+    if (d.IsEmpty()) {
+        return;
+    }
     ParseTranslationsTxt(d, langCode);
     str::Free(d);
 }

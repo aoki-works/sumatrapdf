@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -165,7 +165,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 struct timeval;
 struct timezone;
 int gettimeofday(struct timeval *tv, struct timezone *tz);
@@ -538,6 +538,9 @@ static int usage(void)
 		"\t-A -\tnumber of bits of antialiasing (0 to 8)\n"
 		"\t-A -/-\tnumber of bits of antialiasing (0 to 8) (graphics, text)\n"
 		"\n"
+		"\t-i\tignore errors\n"
+		"\t-v\tshow version\n"
+		"\n"
 		"\tpages\tcomma separated list of page numbers and ranges\n",
 		X_RESOLUTION, Y_RESOLUTION, PAPER_WIDTH, PAPER_HEIGHT
 		);
@@ -710,7 +713,6 @@ static int dodrawpage(fz_context *ctx, int pagenum, fz_cookie *cookie, render_de
 		bit = NULL;
 		if (render->num_workers > 0)
 		{
-			int band;
 			for (band = 0; band < fz_mini(render->num_workers, bands); band++)
 			{
 				worker_t *w = &workers[band];
@@ -1484,7 +1486,7 @@ int main(int argc, char **argv)
 
 		case 'p': password = fz_optarg; break;
 
-		case 'o': output = fz_optarg; break;
+		case 'o': output = fz_optpath(fz_optarg); break;
 		case 'F': format = fz_optarg; break;
 
 		case 'R': rotation = read_rotation(fz_optarg); break;
@@ -1608,11 +1610,7 @@ int main(int argc, char **argv)
 #endif /* DISABLE_MUTHREADS */
 
 	if (layout_css)
-	{
-		fz_buffer *buf = fz_read_file(ctx, layout_css);
-		fz_set_user_css(ctx, fz_string_from_buffer(ctx, buf));
-		fz_drop_buffer(ctx, buf);
-	}
+		fz_load_user_css(ctx, layout_css);
 
 	fz_set_use_document_css(ctx, layout_use_doc_css);
 

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="ext">
@@ -75,6 +75,9 @@
     <ClInclude Include="..\mupdf\include\mupdf\fitz\band-writer.h">
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\include\mupdf\fitz\barcode.h">
+      <Filter>mupdf\include\mupdf\fitz</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\fitz\bidi.h">
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
@@ -144,7 +147,13 @@
     <ClInclude Include="..\mupdf\include\mupdf\fitz\heap.h">
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\include\mupdf\fitz\hyphen.h">
+      <Filter>mupdf\include\mupdf\fitz</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\fitz\image.h">
+      <Filter>mupdf\include\mupdf\fitz</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mupdf\include\mupdf\fitz\json.h">
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\fitz\link.h">
@@ -291,6 +300,9 @@
     <ClInclude Include="..\mupdf\include\mupdf\pdf\parse.h">
       <Filter>mupdf\include\mupdf\pdf</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\include\mupdf\pdf\recolor.h">
+      <Filter>mupdf\include\mupdf\pdf</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\pdf\resource.h">
       <Filter>mupdf\include\mupdf\pdf</Filter>
     </ClInclude>
@@ -375,6 +387,9 @@
     <ClInclude Include="..\mupdf\source\fitz\z-imp.h">
       <Filter>mupdf\source\fitz</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\source\fitz\zxingbarcode.h">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\source\html\css-properties.h">
       <Filter>mupdf\source\html</Filter>
     </ClInclude>
@@ -385,6 +400,9 @@
       <Filter>mupdf\source\pdf</Filter>
     </ClInclude>
     <ClInclude Include="..\mupdf\source\pdf\pdf-annot-imp.h">
+      <Filter>mupdf\source\pdf</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mupdf\source\pdf\pdf-imp.h">
       <Filter>mupdf\source\pdf</Filter>
     </ClInclude>
   </ItemGroup>
@@ -411,6 +429,9 @@
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\bitmap.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\brotli.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\buffer.c">
@@ -518,6 +539,9 @@
     <ClCompile Include="..\mupdf\source\fitz\filter-basic.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\filter-brotli.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\filter-dct.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
@@ -578,10 +602,16 @@
     <ClCompile Include="..\mupdf\source\fitz\heap.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\hyphen.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\image.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\jmemcust.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\json.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\link.c">
@@ -636,6 +666,9 @@
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\output-cbz.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\output-csv.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\output-docx.c">
@@ -698,13 +731,28 @@
     <ClCompile Include="..\mupdf\source\fitz\skew.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\stext-boxer.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\stext-classify.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\stext-device.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\stext-iterator.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\stext-output.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\stext-para.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\stext-search.c">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\fitz\stext-table.c">
       <Filter>mupdf\source\fitz</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\fitz\store.c">
@@ -887,6 +935,9 @@
     <ClCompile Include="..\mupdf\source\pdf\pdf-js.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\pdf\pdf-label.c">
+      <Filter>mupdf\source\pdf</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-layer.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
@@ -917,6 +968,9 @@
     <ClCompile Include="..\mupdf\source\pdf\pdf-op-run.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
+    <ClCompile Include="..\mupdf\source\pdf\pdf-op-vectorize.c">
+      <Filter>mupdf\source\pdf</Filter>
+    </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-outline.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
@@ -927,6 +981,9 @@
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-pattern.c">
+      <Filter>mupdf\source\pdf</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\pdf\pdf-recolor.c">
       <Filter>mupdf\source\pdf</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-repair.c">

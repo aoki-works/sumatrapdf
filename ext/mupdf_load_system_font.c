@@ -151,8 +151,7 @@ static int cmp_font_name(const char* name1, const char* name2) {
 
     if (len1 != len2) {
         const char* rest = len1 > len2 ? name1 + len2 : name2 + len1;
-        if (',' == *rest || streqi(rest, "-roman"))
-            return _strnicmp(name1, name2, fz_mini(len1, len2));
+        if (',' == *rest || streqi(rest, "-roman")) return _strnicmp(name1, name2, fz_mini(len1, len2));
     }
 
     return _stricmp(name1, name2);
@@ -165,6 +164,12 @@ static int font_name_eq(const char* name1, const char* name2) {
 static int cmp_win_font_info(const void* el1, const void* el2) {
     win_font_info* i1 = (win_font_info*)el1;
     win_font_info* i2 = (win_font_info*)el2;
+    if (!i1->fontface) {
+        return i2->fontface ? -1 : 0;
+    }
+    if (!i2->fontface) {
+        return 1;
+    }
     return cmp_font_name(i1->fontface, i2->fontface);
 }
 
@@ -184,18 +189,15 @@ static void decode_unicode_BE(fz_context* ctx, char* source, int sourcelen, char
     WCHAR* tmp;
     int converted, i;
 
-    if (sourcelen % 2 != 0)
-        fz_throw(ctx, FZ_ERROR_GENERIC, "fonterror : invalid unicode string");
+    if (sourcelen % 2 != 0) fz_throw(ctx, FZ_ERROR_GENERIC, "fonterror : invalid unicode string");
 
     tmp = fz_malloc_array(ctx, sourcelen / 2 + 1, WCHAR);
-    for (i = 0; i < sourcelen / 2; i++)
-        tmp[i] = BEtoHs(((WCHAR*)source)[i]);
+    for (i = 0; i < sourcelen / 2; i++) tmp[i] = BEtoHs(((WCHAR*)source)[i]);
     tmp[sourcelen / 2] = '\0';
 
     converted = WideCharToMultiByte(CP_UTF8, 0, tmp, -1, dest, destlen, NULL, NULL);
     fz_free(ctx, tmp);
-    if (!converted)
-        fz_throw(ctx, FZ_ERROR_GENERIC, "fonterror : invalid unicode string");
+    if (!converted) fz_throw(ctx, FZ_ERROR_GENERIC, "fonterror : invalid unicode string");
 }
 
 static void decode_platform_string(fz_context* ctx, int platform, int enctype, char* source, int sourcelen, char* dest,
@@ -282,6 +284,9 @@ static void append_mapping(fz_context* ctx, const char* facename, const char* pa
     g_font_allocated += strlen(facename) + 1;
     // TODO: allocate facename and path from a pool allocator
     i->fontface = strdup(facename);
+    if (!i->fontface) {
+        return;
+    }
     i->file_idx = (u32)file_idx;
     i->index = (u32)index;
     fl->len++;
@@ -291,8 +296,7 @@ static void safe_read(fz_context* ctx, fz_stream* file, int offset, char* buf, i
     int n;
     fz_seek(ctx, file, offset, SEEK_SET);
     n = fz_read(ctx, file, (unsigned char*)buf, size);
-    if (n != size)
-        fz_throw(ctx, FZ_ERROR_GENERIC, "safe_read: read %d, expected %d", n, size);
+    if (n != size) fz_throw(ctx, FZ_ERROR_GENERIC, "safe_read: read %d, expected %d", n, size);
 }
 
 static void read_ttf_string(fz_context* ctx, fz_stream* file, int offset, TT_NAME_RECORD* ttRecordBE, char* buf,
@@ -300,8 +304,7 @@ static void read_ttf_string(fz_context* ctx, fz_stream* file, int offset, TT_NAM
     char szTemp[MAX_FACENAME * 2];
     // ignore empty and overlong strings
     int stringLength = BEtoHs(ttRecordBE->uStringLength);
-    if (stringLength == 0 || stringLength >= sizeof(szTemp))
-        return;
+    if (stringLength == 0 || stringLength >= sizeof(szTemp)) return;
 
     safe_read(ctx, file, offset + BEtoHs(ttRecordBE->uStringOffset), szTemp, stringLength);
     decode_platform_string(ctx, BEtoHs(ttRecordBE->uPlatformID), BEtoHs(ttRecordBE->uEncodingID), szTemp, stringLength,
@@ -502,7 +505,7 @@ static void extend_system_font_list(fz_context* ctx, const WCHAR* path) {
             lstrcpyn(lpFileName, FileData.cFileName, szPath + MAX_PATH - lpFileName);
             res = WideCharToMultiByte(CP_UTF8, 0, szPath, -1, szPathUtf8, sizeof(szPathUtf8), NULL, NULL);
             if (!res) {
-                fz_warn(ctx, "WideCharToMultiByte failed for %S", szPath);
+                fz_warn(ctx, "WideCharToMultiByte failed");
                 continue;
             }
             fileExt = szPathUtf8 + strlen(szPathUtf8) - 4;
@@ -594,8 +597,7 @@ static void create_system_font_list(fz_context* ctx) {
 // TODO(port): replace the caller
 static void* fz_resize_array(fz_context* ctx, void* p, unsigned int count, unsigned int size) {
     void* np = fz_realloc(ctx, p, count * size);
-    if (!np)
-        fz_throw(ctx, FZ_ERROR_GENERIC, "resize array (%d x %d bytes) failed", count, size);
+    if (!np) fz_throw(ctx, FZ_ERROR_GENERIC, "resize array (%d x %d bytes) failed", count, size);
     return np;
 }
 
@@ -622,9 +624,9 @@ static fz_buffer* load_and_cache_font(fz_context* ctx, win_font_info* fi, const 
     }
 
     EnterCriticalSection(&cs_fonts);
-    // TODO: free this data. will have to make a copy using allocator
-    // not bound to ctx
+    // ff->data is freed in destroy_system_font_list()
     ff->size = fz_buffer_extract(ctx, buffer, (unsigned char**)&ff->data);
+    fz_drop_buffer(ctx, buffer);
     buffer = fz_new_buffer_from_shared_data(ctx, ff->data, ff->size);
     LeaveCriticalSection(&cs_fonts);
     fz_warn(ctx, "loaded font '%s' from '%s'", font_name, ff->file_path);
@@ -667,35 +669,45 @@ static fz_font* load_windows_font_by_name(fz_context* ctx, const char* orig_name
     if (comma) {
         *comma = '-';
         found = pdf_find_windows_font_path(fontname);
+        if (found) {
+            goto Exit;
+        }
         *comma = ',';
-    }
-    // second, substitute the font name with a known PostScript name
-    else {
+    } else {
+        // second, substitute the font name with a known PostScript name
         int i;
         for (i = 0; i < nelem(baseSubstitutes) && !found; i++)
             if (streq(fontname, baseSubstitutes[i].name)) {
                 found = pdf_find_windows_font_path(baseSubstitutes[i].pattern);
+                if (found) {
+                    goto Exit;
+                }
             }
     }
     // third, search for the font name without additional style information
-    if (!found) {
-        found = pdf_find_windows_font_path(fontname);
+    found = pdf_find_windows_font_path(fontname);
+    if (found) {
+        goto Exit;
     }
     // fourth, try to separate style from basename for prestyled fonts (e.g. "ArialBold")
-    if (!found && !comma && (str_ends_with(fontname, "Bold") || str_ends_with(fontname, "Italic"))) {
+    if (!comma && (str_ends_with(fontname, "Bold") || str_ends_with(fontname, "Italic"))) {
         int styleLen = str_ends_with(fontname, "Bold") ? 4 : str_ends_with(fontname, "BoldItalic") ? 10 : 6;
         fontname = (char*)fz_resize_array(ctx, fontname, strlen(fontname) + 2, sizeof(char));
         comma = fontname + strlen(fontname) - styleLen;
         memmove(comma + 1, comma, styleLen + 1);
         *comma = '-';
         found = pdf_find_windows_font_path(fontname);
+        if (found) {
+            goto Exit;
+        }
         *comma = ',';
-        if (!found) {
-            found = pdf_find_windows_font_path(fontname);
+        found = pdf_find_windows_font_path(fontname);
+        if (found) {
+            goto Exit;
         }
     }
     // fifth, try to convert the font name from the common Chinese codepage 936
-    if (!found && fontname[0] < 0) {
+    if (fontname[0] < 0) {
         WCHAR cjkNameW[MAX_FACENAME];
         char cjkName[MAX_FACENAME];
         if (MultiByteToWideChar(936, MB_ERR_INVALID_CHARS, fontname, -1, cjkNameW, nelem(cjkNameW)) &&
@@ -704,22 +716,35 @@ static fz_font* load_windows_font_by_name(fz_context* ctx, const char* orig_name
             if (comma) {
                 *comma = '-';
                 found = pdf_find_windows_font_path(cjkName);
+                if (found) {
+                    goto Exit;
+                }
                 *comma = ',';
             }
-            if (!found) {
-                found = pdf_find_windows_font_path(cjkName);
+            found = pdf_find_windows_font_path(cjkName);
+            if (found) {
+                goto Exit;
             }
         }
     }
-
+Exit:
     fz_free(ctx, fontname);
     if (!found) {
-        fz_throw(ctx, FZ_ERROR_GENERIC, "couldn't find system font '%s'", orig_name);
+        fz_warn(ctx, "couldn't find system font '%s'", orig_name);
+        return NULL;
     }
     buffer = load_and_cache_font(ctx, found, orig_name);
     int use_glyph_bbox = !streq(found->fontface, "DroidSansFallback");
-    font = fz_new_font_from_buffer(ctx, orig_name, buffer, found->index, use_glyph_bbox);
-    font->flags.ft_substitute = 1;
+    fz_try(ctx) {
+        font = fz_new_font_from_buffer(ctx, orig_name, buffer, found->index, use_glyph_bbox);
+        font->flags.ft_substitute = 1;
+    }
+    fz_always(ctx) {
+        fz_drop_buffer(ctx, buffer);
+    }
+    fz_catch(ctx) {
+        fz_rethrow(ctx);
+    }
     return font;
 }
 
@@ -748,17 +773,15 @@ static fz_font* load_windows_font(fz_context* ctx, const char* fontname, int bol
 
     if (needs_exact_metrics) {
         int len;
-        if (fz_lookup_base14_font(ctx, fontname, &len))
-            return NULL;
+        if (fz_lookup_base14_font(ctx, fontname, &len)) return NULL;
 
-        if (clean_name != fontname && !strncmp(clean_name, "Times-", 6))
-            return NULL;
+        if (clean_name != fontname && !strncmp(clean_name, "Times-", 6)) return NULL;
     }
 
     font = load_windows_font_by_name(ctx, fontname);
+    if (!font) return NULL;
     /* use the font's own metrics for base 14 fonts */
-    if (is_base_14)
-        font->flags.ft_substitute = 0;
+    if (is_base_14) font->flags.ft_substitute = 0;
     return font;
 }
 
@@ -766,14 +789,8 @@ static fz_font* load_windows_cjk_font(fz_context* ctx, const char* fontname, int
     fz_font* font = NULL;
 
     /* try to find a matching system font before falling back to an approximate one */
-    fz_try(ctx) {
-        font = load_windows_font_by_name(ctx, fontname);
-    }
-    fz_catch(ctx) {
-        fz_report_error(ctx);
-    }
-    if (font)
-        return font;
+    font = load_windows_font_by_name(ctx, fontname);
+    if (font) return font;
 
     /* try to fall back to a reasonable system font */
     fz_try(ctx) {
@@ -800,12 +817,9 @@ static fz_font* load_windows_cjk_font(fz_context* ctx, const char* fontname, int
                     font = load_windows_font_by_name(ctx, "DFKaiShu-SB-Estd-BF");
                     break;
                 case FZ_ADOBE_GB:
-                    fz_try(ctx) {
-                        font = load_windows_font_by_name(ctx, "KaiTi");
-                    }
-                    fz_catch(ctx) {
+                    font = load_windows_font_by_name(ctx, "KaiTi");
+                    if (!font) {
                         font = load_windows_font_by_name(ctx, "KaiTi_GB2312");
-                        fz_report_error(ctx);
                     }
                     break;
                 case FZ_ADOBE_JAPAN:
@@ -858,17 +872,22 @@ static fz_font* load_windows_fallback_font(fz_context* ctx, int script, int lang
         case UCDN_SCRIPT_TAMIL:
         case UCDN_SCRIPT_TELUGU:
         case UCDN_SCRIPT_DEVANAGARI: {
-            font_name = "Nirmala UI Regular";
+            font_name = "NirmalaUI";
             if (bold) {
-                font_name = "Nirmala UI Bold";
+                font_name = "NirmalaUI-Bold";
             }
         } break;
-        //
+        case UCDN_SCRIPT_HEBREW: {
+            font_name = "SegoeUI";
+            if (bold) {
+                font_name = "SegoeUI-Bold";
+            }
+        } break;
         case UCDN_SCRIPT_CYRILLIC:
         case UCDN_SCRIPT_GREEK:
         case UCDN_SCRIPT_ARMENIAN:
         case UCDN_SCRIPT_GEORGIAN: {
-            font_name = "Sylfaen Regular";
+            font_name = "Sylfaen";
         } break;
         // per chatgpt Times New Roman is closest to Noto Serif
         case UCDN_SCRIPT_LATIN:
@@ -877,29 +896,26 @@ static fz_font* load_windows_fallback_font(fz_context* ctx, int script, int lang
         case UCDN_SCRIPT_COMMON:
         case UCDN_SCRIPT_INHERITED:
         case UCDN_SCRIPT_UNKNOWN: {
-            font_name = "Times New Roman Regular";
+            font_name = "TimesNewRomanPSMT";
             if (bold) {
-                font_name = "Times New Roman Bold";
+                font_name = "TimesNewRomanPS-BoldMT";
                 if (italic) {
-                    font_name = "Times New Roman Bold Italic";
+                    font_name = "TimesNewRomanPS-BoldItalicMT";
                 }
             } else if (italic) {
-                font_name = "Times New Roman Italic";
+                font_name = "TimesNewRomanPS-ItalicMT";
             }
         } break;
     }
 
     if (!font_name) {
+        fz_warn(ctx, "couldn't find windows system font for script %d, language: %d, bold: %d, italic: %d", script,
+                language, (int)bold, (int)italic);
         return NULL;
     }
 
     /* try to find a matching system font before falling back to an approximate one */
-    fz_try(ctx) {
-        font = load_windows_font_by_name(ctx, font_name);
-    }
-    fz_catch(ctx) {
-        fz_report_error(ctx);
-    }
+    font = load_windows_font_by_name(ctx, font_name);
     return font;
 }
 
@@ -917,11 +933,40 @@ void init_system_font_list(void) {
 }
 
 void destroy_system_font_list(void) {
-    // TODO: free names and file data
+    int i;
+    for (i = 0; i < g_win_fonts.len; i++) {
+        free((void*)g_win_fonts.fontmap[i].fontface);
+    }
+    g_win_fonts.len = 0;
+    for (i = 0; i < g_font_files.len; i++) {
+        free((void*)g_font_files.files[i].file_path);
+        free(g_font_files.files[i].data);
+    }
+    g_font_files.len = 0;
     DeleteCriticalSection(&cs_fonts);
 }
 
 void install_load_windows_font_funcs(fz_context* ctx) {
     init_system_font_list();
     fz_install_load_system_font_funcs(ctx, load_windows_font, load_windows_cjk_font, load_windows_fallback_font);
+}
+
+// Wrappers around harfbuzz allocators that use standard C malloc/free.
+// With HAVE_ATEXIT defined, harfbuzz registers atexit handlers to free
+// its singletons. During atexit, mupdf's fz_hb_lock hasn't been called
+// so fz_hb_secret (the fz_context) is NULL and fz_hb_free would crash.
+// We use plain malloc/free which is safe both during normal operation
+// (mupdf's default allocator is malloc/free) and during atexit cleanup.
+
+void* sumatra_hb_malloc(size_t size) {
+    return malloc(size);
+}
+void* sumatra_hb_calloc(size_t n, size_t size) {
+    return calloc(n, size);
+}
+void* sumatra_hb_realloc(void* ptr, size_t size) {
+    return realloc(ptr, size);
+}
+void sumatra_hb_free(void* ptr) {
+    free(ptr);
 }

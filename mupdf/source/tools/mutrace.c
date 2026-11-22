@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -29,8 +29,10 @@
 static int usage(void)
 {
 	fprintf(stderr,
-		"Usage: mutool trace [options] file [pages]\n"
+		"usage: mutool trace [options] file [pages]\n"
 		"\t-p -\tpassword\n"
+		"\n"
+		"\t-b -\tuse named page box (MediaBox, CropBox, BleedBox, TrimBox, or ArtBox)\n"
 		"\n"
 		"\t-W -\tpage width for EPUB layout\n"
 		"\t-H -\tpage height for EPUB layout\n"
@@ -50,6 +52,7 @@ static float layout_h = FZ_DEFAULT_LAYOUT_H;
 static float layout_em = FZ_DEFAULT_LAYOUT_EM;
 static char *layout_css = NULL;
 static int layout_use_doc_css = 1;
+static int page_box = FZ_CROP_BOX;
 
 static int use_display_list = 0;
 
@@ -66,7 +69,7 @@ static void runpage(fz_context *ctx, fz_document *doc, int number)
 	fz_try(ctx)
 	{
 		page = fz_load_page(ctx, doc, number - 1);
-		mediabox = fz_bound_page(ctx, page);
+		mediabox = fz_bound_page_box(ctx, page, page_box);
 		printf("<page number=\"%d\" mediabox=\"%g %g %g %g\">\n",
 				number, mediabox.x0, mediabox.y0, mediabox.x1, mediabox.y1);
 		dev = fz_new_trace_device(ctx, fz_stdout(ctx));
@@ -113,7 +116,7 @@ int mutrace_main(int argc, char **argv)
 	char *password = "";
 	int i, c, count;
 
-	while ((c = fz_getopt(argc, argv, "p:W:H:S:U:Xd")) != -1)
+	while ((c = fz_getopt(argc, argv, "p:b:W:H:S:U:Xd")) != -1)
 	{
 		switch (c)
 		{
@@ -127,6 +130,15 @@ int mutrace_main(int argc, char **argv)
 		case 'X': layout_use_doc_css = 0; break;
 
 		case 'd': use_display_list = 1; break;
+
+		case 'b':
+			page_box = fz_box_type_from_string(fz_optarg);
+			if (page_box == FZ_UNKNOWN_BOX)
+			{
+				fprintf(stderr, "Invalid box type: %s\n", fz_optarg);
+				return 1;
+			}
+			break;
 		}
 	}
 
@@ -144,11 +156,7 @@ int mutrace_main(int argc, char **argv)
 	{
 		fz_register_document_handlers(ctx);
 		if (layout_css)
-		{
-			fz_buffer *buf = fz_read_file(ctx, layout_css);
-			fz_set_user_css(ctx, fz_string_from_buffer(ctx, buf));
-			fz_drop_buffer(ctx, buf);
-		}
+			fz_load_user_css(ctx, layout_css);
 		fz_set_use_document_css(ctx, layout_use_doc_css);
 	}
 	fz_catch(ctx)
@@ -162,6 +170,7 @@ int mutrace_main(int argc, char **argv)
 	fz_var(doc);
 	fz_try(ctx)
 	{
+		printf("<?xml version=\"1.0\"?>\n");
 		for (i = fz_optind; i < argc; ++i)
 		{
 			doc = fz_open_document(ctx, argv[i]);

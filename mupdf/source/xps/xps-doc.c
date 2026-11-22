@@ -522,12 +522,17 @@ static const char *xps_mimetypes[] =
 };
 
 static int
-xps_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler, fz_stream *stream, fz_archive *dir)
+xps_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler, fz_stream *stream, fz_archive *dir, void **state, fz_document_recognize_state_free_fn **free_state)
 {
 	fz_archive *arch = NULL;
 	int ret = 0;
 	fz_xml *xml = NULL;
 	fz_xml *pos;
+
+	if (state)
+		*state = NULL;
+	if (free_state)
+		*free_state = NULL;
 
 	fz_var(arch);
 	fz_var(ret);
@@ -535,6 +540,9 @@ xps_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler, f
 
 	fz_try(ctx)
 	{
+		int i, count;
+		const char *name;
+
 		if (stream == NULL)
 			arch = fz_keep_archive(ctx, dir);
 		else
@@ -548,12 +556,41 @@ xps_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler, f
 		if (xml == NULL)
 			xml = fz_try_parse_xml_archive_entry(ctx, arch, "\\_rels\\.rels", 0);
 
-		if (xml == NULL)
+		if (xml)
+		{
+			pos = fz_xml_find_dfs(xml, "Relationship", "Type", "http://schemas.microsoft.com/xps/2005/06/fixedrepresentation");
+			if (pos)
+				ret = 100;
 			break;
+		}
 
-		pos = fz_xml_find_dfs(xml, "Relationship", "Type", "http://schemas.microsoft.com/xps/2005/06/fixedrepresentation");
-		if (pos)
-			ret = 100;
+		/* Cope with tricksy XPS's have the rels in multiple bits. */
+		count = fz_count_archive_entries(ctx, arch);
+
+		for (i = 0; i < count; i++)
+		{
+			name = fz_list_archive_entry(ctx, arch, i);
+			if (!name)
+				continue;
+			if (strncmp(name, "/_rels/.rels/", 13) == 0 ||
+				strncmp(name, "_rels/.rels/", 12) == 0 ||
+				strncmp(name, "\\_rels\\.rels\\", 13) == 0 ||
+				strncmp(name, "_rels\\.rels\\", 12) == 0)
+			{
+				xml = fz_try_parse_xml_archive_entry(ctx, arch, name, 0);
+				if (xml)
+				{
+					pos = fz_xml_find_dfs(xml, "Relationship", "Type", "http://schemas.microsoft.com/xps/2005/06/fixedrepresentation");
+					if (pos)
+					{
+						ret = 100;
+						break;
+					}
+					fz_drop_xml(ctx, xml);
+					xml = NULL;
+				}
+			}
+		}
 	}
 	fz_always(ctx)
 	{
@@ -567,7 +604,7 @@ xps_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler, f
 }
 
 static fz_document *
-xps_open(fz_context *ctx, const fz_document_handler *handler, fz_stream *file, fz_stream *accel, fz_archive *dir)
+xps_open(fz_context *ctx, const fz_document_handler *handler, fz_stream *file, fz_stream *accel, fz_archive *dir, void *state)
 {
 	if (file)
 		return xps_open_document_with_stream(ctx, file);

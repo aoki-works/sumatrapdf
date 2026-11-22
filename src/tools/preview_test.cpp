@@ -7,13 +7,13 @@
 #include <Shlwapi.h>
 #include <Thumbcache.h>
 #include <Unknwn.h>
+#include <gdiplus.h>
 
 #include <stdio.h>
 
-#include "utils/BaseUtil.h"
+#pragma comment(lib, "gdiplus.lib")
 
-#pragma comment(lib, "Shlwapi.lib")
-#pragma comment(lib, "Ole32.lib")
+#include "utils/BaseUtil.h"
 
 #define kPdfPreviewClsid L"{3D3B1846-CC43-42AE-BFF9-D914083C2BA3}"
 #define kXpsPreviewClsid L"{D427A82C-6545-4FBE-8E87-030EDB3BE46D}"
@@ -95,7 +95,7 @@ int main(int c, char** v) {
     pInit->Release();
     pStream->Release();
     if (r != S_OK) {
-        printf("failed: init provider\n");
+        printf("pInit->Initialize() failed\n");
         return 11;
     }
 
@@ -104,9 +104,24 @@ int main(int c, char** v) {
     r = pProvider->GetThumbnail(256, &bmp, &alpha);
     pProvider->Release();
     if (r != S_OK) {
-        printf("failed: make thumbnail\n");
+        printf("pProvider->GetThumbnail() failed\n");
         return 12;
     }
 
-    printf("done");
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+    Gdiplus::Bitmap* gdipBmp = Gdiplus::Bitmap::FromHBITMAP(bmp, NULL);
+    CLSID pngClsid;
+    CLSIDFromString(L"{557CF406-1A04-11D3-9A73-0000F81EF32E}", &pngClsid);
+    Gdiplus::Status st = gdipBmp->Save(L"preview.png", &pngClsid);
+    if (st != Gdiplus::Ok) {
+        printf("failed: save png: %d\n", (int)st);
+    } else {
+        printf("saved preview.png\n");
+    }
+    delete gdipBmp;
+    DeleteObject(bmp);
+    Gdiplus::GdiplusShutdown(gdiplusToken);
 }

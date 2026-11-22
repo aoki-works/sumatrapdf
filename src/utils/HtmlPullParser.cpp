@@ -18,7 +18,7 @@ int HtmlEntityNameToRune(const char* name, size_t nameLen) {
 // version, otherwise it wouldn't match anyway
 // returns -1 if didn't find
 int HtmlEntityNameToRune(const WCHAR* name, size_t nameLen) {
-    char asciiName[MAX_ENTITY_NAME_LEN];
+    char asciiName[MAX_ENTITY_NAME_LEN]{};
     if (nameLen > MAX_ENTITY_NAME_LEN) {
         return -1;
     }
@@ -35,7 +35,7 @@ bool SkipUntil(const char*& s, const char* end, char c) {
     while ((s < end) && (*s != c)) {
         ++s;
     }
-    return *s == c;
+    return s < end;
 }
 
 bool SkipUntil(const char*& s, const char* end, const char* term) {
@@ -180,15 +180,20 @@ const char* ResolveHtmlEntities(const char* s, const char* end, Allocator* alloc
 
 // convenience function for the above that always allocates
 char* ResolveHtmlEntities(const char* s, size_t len) {
-    const char* tmp = ResolveHtmlEntities(s, s + len, nullptr);
-    if (tmp == s) {
+    const char* res = ResolveHtmlEntities(s, s + len, nullptr);
+    if (res == s) {
+        // ensure 0-terminated string is returned
         return str::Dup(s, len);
     }
-    return (char*)tmp;
+    return (char*)res;
 }
 
 TempStr ResolveHtmlEntitiesTemp(const char* s, size_t len) {
-    auto res = ResolveHtmlEntities(s, s + len, GetTempAllocator());
+    const char* res = ResolveHtmlEntities(s, s + len, GetTempAllocator());
+    if (res == s) {
+        // ensure 0-terminated string is returned
+        return str::DupTemp(s, len);
+    }
     return (TempStr)res;
 }
 

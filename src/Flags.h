@@ -52,7 +52,7 @@ struct Flags {
     DisplayMode startView = DisplayMode::Automatic;
     float startZoom = kInvalidZoom;
     Point startScroll = {-1, -1};
-    bool showConsole = false;   // CPSLab debug
+    bool showConsole = false;
     HWND hwndPluginParent = nullptr;
     char* pluginURL = nullptr;
     bool exitImmediately = false;
@@ -79,6 +79,7 @@ struct Flags {
     int stressParallelCount = 1;
     bool stressRandomizeFiles = false;
     int stressTestMax = 0;
+    int maxFiles = 0;
 
     // related to testing
     bool testRenderPage = false;
@@ -105,6 +106,7 @@ struct Flags {
     bool log = false;
     bool allUsers = false;
     bool runInstallNow = false;
+    bool storeInstaller = false;
 
     // for internal use
     char* updateSelfTo = nullptr;
@@ -114,27 +116,14 @@ struct Flags {
     // before proceeding
     int sleepMs = 0;
 
-#if defined(DEBUG)
-    // DDE Service/Topic name for PdfSync
-    char* pdfsync_dde_service = str::Dup("xxxSUMATRA");
-    char* pdfsync_dde_topic = str::Dup("xxxcontrol");
+    // for preview pipe mode (used by previewer DLL)
+    char* previewPipeName = nullptr;
 
-    // DDE Service/Topic name for user application
-    char* userapp_dde_service = str::Dup("xxxUSERAPP");
-    char* userapp_dde_topic = str::Dup("xxxcontrol");
-    char* userapp_dde_debug_topic = nullptr;
-#else
-    // DDE Service/Topic name for PdfSync
-    char* pdfsync_dde_service = nullptr;
-    char* pdfsync_dde_topic = nullptr;
+    // for ifilter pipe mode (used by ifilter DLL)
+    char* ifilterPipeName = nullptr;
 
-    // DDE Service/Topic name for user application
-    char* userapp_dde_service = nullptr;
-    char* userapp_dde_topic = nullptr;
-    char* userapp_dde_debug_topic = nullptr;
-#endif
-    bool document_mode = false;  // CPS Lab.
-    char* export_text_blocks = nullptr;  // CPS Lab.
+    // for testing preview pipe functionality
+    char* testPreviewPipePath = nullptr;
 
     Flags() = default;
     ~Flags();

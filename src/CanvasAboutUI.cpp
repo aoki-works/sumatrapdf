@@ -32,14 +32,14 @@ static void OnPaintAbout(MainWindow* win) {
     auto t = TimeGet();
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(win->hwndCanvas, &ps);
-
-    auto txtCol = ThemeWindowTextColor();
-    auto bgCol = ThemeMainWindowBackgroundColor();
-    if (HasPermission(Perm::SavePreferences | Perm::DiskAccess) && gGlobalPrefs->rememberOpenedFiles &&
-        gGlobalPrefs->showStartPage) {
-        DrawHomePage(win, win->buffer->GetDC(), gFileHistory, txtCol, bgCol);
+    HDC bufDC = win->buffer->GetDC();
+    GlobalPrefs* prefs = gGlobalPrefs;
+    bool hasPerms = HasPermission(Perm::SavePreferences | Perm::DiskAccess);
+    bool drawHome = hasPerms && prefs->rememberOpenedFiles && prefs->showStartPage;
+    if (drawHome) {
+        DrawHomePage(win, bufDC);
     } else {
-        DrawAboutPage(win, win->buffer->GetDC());
+        DrawAboutPage(win, bufDC);
     }
     win->buffer->Flush(hdc);
 
@@ -54,7 +54,7 @@ static void OnMouseLeftButtonDownAbout(MainWindow* win, int x, int y, WPARAM) {
 
     // remember a link under so that on mouse up we only activate
     // link if mouse up is on the same link as mouse down
-    win->urlOnLastButtonDown.SetCopy(GetStaticLinkTemp(win->staticLinks, x, y, nullptr));
+    win->urlOnLastButtonDown.SetCopy(GetStaticLinkAtTemp(win->staticLinks, x, y, nullptr));
 }
 
 static bool IsLink(const char* url) {
@@ -71,7 +71,7 @@ static bool IsLink(const char* url) {
 }
 
 static void OnMouseLeftButtonUpAbout(MainWindow* win, int x, int y, WPARAM) {
-    char* url = GetStaticLinkTemp(win->staticLinks, x, y, nullptr);
+    char* url = GetStaticLinkAtTemp(win->staticLinks, x, y, nullptr);
     char* prevUrl = win->urlOnLastButtonDown;
     bool clickedURL = url && str::Eq(url, prevUrl);
     win->urlOnLastButtonDown.Set(nullptr);
@@ -97,12 +97,12 @@ static void OnMouseLeftButtonUpAbout(MainWindow* win, int x, int y, WPARAM) {
         args.activateExisting = !IsCtrlPressed();
         StartLoadDocument(&args);
     }
-    // SetFocus(win->hwndFrame);
+    // HwndSetFocus(win->hwndFrame);
 }
 
 static void OnMouseRightButtonDownAbout(MainWindow* win, int x, int y, WPARAM) {
     // lf("Right button clicked on %d %d", x, y);
-    SetFocus(win->hwndFrame);
+    HwndSetFocus(win->hwndFrame);
     win->dragStart = Point(x, y);
 }
 
@@ -117,9 +117,9 @@ static void OnMouseRightButtonUpAbout(MainWindow* win, int x, int y, WPARAM) {
 static LRESULT OnSetCursorAbout(MainWindow* win, HWND hwnd) {
     Point pt = HwndGetCursorPos(hwnd);
     if (!pt.IsEmpty()) {
-        StaticLinkInfo* linkInfo;
-        if (GetStaticLinkTemp(win->staticLinks, pt.x, pt.y, &linkInfo)) {
-            win->ShowToolTip(linkInfo->infotip, linkInfo->rect);
+        StaticLink* link;
+        if (GetStaticLinkAtTemp(win->staticLinks, pt.x, pt.y, &link)) {
+            win->ShowToolTip(link->tooltip, link->rect);
             SetCursorCached(IDC_HAND);
         } else {
             win->DeleteToolTip();

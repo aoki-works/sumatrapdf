@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -61,6 +61,11 @@ public class Font
 
 	public native String getName();
 
+	public native boolean isMono();
+	public native boolean isSerif();
+	public native boolean isBold();
+	public native boolean isItalic();
+
 	public native int encodeCharacter(int unicode);
 	public native float advanceGlyph(int glyph, boolean wmode);
 
@@ -70,5 +75,12 @@ public class Font
 
 	public String toString() {
 		return "Font(" + getName() + ")";
+	}
+
+	protected static FontLoader fontLoader;
+	public static native void installFontLoader(FontLoader loader);
+
+	public interface FontLoader {
+		Font loadFont(String name, String script, boolean bold, boolean italic);
 	}
 }

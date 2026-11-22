@@ -129,6 +129,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
+    <EnableASAN>true</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -154,6 +155,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
+    <EnableASAN>true</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -174,6 +176,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
     <WindowsSDKDesktopARM64Support>true</WindowsSDKDesktopARM64Support>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release x64_asan|x64'" Label="Configuration">
@@ -181,6 +184,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
+    <EnableASAN>true</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -201,6 +205,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
     <WindowsSDKDesktopARM64Support>true</WindowsSDKDesktopARM64Support>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze x64_asan|x64'" Label="Configuration">
@@ -208,6 +213,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
+    <EnableASAN>true</EnableASAN>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -263,128 +269,128 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbg32\</OutDir>
-    <IntDir>..\out\dbg32\obj\x32\Debug\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\dbg32\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbg32\obj\x86\Debug\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbg64\</OutDir>
-    <IntDir>..\out\dbg64\obj\x64\Debug\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\dbg64\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbg64\obj\x64\Debug\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbgarm64\</OutDir>
-    <IntDir>..\out\dbgarm64\obj\arm64\Debug\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\dbgarm64\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbgarm64\obj\arm64\Debug\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug x64_asan|x64'">
-    <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbg64_asan\</OutDir>
-    <IntDir>..\out\dbg64_asan\obj\x64_asan\Debug\SumatraPDF\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(ProjectDir)..\out\dbg64_asan\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbg64_asan\obj\x64_asan\Debug\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbgfull32\</OutDir>
-    <IntDir>..\out\dbgfull32\obj\x32\DebugFull\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\dbgfull32\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbgfull32\obj\x86\DebugFull\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbgfull64\</OutDir>
-    <IntDir>..\out\dbgfull64\obj\x64\DebugFull\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\dbgfull64\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbgfull64\obj\x64\DebugFull\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull|ARM64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbgfullarm64\</OutDir>
-    <IntDir>..\out\dbgfullarm64\obj\arm64\DebugFull\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\dbgfullarm64\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbgfullarm64\obj\arm64\DebugFull\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull x64_asan|x64'">
-    <LinkIncremental>true</LinkIncremental>
-    <OutDir>..\out\dbgfull64_asan\</OutDir>
-    <IntDir>..\out\dbgfull64_asan\obj\x64_asan\DebugFull\SumatraPDF\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(ProjectDir)..\out\dbgfull64_asan\</OutDir>
+    <IntDir>$(ProjectDir)..\out\dbgfull64_asan\obj\x64_asan\DebugFull\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\rel32\</OutDir>
-    <IntDir>..\out\rel32\obj\x32\Release\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\rel32\</OutDir>
+    <IntDir>$(ProjectDir)..\out\rel32\obj\x86\Release\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\rel64\</OutDir>
-    <IntDir>..\out\rel64\obj\x64\Release\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\rel64\</OutDir>
+    <IntDir>$(ProjectDir)..\out\rel64\obj\x64\Release\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\arm64\</OutDir>
-    <IntDir>..\out\arm64\obj\arm64\Release\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\arm64\</OutDir>
+    <IntDir>$(ProjectDir)..\out\arm64\obj\arm64\Release\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release x64_asan|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\rel64_asan\</OutDir>
-    <IntDir>..\out\rel64_asan\obj\x64_asan\Release\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\rel64_asan\</OutDir>
+    <IntDir>$(ProjectDir)..\out\rel64_asan\obj\x64_asan\Release\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\rel32_prefast\</OutDir>
-    <IntDir>..\out\rel32_prefast\obj\x32\ReleaseAnalyze\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\rel32_prefast\</OutDir>
+    <IntDir>$(ProjectDir)..\out\rel32_prefast\obj\x86\ReleaseAnalyze\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\rel64_prefast\</OutDir>
-    <IntDir>..\out\rel64_prefast\obj\x64\ReleaseAnalyze\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\rel64_prefast\</OutDir>
+    <IntDir>$(ProjectDir)..\out\rel64_prefast\obj\x64\ReleaseAnalyze\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|ARM64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\arm64_prefast\</OutDir>
-    <IntDir>..\out\arm64_prefast\obj\arm64\ReleaseAnalyze\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\arm64_prefast\</OutDir>
+    <IntDir>$(ProjectDir)..\out\arm64_prefast\obj\arm64\ReleaseAnalyze\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze x64_asan|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\out\rel64_prefast_asan\</OutDir>
-    <IntDir>..\out\rel64_prefast_asan\obj\x64_asan\ReleaseAnalyze\SumatraPDF\</IntDir>
+    <OutDir>$(ProjectDir)..\out\rel64_prefast_asan\</OutDir>
+    <IntDir>$(ProjectDir)..\out\rel64_prefast_asan\obj\x64_asan\ReleaseAnalyze\SumatraPDF\</IntDir>
     <TargetName>SumatraPDF</TargetName>
     <TargetExt>.exe</TargetExt>
     <GenerateManifest>false</GenerateManifest>
@@ -395,8 +401,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -405,21 +411,24 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -427,8 +436,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -437,21 +446,24 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <ClCompile>
@@ -459,8 +471,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -469,21 +481,24 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\arm64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug x64_asan|x64'">
     <ClCompile>
@@ -491,8 +506,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -500,23 +515,25 @@
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/fsanitize=address %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull|Win32'">
     <ClCompile>
@@ -524,8 +541,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -534,21 +551,24 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull|x64'">
     <ClCompile>
@@ -556,8 +576,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -566,21 +586,24 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull|ARM64'">
     <ClCompile>
@@ -588,8 +611,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -598,21 +621,24 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\arm64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DebugFull x64_asan|x64'">
     <ClCompile>
@@ -620,8 +646,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -629,23 +655,25 @@
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/fsanitize=address %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;DEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -653,8 +681,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -666,22 +694,26 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -689,8 +721,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -702,22 +734,26 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <ClCompile>
@@ -725,8 +761,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -738,22 +774,26 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\arm64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release x64_asan|x64'">
     <ClCompile>
@@ -761,8 +801,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -773,24 +813,26 @@
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/fsanitize=address %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|Win32'">
     <ClCompile>
@@ -798,8 +840,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;28125;28252;28253;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -812,10 +854,11 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/analyze %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -823,12 +866,15 @@
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|x64'">
     <ClCompile>
@@ -836,8 +882,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;28125;28252;28253;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -850,10 +896,11 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/analyze %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -861,12 +908,15 @@
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|ARM64'">
     <ClCompile>
@@ -874,8 +924,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;28125;28252;28253;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -888,10 +938,11 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/analyze %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -899,12 +950,15 @@
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\arm64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze x64_asan|x64'">
     <ClCompile>
@@ -912,8 +966,8 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DisableSpecificWarnings>4127;4189;4324;4458;4522;4611;4800;6319;28125;28252;28253;4100;4244;4267;4702;4706;4819;4302;4311;4838;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -924,12 +978,13 @@
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/fsanitize=address /analyze %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/analyze %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ASAN_BUILD=1;WIN32;_WIN32;WINVER=0x0605;_WIN32_WINNT=0x0603;_HAS_ITERATOR_DEBUGGING=0;NDEBUG;_DARKMODELIB_NO_INI_CONFIG;_CRT_SECURE_NO_WARNINGS;DISABLE_DOCUMENT_RESTRICTIONS;_WIN64;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;..\mupdf\include;..\ext\libdjvu;..\ext\CHMLib;..\ext\darkmodelib\include;..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\include;..\ext\zlib;..\ext\synctex;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -937,14 +992,32 @@
       <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;delayimp.lib;gdiplus.lib;msimg32.lib;shlwapi.lib;urlmon.lib;version.lib;windowscodecs.lib;wininet.lib;uiautomationcore.lib;uxtheme.lib;wintrust.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\packages\Microsoft.Web.WebView2.1.0.992.28\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>WinMainCRTStartup</EntryPointSymbol>
       <GenerateMapFile>true</GenerateMapFile>
-      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/DELAYLOAD:gdiplus.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:shlwapi.dll /DELAYLOAD:urlmon.dll /DELAYLOAD:wininet.dll /DELAYLOAD:uiautomationcore.dll /DEPENDENTLOADFLAG:0x800 /INFERASANLIBS %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <ProjectReference>
+    </ProjectReference>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\ext\darkmodelib\include\DarkModeSubclass.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibColor.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibDpi.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibGlyph.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibHook.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibIni.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibPaintHelper.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibSubclass.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibSubclassControl.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibSubclassWindow.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\DmlibWinApi.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\IatHook.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\ModuleHelper.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\StdAfx.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\UAHMenuBar.h" />
+    <ClInclude Include="..\ext\darkmodelib\src\Version.h" />
     <ClInclude Include="..\src\Accelerators.h" />
     <ClInclude Include="..\src\Annotation.h" />
     <ClInclude Include="..\src\AppColors.h" />
@@ -956,7 +1029,6 @@
     <ClInclude Include="..\src\ChmModel.h" />
     <ClInclude Include="..\src\CommandPalette.h" />
     <ClInclude Include="..\src\Commands.h" />
-    <ClInclude Include="..\src\CpsLabAnnot.h" />
     <ClInclude Include="..\src\CrashHandler.h" />
     <ClInclude Include="..\src\DisplayMode.h" />
     <ClInclude Include="..\src\DisplayModel.h" />
@@ -985,6 +1057,7 @@
     <ClInclude Include="..\src\PalmDbReader.h" />
     <ClInclude Include="..\src\PdfCreator.h" />
     <ClInclude Include="..\src\PdfSync.h" />
+    <ClInclude Include="..\src\PreviewPipe.h" />
     <ClInclude Include="..\src\Print.h" />
     <ClInclude Include="..\src\ProgressUpdateUI.h" />
     <ClInclude Include="..\src\RegistryPreview.h" />
@@ -1009,7 +1082,6 @@
     <ClInclude Include="..\src\Translations.h" />
     <ClInclude Include="..\src\UpdateCheck.h" />
     <ClInclude Include="..\src\Version.h" />
-    <ClInclude Include="..\src\Widget.h" />
     <ClInclude Include="..\src\WindowTab.h" />
     <ClInclude Include="..\src\mui\Mui.h" />
     <ClInclude Include="..\src\mui\TextRender.h" />
@@ -1032,6 +1104,15 @@
     <ClInclude Include="..\src\wingui\WinGui.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\ext\darkmodelib\src\DarkModeSubclass.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibColor.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibDpi.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibHook.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibPaintHelper.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibSubclass.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibSubclassControl.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibSubclassWindow.cpp" />
+    <ClCompile Include="..\ext\darkmodelib\src\DmlibWinApi.cpp" />
     <ClCompile Include="..\ext\synctex\synctex_parser.c" />
     <ClCompile Include="..\ext\synctex\synctex_parser_utils.c" />
     <ClCompile Include="..\src\Accelerators.cpp" />
@@ -1046,7 +1127,6 @@
     <ClCompile Include="..\src\ChmModel.cpp" />
     <ClCompile Include="..\src\CommandPalette.cpp" />
     <ClCompile Include="..\src\Commands.cpp" />
-    <ClCompile Include="..\src\CpsLabAnnot.cpp" />
     <ClCompile Include="..\src\CrashHandler.cpp" />
     <ClCompile Include="..\src\DisplayMode.cpp" />
     <ClCompile Include="..\src\DisplayModel.cpp" />
@@ -1080,6 +1160,7 @@
     <ClCompile Include="..\src\PalmDbReader.cpp" />
     <ClCompile Include="..\src\PdfCreator.cpp" />
     <ClCompile Include="..\src\PdfSync.cpp" />
+    <ClCompile Include="..\src\PreviewPipe.cpp" />
     <ClCompile Include="..\src\Print.cpp" />
     <ClCompile Include="..\src\RegistryInstaller.cpp" />
     <ClCompile Include="..\src\RegistryPreview.cpp" />
@@ -1108,16 +1189,7 @@
     <ClCompile Include="..\src\TableOfContents.cpp" />
     <ClCompile Include="..\src\Tabs.cpp" />
     <ClCompile Include="..\src\Tester.cpp" />
-    <ClCompile Include="..\src\Tests.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release x64_asan|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|ARM64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze x64_asan|x64'">true</ExcludedFromBuild>
-    </ClCompile>
+    <ClCompile Include="..\src\Tests.cpp" />
     <ClCompile Include="..\src\TextSearch.cpp" />
     <ClCompile Include="..\src\TextSelection.cpp" />
     <ClCompile Include="..\src\Theme.cpp" />
@@ -1126,7 +1198,6 @@
     <ClCompile Include="..\src\Translations.cpp" />
     <ClCompile Include="..\src\Uninstaller.cpp" />
     <ClCompile Include="..\src\UpdateCheck.cpp" />
-    <ClCompile Include="..\src\Widget.cpp" />
     <ClCompile Include="..\src\WindowTab.cpp" />
     <ClCompile Include="..\src\mui\Mui.cpp" />
     <ClCompile Include="..\src\mui\TextRender.cpp" />
@@ -1365,45 +1436,73 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|ARM64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze x64_asan|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\src\wingui\Button.cpp" />
+    <ClCompile Include="..\src\wingui\Checkbox.cpp" />
     <ClCompile Include="..\src\wingui\DialogSizer.cpp" />
+    <ClCompile Include="..\src\wingui\DropDown.cpp" />
+    <ClCompile Include="..\src\wingui\Edit.cpp" />
     <ClCompile Include="..\src\wingui\FrameRateWnd.cpp" />
     <ClCompile Include="..\src\wingui\HtmlWindow.cpp" />
     <ClCompile Include="..\src\wingui\LabelWithCloseWnd.cpp" />
     <ClCompile Include="..\src\wingui\Layout.cpp" />
+    <ClCompile Include="..\src\wingui\ListBox.cpp" />
+    <ClCompile Include="..\src\wingui\Progress.cpp" />
+    <ClCompile Include="..\src\wingui\Splitter.cpp" />
+    <ClCompile Include="..\src\wingui\Static.cpp" />
+    <ClCompile Include="..\src\wingui\TabsCtrl.cpp" />
+    <ClCompile Include="..\src\wingui\Tooltip.cpp" />
+    <ClCompile Include="..\src\wingui\Trackbar.cpp" />
+    <ClCompile Include="..\src\wingui\TreeView.cpp" />
     <ClCompile Include="..\src\wingui\UIModels.cpp" />
     <ClCompile Include="..\src\wingui\VirtWnd.cpp" />
     <ClCompile Include="..\src\wingui\WebView.cpp" />
-    <ClCompile Include="..\src\wingui\WinGui.cpp" />
+    <ClCompile Include="..\src\wingui\Wnd.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\.clang-format" />
+    <None Include="..\.github\workflows\build.yml" />
+    <None Include="..\.github\workflows\codeql.yml" />
+    <None Include="..\.github\workflows\daily.yml" />
     <None Include="..\.gitignore" />
-    <None Include="..\do\build.go" />
-    <None Include="..\do\check_accesskyes.go" />
-    <None Include="..\do\clang_format.go" />
-    <None Include="..\do\clang_tidy.go" />
-    <None Include="..\do\extract_utils.go" />
-    <None Include="..\do\file_upload.go" />
-    <None Include="..\do\gen_docs.go" />
-    <None Include="..\do\git.go" />
-    <None Include="..\do\github_ci.go" />
-    <None Include="..\do\main.go" />
-    <None Include="..\do\settings_gen_code.go" />
-    <None Include="..\do\settings_gen_def.go" />
-    <None Include="..\do\settings_gen_html.go" />
-    <None Include="..\do\sign.go" />
-    <None Include="..\do\trans_download.go" />
-    <None Include="..\do\trans_gen.go" />
-    <None Include="..\do\trans_langs.go" />
-    <None Include="..\do\translations.go" />
-    <None Include="..\do\update_auto_update_ver.go" />
-    <None Include="..\do\upload_storage.go" />
-    <None Include="..\do\util.go" />
-    <None Include="..\do\vs.go" />
-    <None Include="..\do\wc.go" />
+    <None Include="..\Claude.md" />
+    <None Include="..\SECURITY.md" />
+    <None Include="..\cmd\build-codeql.ts" />
+    <None Include="..\cmd\build-no-info.ts" />
+    <None Include="..\cmd\build-smoke.ts" />
+    <None Include="..\cmd\build-with-mingw.ts" />
+    <None Include="..\cmd\build.ts" />
+    <None Include="..\cmd\bun.lock" />
+    <None Include="..\cmd\check-access-keys.ts" />
+    <None Include="..\cmd\ci-build.ts" />
+    <None Include="..\cmd\ci-daily-build.ts" />
+    <None Include="..\cmd\clang-tidy.ts" />
+    <None Include="..\cmd\clean.ts" />
+    <None Include="..\cmd\compress-docs-images.ts" />
+    <None Include="..\cmd\cppcheck.ts" />
+    <None Include="..\cmd\diff.ts" />
+    <None Include="..\cmd\format.ts" />
+    <None Include="..\cmd\gen-commands.ts" />
+    <None Include="..\cmd\gen-docs-website.ts" />
+    <None Include="..\cmd\gen-docs.ts" />
+    <None Include="..\cmd\gen-flags.ts" />
+    <None Include="..\cmd\gen-settings.ts" />
+    <None Include="..\cmd\logview-build.ts" />
+    <None Include="..\cmd\logview.ts" />
+    <None Include="..\cmd\markdown-it.min.js" />
+    <None Include="..\cmd\package.json" />
+    <None Include="..\cmd\pdb-sizes.ts" />
+    <None Include="..\cmd\premake.ts" />
+    <None Include="..\cmd\run-tests.ts" />
+    <None Include="..\cmd\trans-dl.ts" />
+    <None Include="..\cmd\trans-gen.ts" />
+    <None Include="..\cmd\trans-with-ai.ts" />
+    <None Include="..\cmd\trigger-codeql.ts" />
+    <None Include="..\cmd\tsconfig.json" />
+    <None Include="..\cmd\update-auto-update-ver.ts" />
+    <None Include="..\cmd\util.ts" />
+    <None Include="..\cmd\wc.ts" />
     <None Include="..\docs\manual.tmpl.html" />
-    <None Include="..\docs\manual.website.tmpl.html" />
     <None Include="..\docs\md\Accessibility-and-Text-to-Speech.md" />
-    <None Include="..\docs\md\Add-Favorite.md" />
     <None Include="..\docs\md\Advanced-options-settings.md" />
     <None Include="..\docs\md\Build-system.md" />
     <None Include="..\docs\md\Command-Palette.md" />
@@ -1415,13 +1514,14 @@
     <None Include="..\docs\md\Corrupted-installation.md" />
     <None Include="..\docs\md\Customize-external-viewers.md" />
     <None Include="..\docs\md\Customize-search-translation-services.md" />
+    <None Include="..\docs\md\Customize-theme-colors.md" />
     <None Include="..\docs\md\Customize-toolbar.md" />
     <None Include="..\docs\md\Customizing-eBook-UI.md" />
     <None Include="..\docs\md\Customizing-keyboard-shortcuts.md" />
     <None Include="..\docs\md\DDE-Commands.md" />
     <None Include="..\docs\md\Debugging-Sumatra.md" />
     <None Include="..\docs\md\Editing-annotations.md" />
-    <None Include="..\docs\md\Go-to-Page.md" />
+    <None Include="..\docs\md\Failed-to-load-libmupdf.md" />
     <None Include="..\docs\md\How-to-submit-bug-reports.md" />
     <None Include="..\docs\md\How-we-store-settings.md" />
     <None Include="..\docs\md\Installer-cmd-line-arguments.md" />
@@ -1434,6 +1534,7 @@
     <None Include="..\docs\md\Set-as-default-PDF-viewer.md" />
     <None Include="..\docs\md\Source-code-downloads.md" />
     <None Include="..\docs\md\Submit-crash-report.md" />
+    <None Include="..\docs\md\SumatraPDF-documentation-website.md" />
     <None Include="..\docs\md\SumatraPDF-documentation.md" />
     <None Include="..\docs\md\Supported-document-formats.md" />
     <None Include="..\docs\md\Uninstalling-SumatraPDF.md" />
@@ -1444,14 +1545,14 @@
     <None Include="..\docs\md\Why-only-Windows.md" />
     <None Include="..\docs\notes.txt" />
     <None Include="..\docs\releasenotes.txt" />
+    <None Include="..\docs\scratch.txt" />
     <None Include="..\docs\wishlist.txt" />
     <None Include="..\docs\www\notion.css" />
     <None Include="..\docs\www\sumatra.css" />
+    <None Include="..\ext\versions.txt" />
     <None Include="..\premake5.files.lua" />
     <None Include="..\premake5.lua" />
-    <None Include="..\premake5.obsolete.lua" />
-    <None Include="..\src\ext\versions.txt" />
-    <None Include="..\src\scratch.txt" />
+    <None Include="..\readme.md" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\src\SumatraPDF.rc" />

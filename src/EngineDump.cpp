@@ -479,7 +479,7 @@ bool RenderDocument(EngineBase* engine, const char* renderPath, float zoom = 1.f
             Gdiplus::Bitmap gbmp(bmp->GetBitmap(), nullptr);
             CLSID pngEncId = GetEncoderClsid(L"image/png");
             WCHAR* pageBmpPathW = ToWStrTemp(pageBmpPath);
-            gbmp.Save(pageBmpPathW, &pngEncId);
+            gbmp.Save(pageBmpPathW, &pngEncId, nullptr);
         } else if (str::EndsWithI(pageBmpPath, ".bmp")) {
             ByteSlice imgData = SerializeBitmap(bmp->GetBitmap());
             if (!imgData.empty()) {
@@ -503,11 +503,8 @@ class PasswordHolder : public PasswordUI {
     const char* password;
 
   public:
-    explicit PasswordHolder(const char* password) : password(password) {
-    }
-    char* GetPassword(const char*, u8*, __unused u8 decryptionKeyOut[32], bool*) override {
-        return str::Dup(password);
-    }
+    explicit PasswordHolder(const char* password) : password(password) {}
+    char* GetPassword(const char*, u8*, __unused u8 decryptionKeyOut[32], bool*) override { return str::Dup(password); }
 };
 
 void EngineDump(const Flags& flags) {
@@ -597,6 +594,6 @@ void EngineDump(const Flags& flags) {
     if (renderPath) {
         RenderDocument(engine, renderPath, renderZoom, flags.silent);
     }
-    engine->Release();
+    SafeEngineRelease(&engine);
 #endif
 }

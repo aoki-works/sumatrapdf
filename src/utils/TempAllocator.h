@@ -9,8 +9,11 @@ void ResetTempAllocator();
 
 template <typename T>
 FORCEINLINE T* AllocArrayTemp(size_t n) {
+    if (!mulSafe<size_t>(&n, sizeof(T))) {
+        return nullptr;
+    }
     auto a = GetTempAllocator();
-    return (T*)Allocator::AllocZero(a, n * sizeof(T));
+    return (T*)Allocator::AllocZero(a, n);
 }
 
 namespace str {

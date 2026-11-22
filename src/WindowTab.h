@@ -6,10 +6,6 @@ struct WatchedFile;
 struct EditAnnotationsWindow;
 struct MainWindow;
 
-namespace cpslab {
-    class Markers ;
-}
-
 /* Data related to a single document loaded into a tab/window */
 /* (none of these depend on MainWindow, so that a WindowTab could
    be moved between windows once this is supported) */
@@ -49,13 +45,12 @@ struct WindowTab {
     // TODO: terrible hack
     bool askedToSaveAnnotations = false;
 
-    // CpsLab
-    cpslab::Markers* markers = nullptr;
-
     TabState* tabState = nullptr; // when lazy loading
 
     Annotation* selectedAnnotation = nullptr;
     bool didScrollToSelectedAnnotation = false; // only automatically scroll once
+
+    bool hideAnnotations = false;
 
     // TODO: arguably a hack
     bool ignoreNextAutoReload = false;

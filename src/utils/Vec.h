@@ -154,9 +154,7 @@ class Vec {
         return *this;
     }
 
-    ~Vec() {
-        FreeEls();
-    }
+    ~Vec() { FreeEls(); }
 
     // this frees all elements and clears the array.
     // only applicable where T is a pointer. Otherwise will fail to compile
@@ -207,17 +205,11 @@ class Vec {
         return els[idx];
     }
 
-    bool isValidIndex(int idx) const {
-        return (idx >= 0) && (idx < (int)len);
-    }
+    bool isValidIndex(int idx) const { return (idx >= 0) && (idx < (int)len); }
 
-    size_t size() const {
-        return len;
-    }
+    size_t size() const { return len; }
 
-    int Size() const {
-        return (int)len;
-    }
+    int Size() const { return (int)len; }
 
     bool InsertAt(size_t idx, const T& el) {
         T* p = MakeSpaceAt(idx, 1);
@@ -228,9 +220,7 @@ class Vec {
         return true;
     }
 
-    bool Append(const T& el) {
-        return InsertAt(len, el);
-    }
+    bool Append(const T& el) { return InsertAt(len, el); }
 
     bool Append(const T* src, size_t count) {
         if (0 == count) {
@@ -251,9 +241,7 @@ class Vec {
     }
 
     // appends count blank (i.e. zeroed-out) elements at the end
-    T* AppendBlanks(size_t count) {
-        return MakeSpaceAt(len, count);
-    }
+    T* AppendBlanks(size_t count) { return MakeSpaceAt(len, count); }
 
     void RemoveAt(size_t idx, size_t count = 1) {
         if (len > idx + count) {
@@ -324,9 +312,7 @@ class Vec {
         return res;
     }
 
-    T* LendData() const {
-        return els;
-    }
+    T* LendData() const { return els; }
 
     int Find(const T& el, size_t startAt = 0) const {
         for (size_t i = startAt; i < len; i++) {
@@ -337,23 +323,27 @@ class Vec {
         return -1;
     }
 
-    bool Contains(const T& el) const {
-        return -1 != Find(el);
-    }
+    bool Contains(const T& el) const { return -1 != Find(el); }
 
     // returns position of removed element or -1 if not removed
     int Remove(const T& el) {
         int i = Find(el);
-        if (-1 == i) {
-            return -1;
+        if (i >= 0) {
+            RemoveAt(i);
         }
-        RemoveAt(i);
         return i;
     }
 
-    void Sort(int (*cmpFunc)(const void* a, const void* b)) {
-        qsort(els, len, kElSize, cmpFunc);
+    // returns position of removed element or -1 if not removed
+    int RemoveFast(const T& el) {
+        int i = Find(el);
+        if (i >= 0) {
+            RemoveAtFast(i);
+        }
+        return i;
     }
+
+    void Sort(int (*cmpFunc)(const void* a, const void* b)) { qsort(els, len, kElSize, cmpFunc); }
 
     void SortTyped(int (*cmpFunc)(const T* a, const T* b)) {
         auto cmpFunc2 = (int (*)(const void* a, const void* b))cmpFunc;
@@ -366,32 +356,20 @@ class Vec {
         }
     }
 
-    bool IsEmpty() const {
-        return len == 0;
-    }
+    bool IsEmpty() const { return len == 0; }
 
     // TOOD: replace with IsEmpty()
-    bool empty() const {
-        return len == 0;
-    }
+    bool empty() const { return len == 0; }
 
     // http://www.cprogramming.com/c++11/c++11-ranged-for-loop.html
     // https://stackoverflow.com/questions/16504062/how-to-make-the-for-each-loop-function-in-c-work-with-a-custom-class
     using iterator = T*;
     using const_iterator = const T*;
 
-    iterator begin() {
-        return &(els[0]);
-    }
-    const_iterator begin() const {
-        return &(els[0]);
-    }
-    iterator end() {
-        return &(els[len]);
-    }
-    const_iterator end() const {
-        return &(els[len]);
-    }
+    iterator begin() { return &(els[0]); }
+    const_iterator begin() const { return &(els[0]); }
+    iterator end() { return &(els[len]); }
+    const_iterator end() const { return &(els[len]); }
 };
 
 // only suitable for T that are pointers to C++ objects

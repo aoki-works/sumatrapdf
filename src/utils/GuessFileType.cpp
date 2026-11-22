@@ -105,6 +105,11 @@ Kind kindFileAvif = "fileAvif";
     V(".svg", kindFileSvg)        \
     V(".djvu", kindFileDjVu)      \
     V(".jp2", kindFileJp2)        \
+    V(".j2k", kindFileJp2)        \
+    V(".jpx", kindFileJp2)        \
+    V(".jpf", kindFileJp2)        \
+    V(".jpm", kindFileJp2)        \
+    V(".j2c", kindFileJp2)        \
     V(".zip", kindFileZip)        \
     V(".rar", kindFileRar)        \
     V(".7z", kindFile7Z)          \
@@ -135,6 +140,14 @@ static Kind GetKindByFileExt(const char* path) {
     return gExtsKind[idx];
 }
 
+const char* GetExtForKind(Kind kind) {
+    int idx = KindIndexOf(gExtsKind, dimofi(gExtsKind), kind);
+    if (idx >= 0) {
+        return seqstrings::IdxToStr(gFileExts, idx);
+    }
+    return nullptr;
+}
+
 // ensure gFileExts and gExtsKind match
 static bool gDidVerifyExtsMatch = false;
 static void VerifyExtsMatch() {
@@ -146,14 +159,14 @@ static void VerifyExtsMatch() {
     gDidVerifyExtsMatch = true;
 }
 
-bool KindInArray(Kind* kinds, int nKinds, Kind kind) {
+int KindIndexOf(Kind* kinds, int nKinds, Kind kind) {
     for (int i = 0; i < nKinds; i++) {
         Kind k = kinds[i];
         if (k == kind) {
-            return true;
+            return i;
         }
     }
-    return false;
+    return -1;
 }
 
 #define FILE_SIGS(V)                                    \
@@ -201,7 +214,7 @@ static bool IsPdfFileContent(const ByteSlice& d) {
     char* end = data + n;
     while (data < end) {
         size_t nLeft = end - data;
-        data = (char*)std::memchr(data, '%', nLeft);
+        data = (char*)memchr(data, '%', nLeft);
         if (!data) {
             return false;
         }

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -33,23 +33,7 @@ FUN(Archive_finalize)(JNIEnv *env, jobject self)
 }
 
 JNIEXPORT jlong JNICALL
-FUN(Archive_newNativeMultiArchive)(JNIEnv *env, jobject self)
-{
-	fz_context *ctx = get_context(env);
-	fz_archive *arch = NULL;
-
-	if (!ctx) return 0;
-
-	fz_try(ctx)
-		arch = fz_new_multi_archive(ctx);
-	fz_catch(ctx)
-		jni_rethrow(env, ctx);
-
-	return jlong_cast(arch);
-}
-
-JNIEXPORT jlong JNICALL
-FUN(Archive_newNativeArchive)(JNIEnv *env, jobject self, jstring jpath)
+FUN(Archive_newNativeArchiveWithPath)(JNIEnv *env, jobject self, jstring jpath)
 {
 	fz_context *ctx = get_context(env);
 	fz_archive *arch = NULL;
@@ -70,6 +54,72 @@ FUN(Archive_newNativeArchive)(JNIEnv *env, jobject self, jstring jpath)
 		(*env)->ReleaseStringUTFChars(env, jpath, path);
 	fz_catch(ctx)
 		jni_rethrow(env, ctx);
+
+	return jlong_cast(arch);
+}
+
+JNIEXPORT jlong JNICALL
+FUN(Archive_newNativeArchiveWithStream)(JNIEnv *env, jobject self, jobject jstream)
+{
+	fz_context *ctx = get_context(env);
+	fz_archive *arch = NULL;
+	jobject jarchstm = NULL;
+	jbyteArray jarcharray = NULL;
+	SeekableStreamState *archstate = NULL;
+	fz_stream *archstream = NULL;
+
+	fz_var(jarchstm);
+	fz_var(jarcharray);
+	fz_var(archstream);
+
+	if (!ctx) return 0;
+	if (jstream)
+	{
+		jarchstm = (*env)->NewGlobalRef(env, jstream);
+		if (!jarchstm)
+		{
+			jni_throw_run(env, "cannot get reference to archive stream");
+		}
+	}
+
+	jarcharray = (*env)->NewByteArray(env, sizeof archstate->buffer);
+	if (jarcharray)
+		jarcharray = (*env)->NewGlobalRef(env, jarcharray);
+	if (!jarcharray)
+	{
+		(*env)->DeleteGlobalRef(env, jarchstm);
+		jni_throw_run(env, "cannot create internal buffer for archive stream");
+	}
+
+	fz_try(ctx)
+	{
+		if (jarchstm)
+		{
+			/* No exceptions can occur from here to stream owning archstate, so we must not free archstate. */
+			archstate = Memento_label(fz_malloc(ctx, sizeof(SeekableStreamState)), "SeekableStreamState_archstate");
+			archstate->stream = jarchstm;
+			archstate->array = jarcharray;
+
+			/* Ownership transferred to archstate. */
+			jarchstm = NULL;
+			jarcharray = NULL;
+
+			/* Stream takes ownership of archstate. */
+			archstream = fz_new_stream(ctx, archstate, SeekableInputStream_next, SeekableInputStream_drop);
+			archstream->seek = SeekableInputStream_seek;
+		}
+		arch = fz_open_archive_with_stream(ctx,	archstream);
+	}
+	fz_always(ctx)
+	{
+		fz_drop_stream(ctx, archstream);
+	}
+	fz_catch(ctx)
+	{
+		(*env)->DeleteGlobalRef(env, jarcharray);
+		(*env)->DeleteGlobalRef(env, jarchstm);
+		jni_rethrow(env, ctx);
+	}
 
 	return jlong_cast(arch);
 }

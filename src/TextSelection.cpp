@@ -7,8 +7,6 @@
 
 #include "wingui/UIModels.h"
 
-#include "Settings.h"
-#include "GlobalPrefs.h"
 #include "DocController.h"
 #include "EngineBase.h"
 #include "TextSelection.h"
@@ -18,18 +16,11 @@ uint distSq(int x, int y) {
 }
 // underscore is mainly used for programming and is thus considered a word character
 bool isWordChar(WCHAR c) {
-    if (gGlobalPrefs->printableCharAsWordChar) {
-        // CPS Labs.
-        if (c == '\n')
-            return false;
-        if (str::IsNonCharacter(c))
-            return false;
-        if (isspace(c))
-            return false;
-        return true;
-    } else {
-        return IsCharAlphaNumeric(c) || c == '_';
-    }
+    return IsCharAlphaNumeric(c) || c == '_';
+}
+
+static bool isDigit(WCHAR c) {
+    return c >= '0' && c <= '9';
 }
 
 DocumentTextCache::DocumentTextCache(EngineBase* engine) : engine(engine) {
@@ -56,12 +47,24 @@ DocumentTextCache::~DocumentTextCache() {
 
 bool DocumentTextCache::HasTextForPage(int pageNo) const {
     ReportIf(pageNo < 1 || pageNo > nPages);
+    if (pageNo < 1 || pageNo > nPages) {
+        return false;
+    }
     PageText* pageText = &pagesText[pageNo - 1];
     return pageText->text != nullptr;
 }
 
 const WCHAR* DocumentTextCache::GetTextForPage(int pageNo, int* lenOut, Rect** coordsOut) {
     ReportIf(pageNo < 1 || pageNo > nPages);
+    if (pageNo < 1 || pageNo > nPages) {
+        if (lenOut) {
+            *lenOut = 0;
+        }
+        if (coordsOut) {
+            *coordsOut = nullptr;
+        }
+        return L"";
+    }
 
     ScopedCritSec scope(&access);
     PageText* pageText = &pagesText[pageNo - 1];
@@ -84,8 +87,7 @@ const WCHAR* DocumentTextCache::GetTextForPage(int pageNo, int* lenOut, Rect** c
     return pageText->text;
 }
 
-TextSelection::TextSelection(EngineBase* engine, DocumentTextCache* textCache) : engine(engine), textCache(textCache) {
-}
+TextSelection::TextSelection(EngineBase* engine, DocumentTextCache* textCache) : engine(engine), textCache(textCache) {}
 
 TextSelection::~TextSelection() {
     Reset();
@@ -245,11 +247,11 @@ void TextSelection::StartAt(int pageNo, double x, double y) {
     StartAt(pageNo, FindClosestGlyph(this, pageNo, x, y));
 }
 
-void TextSelection::SelectUpTo(int pageNo, double x, double y, bool conti) {
-    SelectUpTo(pageNo, FindClosestGlyph(this, pageNo, x, y), conti);
+void TextSelection::SelectUpTo(int pageNo, double x, double y) {
+    SelectUpTo(pageNo, FindClosestGlyph(this, pageNo, x, y));
 }
 
-void TextSelection::SelectUpTo(int pageNo, int glyphIx, bool conti) {
+void TextSelection::SelectUpTo(int pageNo, int glyphIx) {
     if (startPage == -1 || startGlyph == -1) {
         return;
     }
@@ -262,9 +264,7 @@ void TextSelection::SelectUpTo(int pageNo, int glyphIx, bool conti) {
         endGlyph = textLen + glyphIx + 1;
     }
 
-    if (not conti) {
-        result.len = 0;  // CPS Lab.
-    }
+    result.len = 0;
     int fromPage = std::min(startPage, endPage), toPage = std::max(startPage, endPage);
     int fromGlyph = (fromPage == endPage ? endGlyph : startGlyph);
     int toGlyph = (fromPage == endPage ? startGlyph : endGlyph);
@@ -284,46 +284,79 @@ void TextSelection::SelectUpTo(int pageNo, int glyphIx, bool conti) {
     }
 }
 
-void TextSelection::SelectWordAt(int pageNo, double x, double y, bool conti) {
+void TextSelection::SelectWordAt(int pageNo, double x, double y) {
     int i = FindClosestGlyph(this, pageNo, x, y);
     int textLen;
-    Rect* coords;
-    const WCHAR* text = textCache->GetTextForPage(pageNo, &textLen, &coords);
-    Rect& coord = coords[i];
+    const WCHAR* text = textCache->GetTextForPage(pageNo, &textLen);
 
+    bool isAllDigits = true;
+    WCHAR c = 0;
     for (; i > 0; i--) {
-        if (!isWordChar(text[i - 1])) {
+        c = text[i - 1];
+        if (!isWordChar(c)) {
             break;
         }
-        if (gGlobalPrefs->printableCharAsWordChar) {
-            Rect& r = coords[i - 1];
-            if (r.x != coord.x && r.y != coord.y) {
-                break; // CPS Lab.
-            }
+        if (!isDigit(c)) {
+            isAllDigits = false;
         }
     }
-    StartAt(pageNo, i);
+    int wordStart = i;
+    int maybeNumberStart = i;
+    int nDigits = 0;
+    if (isAllDigits && c == '.') {
+        for (int j = i - 2; j >= 0; j--) {
+            c = text[j];
+            if (isDigit(c)) {
+                nDigits++;
+                continue;
+            }
+            if (nDigits > 0) {
+                maybeNumberStart = j + 1;
+            } else {
+                isAllDigits = false;
+            }
+            break;
+        }
+    }
 
     for (; i < textLen; i++) {
-        if (!isWordChar(text[i])) {
+        c = text[i];
+        if (!isWordChar(c)) {
             break;
         }
-        if (gGlobalPrefs->printableCharAsWordChar) {
-            Rect& r = coords[i];
-            if (r.x != coord.x && r.y != coord.y) {
-                break; // CPS Lab.
-            }
+        if (!isDigit(c)) {
+            isAllDigits = false;
         }
     }
-    SelectUpTo(pageNo, i, conti);
+
+    // try to select fractional numbers i.e. if c is '.', chars before are all digits and chars after are all digits,
+    // extend to digits
+    int wordEnd = i;
+    nDigits = 0;
+    if (isAllDigits && c == '.') {
+        for (int j = wordEnd + 1; j < textLen; j++) {
+            c = text[j];
+            if (isDigit(c)) {
+                nDigits++;
+                continue;
+            }
+            break;
+        }
+        if (nDigits > 0) {
+            wordEnd += nDigits + 1; // +1 for '.'
+        }
+    }
+    if (isAllDigits) {
+        wordStart = maybeNumberStart;
+    }
+    StartAt(pageNo, wordStart);
+    SelectUpTo(pageNo, wordEnd);
 }
 
-void TextSelection::CopySelection(TextSelection* orig, bool conti) {
-    if (!conti) {
-        Reset();
-    }
+void TextSelection::CopySelection(TextSelection* orig) {
+    Reset();
     StartAt(orig->startPage, orig->startGlyph);
-    SelectUpTo(orig->endPage, orig->endGlyph, conti);
+    SelectUpTo(orig->endPage, orig->endGlyph);
 }
 
 WCHAR* TextSelection::ExtractText(const char* lineSep) {
@@ -342,24 +375,6 @@ WCHAR* TextSelection::ExtractText(const char* lineSep) {
         }
     }
 
-    TempStr res = JoinTemp(&lines, lineSep);
-    return ToWStr(res);
-}
-
-WCHAR* TextSelection::ExtractText(const char* lineSep, const int pageNo) {
-    StrVec lines;
-
-    int fromPage, fromGlyph, toPage, toGlyph;
-    GetGlyphRange(&fromPage, &fromGlyph, &toPage, &toGlyph);
-    if (fromPage <= pageNo && pageNo <= toPage) {
-        int textLen;
-        textCache->GetTextForPage(pageNo, &textLen);
-        int glyph = pageNo == fromPage ? fromGlyph : 0;
-        int length = (pageNo == toPage ? toGlyph : textLen) - glyph;
-        if (length > 0) {
-            FillResultRects(this, pageNo, glyph, length, &lines);
-        }
-    }
     TempStr res = JoinTemp(&lines, lineSep);
     return ToWStr(res);
 }

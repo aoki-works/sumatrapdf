@@ -46,13 +46,9 @@ struct MobiDoc {
     ByteSlice GetHtmlData() const;
     ByteSlice* GetCoverImage();
     ByteSlice* GetImage(size_t imgRecIndex) const;
-    const char* GetFileName() const {
-        return fileName;
-    }
+    const char* GetFileName() const { return fileName; }
     TempStr GetPropertyTemp(const char* name);
-    PdbDocType GetDocType() const {
-        return docType;
-    }
+    PdbDocType GetDocType() const { return docType; }
 
     bool HasToc();
     bool ParseToc(EbookTocVisitor* visitor);

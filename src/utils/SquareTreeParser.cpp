@@ -94,33 +94,35 @@ static bool IsBracketLine(char* s) {
 SquareTreeNode::~SquareTreeNode() {
     for (size_t i = 0; i < data.size(); i++) {
         DataItem& item = data.at(i);
-        if (item.isChild) {
-            delete item.value.child;
-        }
+        delete item.child;
     }
 }
 
 const char* SquareTreeNode::GetValue(const char* key, size_t* startIdx) const {
-    for (size_t i = startIdx ? *startIdx : 0; i < data.size(); i++) {
-        DataItem& item = data.at(i);
-        if (str::EqI(key, item.key) && !item.isChild) {
+    int start = startIdx ? (int)*startIdx : 0;
+    int n = data.Size();
+    for (int i = start; i < n; i++) {
+        DataItem& item = data.At(i);
+        if (str::EqI(key, item.key) && !item.child) {
             if (startIdx) {
-                *startIdx = i + 1;
+                *startIdx = (size_t)(i + 1);
             }
-            return item.value.str;
+            return item.str;
         }
     }
     return nullptr;
 }
 
 SquareTreeNode* SquareTreeNode::GetChild(const char* key, size_t* startIdx) const {
-    for (size_t i = startIdx ? *startIdx : 0; i < data.size(); i++) {
-        DataItem& item = data.at(i);
-        if (str::EqI(key, item.key) && item.isChild) {
+    int start = startIdx ? (int)*startIdx : 0;
+    int n = data.Size();
+    for (int i = start; i < n; i++) {
+        DataItem& item = data.At(i);
+        if (str::EqI(key, item.key) && item.child) {
             if (startIdx) {
-                *startIdx = i + 1;
+                *startIdx = (size_t)(i + 1);
             }
-            return item.value.child;
+            return item.child;
         }
     }
     return nullptr;
@@ -205,23 +207,49 @@ static SquareTreeNode* ParseSquareTreeRec(char*& data, bool isTopLevel = false) 
     return node;
 }
 
-SquareTree::SquareTree(const char* data) : root(nullptr) {
-    // convert the file content to UTF-8
-    if (str::StartsWith(data, UTF8_BOM)) {
-        dataUtf8.SetCopy(data + 3);
-    } else if (str::StartsWith(data, UTF16_BOM)) {
-        auto tmp = ToUtf8((const WCHAR*)(data + 2));
-        dataUtf8.Set(tmp);
-    } else if (data) {
-        AutoFreeWStr tmp(strconv::AnsiToWStr(data));
-        auto tmp2 = ToUtf8(tmp.Get());
-        dataUtf8.Set(tmp2);
+static void SerializeRec(SquareTreeNode* node, str::Str& s, int indent) {
+    int n = node->data.Size();
+    for (int i = 0; i < n; i++) {
+        SquareTreeNode::DataItem& item = node->data.At(i);
+        for (int j = 0; j < indent; j++) {
+            s.AppendChar(' ');
+            s.AppendChar(' ');
+        }
+        if (item.child) {
+            s.Append(item.key);
+            s.Append(" [\n");
+            SerializeRec(item.child, s, indent + 1);
+            for (int j = 0; j < indent; j++) {
+                s.AppendChar(' ');
+                s.AppendChar(' ');
+            }
+            s.Append("]\n");
+        } else {
+            s.Append(item.key);
+            s.Append(" = ");
+            if (item.str) {
+                s.Append(item.str);
+            }
+            s.AppendChar('\n');
+        }
     }
-    if (!dataUtf8) {
-        return;
-    }
+}
 
-    char* start = dataUtf8.Get();
-    root = ParseSquareTreeRec(start, true);
-    ReportIf(*start || !root);
+const char* SerializeSquareTreeNode(SquareTreeNode* node) {
+    if (!node) {
+        return nullptr;
+    }
+    str::Str s;
+    SerializeRec(node, s, 0);
+    return s.StealData();
+}
+
+SquareTreeNode* ParseSquareTree(const char* s) {
+    TempStr data = strconv::UnknownToUtf8Temp(s);
+    if (!data) {
+        return nullptr;
+    }
+    char* tmp = data;
+    auto res = ParseSquareTreeRec(tmp, true);
+    return res;
 }

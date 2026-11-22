@@ -76,7 +76,7 @@ IDR_MANUAL_PAK          RCDATA               "..\\docs\\manual.dat"
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDI_SUMATRAPDF          ICON "..\\gfx\\cpsv.ico"
+IDI_SUMATRAPDF          ICON "..\\gfx\\SumatraPDF-smaller.ico"
 // for compath with pre 3.4 registry association for pre-win10
 // have icon as ,1, which is index of this icon. unless we delete
 // those old registry on install, the icon would change
@@ -110,7 +110,7 @@ BEGIN
     LTEXT           "&Find what:",IDC_STATIC,6,8,60,9
     EDITTEXT        IDC_FIND_EDIT,66,6,120,13,ES_AUTOHSCROLL
     CONTROL         "&Match case",IDC_MATCH_CASE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,24,180,9
-    LTEXT           "Hint: Use the F3 key for finding again",IDC_FIND_NEXT_HINT,6,37,180,9,WS_DISABLED
+    LTEXT           "Hint: Use the F3 key for finding again",IDC_FIND_NEXT_HINT,6,37,180,9
     DEFPUSHBUTTON   "Find",IDOK,191,6,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,191,24,50,14
 END

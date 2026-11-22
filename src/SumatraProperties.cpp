@@ -29,6 +29,7 @@
 #include "SumatraConfig.h"
 #include "Print.h"
 #include "Theme.h"
+#include "DarkModeSubclass.h"
 
 void ShowProperties(HWND parent, DocController* ctrl, bool extended);
 
@@ -77,9 +78,7 @@ struct PropertiesLayout {
         return strings.At(idx);
     }
 
-    int PropCount() const {
-        return strings.Size() / 2;
-    }
+    int PropCount() const { return strings.Size() / 2; }
 
     bool HasProperty(const char* key) {
         int n = PropCount();
@@ -92,9 +91,7 @@ struct PropertiesLayout {
         return false;
     }
 
-    Pos& GetPos(int i) {
-        return positions.At(i);
-    }
+    Pos& GetPos(int i) { return positions.At(i); }
 
     HWND hwnd = nullptr;
     HWND hwndParent = nullptr;
@@ -366,11 +363,16 @@ static Rect CalcPropertiesLayout(PropertiesLayout* layoutData, HDC hdc) {
 }
 
 static void ShowExtendedProperties(PropertiesLayout* pl) {
-    MainWindow* win = FindMainWindowByHwnd(pl ? pl->hwndParent : nullptr);
-    if (win && !pl->HasProperty(_TRA("Fonts:"))) {
-        DestroyWindow(pl->hwnd);
-        ShowProperties(win->hwndFrame, win->ctrl, true);
+    if (!pl || pl->HasProperty(_TRA("Fonts:"))) {
+        // early exit if already showing extended properties
+        return;
     }
+    MainWindow* win = FindMainWindowByHwnd(pl->hwndParent);
+    if (!win) {
+        return;
+    }
+    DestroyWindow(pl->hwnd);
+    ShowProperties(win->hwndFrame, win->ctrl, true);
 }
 
 static void CopyPropertiesToClipboard(PropertiesLayout* layoutData) {
@@ -419,18 +421,18 @@ static bool CreatePropertiesWindow(HWND hParent, PropertiesLayout* layoutData, b
 
     layoutData->hwnd = hwnd;
     layoutData->hwndParent = hParent;
-    bool isRtl = IsUIRightToLeft();
+    bool isRtl = IsUIRtl();
     HwndSetRtl(hwnd, isRtl);
     {
         Button::CreateArgs args;
         args.parent = hwnd;
         args.text = _TRA("Copy To Clipboard");
+        args.isRtl = IsUIRtl();
 
         auto b = new Button();
         b->Create(args);
 
         layoutData->btnCopyToClipboard = b;
-        HwndSetRtl(b->hwnd, isRtl);
         b->onClick = MkFunc0(CopyPropertiesToClipboard, layoutData);
     }
 
@@ -438,11 +440,11 @@ static bool CreatePropertiesWindow(HWND hParent, PropertiesLayout* layoutData, b
         Button::CreateArgs args;
         args.parent = hwnd;
         args.text = _TRA("Get Fonts Info");
+        args.isRtl = IsUIRtl();
 
         auto b = new Button();
         b->Create(args);
 
-        HwndSetRtl(b->hwnd, isRtl);
         layoutData->btnGetFonts = b;
         b->onClick = MkFunc0(ShowExtendedProperties, layoutData);
     }
@@ -462,7 +464,10 @@ static bool CreatePropertiesWindow(HWND hParent, PropertiesLayout* layoutData, b
     wRc.dy = std::min(rc.dy + wRc.dy - cRc.dy, work.dy);
     MoveWindow(hwnd, wRc.x, wRc.y, wRc.dx, wRc.dy, FALSE);
     CenterDialog(hwnd, hParent);
-
+    if (UseDarkModeLib()) {
+        DarkMode::setDarkWndSafe(hwnd);
+        DarkMode::setWindowEraseBgSubclass(hwnd);
+    }
     ShowWindow(hwnd, SW_SHOW);
     return true;
 }
@@ -529,10 +534,18 @@ static void AddPdfFileStructure(DocController* ctrl, PropertiesLayout* layoutDat
     layoutData->AddProperty(_TRA("PDF Optimizations:"), val);
 }
 
+// https://www.compart.com/en/unicode/U+202A
+constexpr const char* leftToRightEmbeding = "\xe2\x80\xaa";
+// https://www.compart.com/en/unicode/U+202c
+constexpr const char* popDirectionalFormatting = "\xe2\x80\xac";
+
 static void GetProps(DocController* ctrl, PropertiesLayout* layoutData, bool extended) {
     ReportIf(!ctrl);
 
     const char* path = gPluginMode ? gPluginURL : ctrl->GetFilePath();
+    if (!path) {
+        path = "unknown";
+    }
     layoutData->AddProperty(_TRA("File:"), path, true);
 
     DisplayModel* dm = ctrl->AsFixed();
@@ -547,7 +560,7 @@ static void GetProps(DocController* ctrl, PropertiesLayout* layoutData, bool ext
     }
     TempStr strTemp;
     if (-1 != fileSize) {
-        strTemp = FormatFileSizeTemp(fileSize);
+        strTemp = FormatFileSizeTransTemp(fileSize);
         layoutData->AddProperty(_TRA("File Size:"), strTemp);
     }
 
@@ -583,13 +596,10 @@ static void GetProps(DocController* ctrl, PropertiesLayout* layoutData, bool ext
 
     if (dm) {
         strTemp = FormatPageSizeTemp(dm->GetEngine(), ctrl->CurrentPageNo(), dm->GetRotation());
-        if (IsUIRightToLeft() && IsWindowsVistaOrGreater()) {
+        if (IsUIRtl() && IsWindowsVistaOrGreater()) {
             // ensure that the size remains ungarbled left-to-right
             // (note: XP doesn't know about \u202A...\u202C)
-            TempWStr ws = ToWStrTemp(strTemp);
-            ws = str::Format(L"\u202A%s\u202C", ws);
-            strTemp = ToUtf8Temp(ws);
-            str::Free(ws);
+            strTemp = str::JoinTemp(leftToRightEmbeding, strTemp, popDirectionalFormatting);
         }
         layoutData->AddProperty(_TRA("Page Size:"), strTemp);
     }

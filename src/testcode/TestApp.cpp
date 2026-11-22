@@ -13,6 +13,8 @@
 extern int TestTab(HINSTANCE hInstance, int nCmdShow);
 // in TestLayout.cpp
 extern int TestLayout(HINSTANCE hInstance, int nCmdShow);
+// in SumatraPDF.cpp
+extern bool IsUIRtl();
 
 HINSTANCE gHinst = nullptr;
 
@@ -29,14 +31,14 @@ static ILayout* CreateMainLayout(HWND hwnd) {
 
     vbox->alignMain = MainAxisAlign::MainCenter;
     vbox->alignCross = CrossAxisAlign::CrossCenter;
-
+    auto isRtl = IsUIRtl();
     {
-        auto b = CreateButton(hwnd, "Tabs test", MkFunc0Void(LaunchTabs));
+        auto b = CreateButton(hwnd, "Tabs test", MkFunc0Void(LaunchTabs), isRtl);
         vbox->AddChild(b);
     }
 
     {
-        auto b = CreateButton(hwnd, "Layout test", MkFunc0Void(LaunchLayout));
+        auto b = CreateButton(hwnd, "Layout test", MkFunc0Void(LaunchLayout), isRtl);
         vbox->AddChild(b);
     }
 

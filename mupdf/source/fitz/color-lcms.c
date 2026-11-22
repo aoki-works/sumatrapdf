@@ -347,7 +347,7 @@ fz_new_icc_link(fz_context *ctx,
 
 	if (prf_pro == NULL)
 	{
-		transform = cmsCreateTransform(GLO src_pro, src_fmt, dst_pro, dst_fmt, rend.ri, flags);
+		transform = cmsCreateTransform(GLO src_pro, src_fmt, dst_pro, dst_fmt, rend.ri & ~FZ_RI_IN_SOFTMASK, flags);
 		if (!transform)
 			fz_throw(ctx, FZ_ERROR_LIBRARY, "cmsCreateTransform(%s,%s) failed", src->name, dst->name);
 	}
@@ -423,7 +423,7 @@ fz_icc_transform_color(fz_context *ctx, fz_color_converter *cc, const float *src
 #else
 	uint16_t s16[FZ_MAX_COLORS];
 	uint16_t d16[FZ_MAX_COLORS];
-	int dn = cc->ds->n;
+	int dn = cc->dst_n;
 	int i;
 	if (cc->ss->type == FZ_COLORSPACE_LAB)
 	{

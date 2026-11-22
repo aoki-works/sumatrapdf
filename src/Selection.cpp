@@ -109,8 +109,18 @@ void DeleteOldSelectionInfo(MainWindow* win, bool alsoTextSel) {
     }
 }
 
+void PaintTransparentRectangles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha,
+                                int margin) {
+    // create path from rectangles
+    Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
+    screenRc.Inflate(margin, margin);
+    for (size_t i = 0; i < rects.size(); i++) {
+        Rect rc = rects.at(i).Intersect(screenRc);
+        if (!rc.IsEmpty()) {
+            path.AddRectangle(ToGdipRect(rc));
+        }
+    }
 
-static void FillTransparentPath(HDC hdc, Gdiplus::GraphicsPath& path, COLORREF selectionColor, u8 alpha, int margin) {
     // fill path (and draw optional outline margin)
     Gdiplus::Graphics gs(hdc);
     u8 r, g, b;
@@ -124,35 +134,6 @@ static void FillTransparentPath(HDC hdc, Gdiplus::GraphicsPath& path, COLORREF s
         gs.DrawPath(&tmpPen, &path);
     }
 }
-
-void PaintTransparentRectangles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha,
-                                int margin) {
-    // create path from rectangles
-    Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
-    screenRc.Inflate(margin, margin);
-    for (size_t i = 0; i < rects.size(); i++) {
-        Rect rc = rects.at(i).Intersect(screenRc);
-        if (!rc.IsEmpty()) {
-            path.AddRectangle(ToGdipRect(rc));
-        }
-    }
-    FillTransparentPath(hdc, path, selectionColor, alpha, margin);
-}
-
-void PaintTransparentCircles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha,
-                             int margin) {
-    // create path from rectangles
-    Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
-    screenRc.Inflate(margin, margin);
-    for (size_t i = 0; i < rects.size(); i++) {
-        Rect rc = rects.at(i).Intersect(screenRc);
-        if (!rc.IsEmpty()) {
-            path.AddArc(ToGdipRect(rc), 0, 360);
-        }
-    }
-    FillTransparentPath(hdc, path, selectionColor, alpha, margin);
-}
-
 
 void PaintSelection(MainWindow* win, HDC hdc) {
     ReportIf(!win->AsFixed());
@@ -185,7 +166,7 @@ void PaintSelection(MainWindow* win, HDC hdc) {
             }
         }
 
-        ReportIf(!win->CurrentTab()->selectionOnPage);
+        ReportDebugIf(!win->CurrentTab()->selectionOnPage);
         if (!win->CurrentTab()->selectionOnPage) {
             return;
         }
@@ -195,15 +176,8 @@ void PaintSelection(MainWindow* win, HDC hdc) {
         }
     }
 
-    DisplayModel* dm = win->AsFixed();
     ParsedColor* parsedCol = GetPrefsColor(gGlobalPrefs->fixedPageUI.selectionColor);
-    if (gGlobalPrefs->circularSelectionRegion &&
-        !win->selectionRect.IsEmpty() &&
-        dm->textSelection->result.len == 0) {
-        PaintTransparentCircles(hdc, win->canvasRc, rects, parsedCol->col);
-    } else {
-        PaintTransparentRectangles(hdc, win->canvasRc, rects, parsedCol->col);
-    }
+    PaintTransparentRectangles(hdc, win->canvasRc, rects, parsedCol->col);
 }
 
 void UpdateTextSelection(MainWindow* win, bool select) {
@@ -211,7 +185,7 @@ void UpdateTextSelection(MainWindow* win, bool select) {
         return;
     }
 
-    // logf("UpdateTextSelection: select: %d\n", (int)select); CPSLab debug
+    // logf("UpdateTextSelection: select: %d\n", (int)select);
     DisplayModel* dm = win->AsFixed();
     if (select) {
         int pageNo = dm->GetPageNoByPoint(win->selectionRect.BR());
@@ -259,6 +233,10 @@ TempStr GetSelectedTextTemp(WindowTab* tab, const char* lineSep, bool& isTextOnl
     }
     StrVec selections;
     for (SelectionOnPage& sel : *tab->selectionOnPage) {
+        // selection may reference pages that no longer exist after a reload
+        if (!dm->ValidPageNo(sel.pageNo)) {
+            continue;
+        }
         char* text = dm->GetTextInRegion(sel.pageNo, sel.rect);
         if (!str::IsEmpty(text)) {
             selections.Append(text);
@@ -310,6 +288,9 @@ void CopySelectionToClipboard(MainWindow* win) {
     }
     /* also copy a screenshot of the current selection to the clipboard */
     SelectionOnPage* selOnPage = &tab->selectionOnPage->at(0);
+    if (!dm->ValidPageNo(selOnPage->pageNo)) {
+        return;
+    }
     float zoom = dm->GetZoomReal(selOnPage->pageNo);
     int rotation = dm->GetRotation();
     RenderPageArgs args(selOnPage->pageNo, zoom, rotation, &selOnPage->rect, RenderTarget::Export);
@@ -424,7 +405,6 @@ void OnSelectionStart(MainWindow* win, int x, int y, WPARAM) {
     SetCapture(win->hwndCanvas);
     SetTimer(win->hwndCanvas, SMOOTHSCROLL_TIMER_ID, SMOOTHSCROLL_DELAY_IN_MS, nullptr);
     ScheduleRepaint(win, 0);
-    return;
 }
 
 void OnSelectionStop(MainWindow* win, int x, int y, bool aborted) {
@@ -438,19 +418,7 @@ void OnSelectionStop(MainWindow* win, int x, int y, bool aborted) {
         UpdateTextSelection(win);
     }
 
-    DisplayModel* dm = win->AsFixed();
-    if (gGlobalPrefs->circularSelectionRegion && dm->textSelection->result.len == 0){
-        // CPS Labs.
-        int dx = (x - win->selectionRect.x) - win->selectionRect.dx;
-        int dy = (y - win->selectionRect.y) - win->selectionRect.dy;
-        win->selectionRect.x -= dx < dy ? dy : dx;
-        win->selectionRect.y -= dx < dy ? dy : dx;
-        win->selectionRect.dx += 2 * (dx < dy ? dy : dx);
-        win->selectionRect.dy += 2 * (dx < dy ? dy : dx);
-    } else {
-        win->selectionRect = Rect::FromXY(win->selectionRect.x, win->selectionRect.y, x, y);
-    }
-
+    win->selectionRect = Rect::FromXY(win->selectionRect.x, win->selectionRect.y, x, y);
     if (aborted || (MouseAction::Selecting == win->mouseAction ? win->selectionRect.IsEmpty()
                                                                : !win->CurrentTab()->selectionOnPage)) {
         DeleteOldSelectionInfo(win, true);

@@ -101,6 +101,13 @@
 #if defined(min) || defined(max)
 #error "min or max defined"
 #endif
+// mingw's gdiplus.h includes <math.h> which in C++ pulls in <cmath>/<limits>
+// that use min/max as identifiers; pre-include them before defining macros
+#ifdef __GNUC__
+#include <cmath>
+#include <algorithm>
+#include <limits>
+#endif
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #define max(x, y) ((x) > (y) ? (x) : (y))
 #include <gdiplus.h>
@@ -224,17 +231,8 @@ inline void CrashMe() {
 // rare cases where we really want to know a given condition happens. Before
 // each release we should audit the uses of ReportAlwaysIf()
 
-// in release builds ReportIf()/ReportIfQuick() will break if running under
-// the debugger. In other builds it send a debug report
-#undef UPLOAD_REPORT
-#if defined(PRE_RELEASE_VER) || defined(DEBUG) || defined(ASAN_BUILD)
-#define UPLOAD_REPORT
-#endif
-
 extern void _uploadDebugReport(const char*, bool, bool);
-void BreakIfUnderDebugger();
 
-#ifdef UPLOAD_REPORT
 #define ReportIfCond(cond, condStr, isCrash, captureCallstack)      \
     __analysis_assume(!(cond));                                     \
     do {                                                            \
@@ -242,19 +240,14 @@ void BreakIfUnderDebugger();
             _uploadDebugReport(condStr, isCrash, captureCallstack); \
         }                                                           \
     } while (0)
-#else
-// version that is a no-op
-#define ReportIfCond(cond, x, y, z) \
-    __analysis_assume(!(cond));     \
-    do {                            \
-        if (cond) {                 \
-            BreakIfUnderDebugger(); \
-        }                           \
-    } while (0)
-#endif
 
 #define ReportIf(cond) ReportIfCond(cond, #cond, false, true)
-#define ReportIfQuick(cond) ReportIfCond(cond, #cond, false, false)
+#define ReportIfFast(cond) ReportIfCond(cond, #cond, false, false)
+#if defined(DEBUG)
+#define ReportDebugIf(cond) ReportIfCond(cond, #cond, false, true)
+#else
+#define ReportDebugIf(cond)
+#endif
 
 void* AllocZero(size_t count, size_t size);
 
@@ -286,9 +279,48 @@ float limitValue(float val, float min, float max);
 // return true if adding n to val overflows. Only valid for n > 0
 template <typename T>
 inline bool addOverflows(T val, T n) {
-    ReportIf(!(n > 0));
+    if (n == 0 || val == 0) {
+        return true;
+    }
+    ReportIf(n < 0);
+    ReportIf(val < 0);
     T res = val + n;
     return val > res;
+}
+
+// return false if adding n to val overflows. Only valid for n > 0
+template <typename T>
+inline bool addSafe(T* valInOut, T n) {
+    if (n == 0 || *valInOut == 0) {
+        valInOut = 0;
+        return true;
+    }
+    ReportIf(n < 0);
+    ReportIf(*valInOut < 0);
+    T res = *valInOut + n;
+    if (res < *valInOut) {
+        return false;
+    }
+    *valInOut = res;
+    return true;
+}
+
+// return false if multiplying val by n overflows. Only valid for n > 0
+template <typename T>
+inline bool mulSafe(T* valInOut, T n) {
+    if (n == 0 || *valInOut == 0) {
+        *valInOut = 0;
+        return true;
+    }
+    ReportIf(n < 0);
+    ReportIf(*valInOut < 0);
+    T res = *valInOut * n;
+    if (res < *valInOut || res < n) {
+        // multiplication overflowed
+        return false;
+    }
+    *valInOut = res;
+    return true;
 }
 
 void* memdup(const void* data, size_t len, size_t extraBytes = 0);
@@ -304,9 +336,53 @@ int RoundUp(int n, int rounding);
 char* RoundUp(char*, int rounding);
 
 template <typename T>
-void ListInsert(T** root, T* el) {
+void ListDelete(T* root) {
+    T* next;
+    T* curr = root;
+    while (curr) {
+        next = curr->next;
+        delete curr;
+        curr = next;
+    }
+}
+
+template <typename T>
+void ListInsertFront(T** root, T* el) {
     el->next = *root;
     *root = el;
+}
+
+template <typename T>
+void ListInsertEnd(T** root, T* el) {
+    el->next = nullptr;
+    if (!*root) {
+        *root = el;
+        return;
+    }
+    T** prevPtr = root;
+    T** currPtr = root;
+    T* curr;
+    while (*currPtr) {
+        prevPtr = currPtr;
+        curr = *currPtr;
+        currPtr = &(curr->next);
+    }
+    T* prev = *prevPtr;
+    prev->next = el;
+}
+
+template <typename T>
+void ListReverse(T** root) {
+    T* newRoot = nullptr;
+    T* next;
+    T* el = *root;
+    while (el) {
+        next = el->next;
+        el->next = newRoot;
+        newRoot = el;
+        el = next;
+    }
+    *root = newRoot;
 }
 
 template <typename T>
@@ -365,6 +441,22 @@ struct Allocator {
     static void* MemDup(Allocator* a, const void* mem, size_t size, size_t extraBytes = 0);
 };
 
+using AtomicBool = volatile LONG;
+bool AtomicBoolGet(AtomicBool* v);
+bool AtomicBoolSet(AtomicBool* v, bool newValue);
+
+using AtomicInt = volatile LONG;
+int AtomicIntSet(AtomicInt* v, int n);
+int AtomicIntInc(AtomicInt* v);
+int AtomicIntDec(AtomicInt* v);
+int AtomicIntAdd(AtomicInt* v, int n);
+int AtomicIntSub(AtomicInt* v, int n);
+int AtomicIntGet(AtomicInt* v);
+
+using AtomicRefCount = volatile LONG;
+int AtomicRefCountAdd(AtomicRefCount* v);
+int AtomicRefCountDec(AtomicRefCount* v);
+
 // PoolAllocator is for the cases where we need to allocate pieces of memory
 // that are meant to be freed together. It simplifies the callers (only need
 // to track this object and not all allocated pieces). Allocation and freeing
@@ -396,6 +488,13 @@ struct PoolAllocator : Allocator {
     Block* firstBlock = nullptr;
     int nAllocs = 0;
     CRITICAL_SECTION cs;
+
+    // statistics
+    AtomicInt totalAllocs;         // total number of allocations (never reset)
+    AtomicInt totalAllocatedSize;  // total bytes allocated (never reset)
+    AtomicInt maxAllocsSinceReset; // max allocations between Reset() calls
+    AtomicInt maxMemSinceReset;    // max memory between Reset() calls
+    int currAllocatedSize = 0;     // current allocated memory since last Reset()
 
     PoolAllocator();
 
@@ -431,13 +530,9 @@ struct PoolAllocator : Allocator {
             idx = startIdx;
         }
 
-        bool operator!=(const Iter& other) const {
-            return idx != other.idx;
-        }
+        bool operator!=(const Iter& other) const { return idx != other.idx; }
 
-        T* operator*() const {
-            return (T*)self->At(idx);
-        }
+        T* operator*() const { return (T*)self->At(idx); }
 
         Iter& operator++() {
             idx += 1;
@@ -458,20 +553,11 @@ struct PoolAllocator : Allocator {
 struct HeapAllocator : Allocator {
     HANDLE allocHeap = nullptr;
 
-    explicit HeapAllocator(size_t initialSize = 128 * 1024) : allocHeap(HeapCreate(0, initialSize, 0)) {
-    }
-    ~HeapAllocator() override {
-        HeapDestroy(allocHeap);
-    }
-    void* Alloc(size_t size) override {
-        return HeapAlloc(allocHeap, 0, size);
-    }
-    void* Realloc(void* mem, size_t size) override {
-        return HeapReAlloc(allocHeap, 0, mem, size);
-    }
-    void Free(const void* mem) override {
-        HeapFree(allocHeap, 0, (void*)mem);
-    }
+    explicit HeapAllocator(size_t initialSize = 128 * 1024) : allocHeap(HeapCreate(0, initialSize, 0)) {}
+    ~HeapAllocator() override { HeapDestroy(allocHeap); }
+    void* Alloc(size_t size) override { return HeapAlloc(allocHeap, 0, size); }
+    void* Realloc(void* mem, size_t size) override { return HeapReAlloc(allocHeap, 0, mem, size); }
+    void Free(const void* mem) override { HeapFree(allocHeap, 0, (void*)mem); }
 
     HeapAllocator(const HeapAllocator&) = delete;
     HeapAllocator& operator=(const HeapAllocator&) = delete;
@@ -495,9 +581,7 @@ class FixedArray {
         }
     }
 
-    ~FixedArray() {
-        free(memBuf);
-    }
+    ~FixedArray() { free(memBuf); }
 
     T* Get() {
         if (memBuf) {
@@ -533,11 +617,9 @@ Kind kindFoo = "foo";
 using Kind = const char*;
 
 struct KindBase {
-    Kind kind;
+    Kind kind = nullptr;
 
-    Kind GetKind() const {
-        return kind;
-    }
+    Kind GetKind() const { return kind; }
 };
 
 inline bool isOfKindHelper(Kind k1, Kind k2) {
@@ -559,9 +641,7 @@ struct ExitScope {
     T lambda;
     ExitScope(T lambda) : lambda(lambda) { // NOLINT
     }
-    ~ExitScope() {
-        lambda();
-    }
+    ~ExitScope() { lambda(); }
     ExitScope(const ExitScope&);
 
   private:
@@ -576,25 +656,10 @@ class ExitScopeHelp {
     }
 };
 
-// it's 32-bit value which we cast to int for ease of use
-struct AtomicInt {
-    AtomicInt() = default;
-    ~AtomicInt() = default;
-    int Set(int n);
-    int Inc();
-    int Dec();
-    int Add(int n);
-    int Sub(int n);
-    int Get() const;
-
-  private:
-    volatile LONG val = 0;
-};
-
 using func0Ptr = void (*)(void*);
 using funcVoidPtr = void (*)();
 
-#define kVoidFuncNoArg (void*)-1
+#define kFuncNoArg (void*)-1
 
 // the simplest possible function that ties a function and a single argument to it
 // we get type safety and convenience with mkFunc()
@@ -618,17 +683,13 @@ struct Func0 {
     }
     ~Func0() = default;
 
-    bool IsEmpty() const {
-        return fn == nullptr;
-    }
-    bool IsValid() const {
-        return fn != nullptr;
-    }
+    bool IsEmpty() const { return fn == nullptr; }
+    bool IsValid() const { return fn != nullptr; }
     void Call() const {
         if (!fn) {
             return;
         }
-        if (userData == kVoidFuncNoArg) {
+        if (userData == kFuncNoArg) {
             auto func = (funcVoidPtr)fn;
             func();
             return;
@@ -642,8 +703,21 @@ Func0 MkFunc0Void(funcVoidPtr fn);
 template <typename T>
 Func0 MkFunc0(void (*fn)(T*), T* d) {
     auto res = Func0{};
-    res.fn = (func0Ptr)fn;
+    res.fn = (void*)fn;
     res.userData = (void*)d;
+    return res;
+}
+
+template <typename T, void (T::*Method)()>
+static void MethodTrampoline(void* obj) {
+    (static_cast<T*>(obj)->*Method)();
+}
+
+template <typename T, void (T::*Method)()>
+Func0 MkMethod0(T* obj) {
+    auto res = Func0{};
+    res.fn = (void*)&MethodTrampoline<T, Method>;
+    res.userData = (void*)obj;
     return res;
 }
 
@@ -668,17 +742,13 @@ struct Func1 {
     }
     ~Func1() = default;
 
-    bool IsValid() const {
-        return fn != nullptr;
-    }
-    bool IsEmpty() const {
-        return fn == nullptr;
-    }
+    bool IsValid() const { return fn != nullptr; }
+    bool IsEmpty() const { return fn == nullptr; }
     void Call(T arg) const {
         if (!fn) {
             return;
         }
-        if (userData == kVoidFuncNoArg) {
+        if (userData == kFuncNoArg) {
             using fptr = void (*)(T);
             auto func = (fptr)fn;
             func(arg);
@@ -687,6 +757,20 @@ struct Func1 {
         fn(userData, arg);
     }
 };
+
+template <typename T, typename TArg, void (T::*Method)(TArg)>
+static void MethodTrampoline1(void* obj, TArg arg) {
+    (static_cast<T*>(obj)->*Method)(arg);
+}
+
+template <typename T, typename TArg, void (T::*Method)(TArg)>
+Func1<TArg> MkMethod1(T* obj) {
+    auto res = Func1<TArg>{};
+    using fptr = void (*)(void*, TArg);
+    res.fn = (fptr)&MethodTrampoline1<T, TArg, Method>;
+    res.userData = (void*)obj;
+    return res;
+}
 
 template <typename T1, typename T2>
 Func1<T2> MkFunc1(void (*fn)(T1*, T2), T1* d) {
@@ -702,7 +786,7 @@ Func1<T2> MkFunc1Void(void (*fn)(T2)) {
     auto res = Func1<T2>{};
     using fptr = void (*)(void*, T2);
     res.fn = (fptr)fn;
-    res.userData = kVoidFuncNoArg;
+    res.userData = kFuncNoArg;
     return res;
 }
 
@@ -715,29 +799,7 @@ Func1<T2>* NewFunc1(void (*fn)(T1*, T2), T1* d) {
     return res;
 }
 
-class AtomicBool {
-  public:
-    AtomicBool() = default;
-    ~AtomicBool() = default;
-    bool Get() const;
-    bool Set(bool newValue);
-
-  private:
-    volatile LONG val = 0;
-};
-
-struct AtomicRefCount {
-    AtomicRefCount() = default;
-    ~AtomicRefCount() = default;
-    int Add();
-    // returns true if counter reaches 0, meaning it has been released
-    // by all who held a reference to it
-    bool Dec();
-
-  private:
-    // starts life as acquired
-    volatile LONG val = 1;
-};
+int setMinMax(int& v, int minVal, int maxVal);
 
 #define defer const auto& CONCAT(defer__, __LINE__) = ExitScopeHelp() + [&]()
 

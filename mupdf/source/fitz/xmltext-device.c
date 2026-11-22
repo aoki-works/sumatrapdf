@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -137,11 +137,7 @@ fz_xmltext_text(fz_context *ctx, fz_device *dev_, const fz_text *text, fz_matrix
 		for (i=0; i<span->len; ++i)
 		{
 			fz_text_item *item = &span->items[i];
-			float adv = 0;
-			if (span->items[i].gid >= 0)
-			{
-				adv = fz_advance_glyph(ctx, span->font, span->items[i].gid, span->wmode);
-			}
+
 			s_xml_starttag_begin(ctx, dev->out, "char");
 			s_write_attribute_float(ctx, dev->out, "x", item->x);
 			s_write_attribute_float(ctx, dev->out, "y", item->y);
@@ -156,7 +152,7 @@ fz_xmltext_text(fz_context *ctx, fz_device *dev_, const fz_text *text, fz_matrix
 				(item->ucs >= 32 && item->ucs < 128 && item->ucs != '"')
 					? item->ucs : ' '
 				);
-			s_write_attribute_float(ctx, dev->out, "adv", adv);
+			s_write_attribute_float(ctx, dev->out, "adv", span->items[i].adv);
 			s_xml_starttag_empty_end(ctx, dev->out);
 		}
 
@@ -245,6 +241,15 @@ static void fz_xmltext_fill_image(fz_context *ctx, fz_device *dev_, fz_image *im
 				s_write_attribute_int(ctx, dev->out, "colors", compressed->params.u.flate.colors);
 				s_write_attribute_int(ctx, dev->out, "predictor", compressed->params.u.flate.predictor);
 				s_write_attribute_int(ctx, dev->out, "bpc", compressed->params.u.flate.bpc);
+			}
+			else if (compressed->params.type == FZ_IMAGE_BROTLI)
+			{
+				type = "brotli";
+				s_write_attribute_string(ctx, dev->out, "type", type);
+				s_write_attribute_int(ctx, dev->out, "columns", compressed->params.u.brotli.columns);
+				s_write_attribute_int(ctx, dev->out, "colors", compressed->params.u.brotli.colors);
+				s_write_attribute_int(ctx, dev->out, "predictor", compressed->params.u.brotli.predictor);
+				s_write_attribute_int(ctx, dev->out, "bpc", compressed->params.u.brotli.bpc);
 			}
 			else if (compressed->params.type == FZ_IMAGE_LZW)
 			{

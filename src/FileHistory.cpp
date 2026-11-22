@@ -43,26 +43,6 @@ constexpr size_t kFileHistoryMaxFiles = 1000;
 
 FileHistory gFileHistory;
 
-// sorts the most often used files first
-static int cmpOpenCount(const void* a, const void* b) {
-    FileState* dsA = *(FileState**)a;
-    FileState* dsB = *(FileState**)b;
-    // sort pinned documents before unpinned ones
-    if (dsA->isPinned != dsB->isPinned) {
-        return dsA->isPinned ? -1 : 1;
-    }
-    // sort pinned documents alphabetically
-    if (dsA->isPinned) {
-        return str::CmpNatural(path::GetBaseNameTemp(dsA->filePath), path::GetBaseNameTemp(dsB->filePath));
-    }
-    // sort often opened documents first
-    if (dsA->openCount != dsB->openCount) {
-        return dsB->openCount - dsA->openCount;
-    }
-    // use recency as the criterion in case of equal open counts
-    return dsA->index < dsB->index ? -1 : 1;
-}
-
 void FileHistory::Append(FileState* fs) const {
     ReportIf(!fs->filePath);
     states->Append(fs);
@@ -86,7 +66,7 @@ void FileHistory::Clear(bool keepFavorites) const {
             states->at(i)->openCount = 0;
             keep.Append(states->at(i));
         } else {
-            DeleteDisplayState(states->at(i));
+            DeleteFileState(states->at(i));
         }
     }
     *states = keep;
@@ -125,7 +105,7 @@ FileState* FileHistory::FindByName(const char* filePath, size_t* idxOut) const {
         FileState* fs = states->at(i);
         if (str::EqI(fs->filePath, filePath)) {
             idxExact = i;
-        } else if (str::EndsWithI(fs->filePath, fileName)) {
+        } else if (str::EqI(path::GetBaseNameTemp(fs->filePath), fileName)) {
             idxFileNameMatch = i;
         }
     }
@@ -149,7 +129,7 @@ FileState* FileHistory::MarkFileLoaded(const char* filePath) const {
     // the file moves to the front of the list
     FileState* fs = FindByPath(filePath);
     if (!fs) {
-        fs = NewDisplayState(filePath);
+        fs = NewFileState(filePath);
         fs->useDefaultState = true;
     } else {
         states->Remove(fs);
@@ -190,6 +170,26 @@ bool FileHistory::MarkFileInexistent(const char* filePath, bool hide) const {
     return true;
 }
 
+// sorts the most often used files first
+static int cmpOpenCount(const void* a, const void* b) {
+    FileState* dsA = *(FileState**)a;
+    FileState* dsB = *(FileState**)b;
+    // sort pinned documents before unpinned ones
+    if (dsA->isPinned != dsB->isPinned) {
+        return dsA->isPinned ? -1 : 1;
+    }
+    // sort pinned documents alphabetically
+    if (dsA->isPinned) {
+        return str::CmpNatural(path::GetBaseNameTemp(dsA->filePath), path::GetBaseNameTemp(dsB->filePath));
+    }
+    // sort often opened documents first
+    if (dsA->openCount != dsB->openCount) {
+        return dsB->openCount - dsA->openCount;
+    }
+    // use recency as the criterion in case of equal open counts
+    return dsA->index < dsB->index ? -1 : 1;
+}
+
 // returns a shallow copy of the file history list, sorted
 // by open count (which has a pre-multiplied recency factor)
 // and with all missing states filtered out
@@ -204,6 +204,34 @@ void FileHistory::GetFrequencyOrder(Vec<FileState*>& list) const {
         }
     }
     list.Sort(cmpOpenCount);
+}
+
+// sorts recently opened files first
+static int cmpRecentlyOpened(const void* a, const void* b) {
+    FileState* dsA = *(FileState**)a;
+    FileState* dsB = *(FileState**)b;
+    // sort pinned documents before unpinned ones
+    if (dsA->isPinned != dsB->isPinned) {
+        return dsA->isPinned ? -1 : 1;
+    }
+    // sort pinned documents alphabetically
+    if (dsA->isPinned) {
+        return str::CmpNatural(path::GetBaseNameTemp(dsA->filePath), path::GetBaseNameTemp(dsB->filePath));
+    }
+    // use recency as the criterion in case of equal open counts
+    return dsA->index < dsB->index ? -1 : 1;
+}
+
+void FileHistory::GetRecentlyOpenedOrder(Vec<FileState*>& list) const {
+    ReportIf(list.size() > 0);
+    size_t i = 0;
+    for (FileState* ds : *states) {
+        ds->index = i++;
+        if (!ds->isMissing || ds->isPinned) {
+            list.Append(ds);
+        }
+    }
+    list.Sort(cmpRecentlyOpened);
 }
 
 // removes file history entries which shouldn't be saved anymore
@@ -241,7 +269,7 @@ void FileHistory::Purge(bool alwaysUseDefaultState) const {
         } else {
             continue;
         }
-        DeleteDisplayState(state);
+        DeleteFileState(state);
     }
 }
 
@@ -283,14 +311,19 @@ static bool shouldDeleteThumbnail = false;
 void CleanUpThumbnailCache() {
     const FileHistory& fileHistory = gFileHistory;
     TempStr thumbsDir = GetThumbnailCacheDirTemp();
-    TempStr pattern = path::JoinTemp(thumbsDir, "*.png");
 
     StrVec filePaths;
-    bool ok = CollectPathsFromDirectory(pattern, filePaths);
-    if (!ok || filePaths.IsEmpty()) {
+    DirIter di{thumbsDir};
+    for (DirIterEntry* de : di) {
+        if (path::Match(de->filePath, "*.png")) {
+            filePaths.Append(de->filePath);
+        }
+    }
+    if (filePaths.IsEmpty()) {
         return;
     }
 
+    bool ok;
     // remove files that should not be deleted
     Vec<FileState*> list;
     fileHistory.GetFrequencyOrder(list);
@@ -310,8 +343,8 @@ void CleanUpThumbnailCache() {
     }
 
     for (char* path : filePaths) {
-        logf("CleanUpThumbnailCache: deleting '%s'\n", path);
         if (shouldDeleteThumbnail) {
+            logf("CleanUpThumbnailCache: deleting '%s'\n", path);
             file::Delete(path);
         }
     }

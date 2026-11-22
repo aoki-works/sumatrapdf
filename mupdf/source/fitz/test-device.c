@@ -145,7 +145,7 @@ prepare_vertex(fz_context *ctx, void *arg_, fz_vertex *v, const float *color)
 	struct shadearg *arg = arg_;
 	fz_test_device *dev = arg->dev;
 	fz_shade *shade = arg->shade;
-	if (!shade->use_function)
+	if (shade->function_stride == 0)
 		fz_test_color(ctx, dev, shade->colorspace, color, arg->color_params);
 }
 
@@ -170,11 +170,12 @@ fz_test_fill_shade(fz_context *ctx, fz_device *dev_, fz_shade *shade, fz_matrix 
 		}
 		else
 		{
-			if (shade->use_function)
+			int stride = shade->function_stride;
+			if (stride)
 			{
 				int i;
 				for (i = 0; i < 256; i++)
-					fz_test_color(ctx, dev, shade->colorspace, shade->function[i], color_params);
+					fz_test_color(ctx, dev, shade->colorspace, &shade->function[i*stride], color_params);
 			}
 			else
 			{
@@ -218,7 +219,7 @@ static void fz_test_fill_compressed_8bpc_image(fz_context *ctx, fz_test_device *
 		fz_color_converter cc;
 		unsigned int n = (unsigned int)image->n;
 
-		fz_init_cached_color_converter(ctx, &cc, image->colorspace, fz_device_rgb(ctx), NULL, color_params);
+		fz_init_cached_color_converter(ctx, &cc, image->colorspace, fz_device_rgb(ctx), NULL, NULL, color_params);
 
 		fz_try(ctx)
 		{
@@ -288,7 +289,7 @@ fz_test_fill_other_image(fz_context *ctx, fz_test_device *dev, fz_pixmap *pix, f
 		fz_color_converter cc;
 		unsigned int n = (unsigned int)pix->n-1;
 
-		fz_init_cached_color_converter(ctx, &cc, pix->colorspace, fz_device_rgb(ctx), NULL, color_params);
+		fz_init_cached_color_converter(ctx, &cc, pix->colorspace, fz_device_rgb(ctx), NULL, NULL, color_params);
 
 		fz_try(ctx)
 		{
@@ -494,12 +495,12 @@ fz_test_end_group(fz_context *ctx, fz_device *dev_)
 }
 
 static int
-fz_test_begin_tile(fz_context *ctx, fz_device *dev_, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id)
+fz_test_begin_tile(fz_context *ctx, fz_device *dev_, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id, int doc_id)
 {
 	fz_test_device *dev = (fz_test_device*)dev_;
 
 	if (dev->passthrough)
-		return fz_begin_tile_id(ctx, dev->passthrough, area, view, xstep, ystep, ctm, id);
+		return fz_begin_tile_tid(ctx, dev->passthrough, area, view, xstep, ystep, ctm, id, doc_id);
 	else
 		return 0;
 }

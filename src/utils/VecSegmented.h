@@ -15,18 +15,14 @@ struct VecSegmented {
 
     VecSegmented() = default;
 
-    ~VecSegmented() {
-        allocator.FreeAll();
-    }
+    ~VecSegmented() { allocator.FreeAll(); }
 
     T* AllocAtEnd() {
         void* p = allocator.Alloc(sizeof(T));
         return reinterpret_cast<T*>(p);
     }
 
-    size_t Size() const {
-        return allocator.nAllocs;
-    }
+    size_t Size() const { return allocator.nAllocs; }
 
     T* AtPtr(int i) {
         void* p = allocator.At(i);
@@ -39,10 +35,6 @@ struct VecSegmented {
         return elPtr;
     }
 
-    PoolAllocator::Iter<T> begin() {
-        return allocator.begin<T>();
-    }
-    PoolAllocator::Iter<T> end() {
-        return allocator.end<T>();
-    }
+    PoolAllocator::Iter<T> begin() { return allocator.begin<T>(); }
+    PoolAllocator::Iter<T> end() { return allocator.end<T>(); }
 };

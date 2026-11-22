@@ -10,7 +10,12 @@ typedef ar_archive* (*archive_opener_t)(ar_stream*);
 
 class MultiFormatArchive {
   public:
-    enum class Format { Zip, Rar, SevenZip, Tar };
+    enum class Format {
+        Zip,
+        Rar,
+        SevenZip,
+        Tar
+    };
 
     struct FileInfo {
         size_t fileId = 0;
@@ -58,9 +63,7 @@ class MultiFormatArchive {
 
     bool OpenUnrarFallback(const char* rarPathUtf);
     ByteSlice GetFileDataByIdUnarrDll(size_t fileId);
-    bool LoadedUsingUnrarDll() const {
-        return rarFilePath_ != nullptr;
-    }
+    bool LoadedUsingUnrarDll() const { return rarFilePath_ != nullptr; }
 };
 
 MultiFormatArchive* OpenZipArchive(const char* path, bool deflatedOnly);

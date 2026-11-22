@@ -159,8 +159,8 @@ static char* GetExistingInstallationFilePathTemp(const char* name) {
     return path::JoinTemp(dir, name);
 }
 
-char* GetInstallationFilePathTemp(const char* name) {
-    TempStr res = path::JoinTemp(gCli->installDir, name);
+char* GetInstallationFilePathTemp(const char* installDir, const char* name) {
+    TempStr res = path::JoinTemp(installDir, name);
     logf("GetInstallationFilePath(%s) = > %s\n", name, res);
     return res;
 }
@@ -236,12 +236,12 @@ void UninstallBrowserPlugin() {
 
 constexpr const char* kSearchFilterDllName = "PdfFilter.dll";
 
-void RegisterSearchFilter(bool allUsers) {
-    char* dllPath = GetInstallationFilePathTemp(kSearchFilterDllName);
+void RegisterSearchFilter(bool allUsers, const char* installDir) {
+    char* dllPath = GetInstallationFilePathTemp(installDir, kSearchFilterDllName);
     logf("RegisterSearchFilter() dllPath=%s\n", dllPath);
-    bool ok = InstallSearchFiler(dllPath, allUsers);
+    bool ok = InstallSearchFilter(dllPath, allUsers);
     if (ok) {
-        log("  did registe\n");
+        log("  did register\n");
         return;
     }
     log("  failed to register\n");
@@ -262,8 +262,8 @@ void UnRegisterSearchFilter() {
 
 constexpr const char* kPreviewDllName = "PdfPreview.dll";
 
-void RegisterPreviewer(bool allUsers) {
-    char* dllPath = GetInstallationFilePathTemp(kPreviewDllName);
+void RegisterPreviewer(bool allUsers, const char* installDir) {
+    char* dllPath = GetInstallationFilePathTemp(installDir, kPreviewDllName);
     logf("RegisterPreviewer() dllPath=%s\n", dllPath);
     bool ok = InstallPreviewDll(dllPath, allUsers);
     if (ok) {

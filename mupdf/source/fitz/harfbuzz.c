@@ -27,6 +27,8 @@
 
 #include "mupdf/fitz.h"
 
+#if FZ_ENABLE_HTML_ENGINE
+
 #include "hb.h"
 
 #include <assert.h>
@@ -125,7 +127,7 @@
 /* SumatraPDF: opening multiple epub files will crash because different threads will clobber
 * fz_hb_secret. Locking is not good enough
 */
-__declspec(thread) static fz_context* fz_hb_secret = NULL;
+__declspec(thread) static fz_context *fz_hb_secret = NULL;
 
 static void set_hb_context(fz_context *ctx)
 {
@@ -186,3 +188,5 @@ void fz_hb_free(void *ptr)
 
 	fz_free(ctx, ptr);
 }
+
+#endif

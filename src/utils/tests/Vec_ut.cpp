@@ -177,8 +177,7 @@ void VecTest() {
     {
         Vec<int> v;
         v.Append(2);
-        for (int i = 0; i < 500; i++)
-            v.Append(4);
+        for (int i = 0; i < 500; i++) v.Append(4);
         v.at(250) = 5;
         v.Reverse();
         utassert(v.size() == 501 && v.at(0) == 4 && v.at(249) == v.at(251) && v.at(250) == 5 && v.at(500) == 2);

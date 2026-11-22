@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -253,7 +253,7 @@ static void fmtquote(struct fmtbuf *out, const char *s, int sq, int eq, int verb
 					for (i = 0; i < n; ++i)
 						fmtputc(out, s[i]);
 				}
-				else
+				else if (c <= 0xffff)
 				{
 					fmtputc(out, '\\');
 					fmtputc(out, 'u');
@@ -261,6 +261,24 @@ static void fmtquote(struct fmtbuf *out, const char *s, int sq, int eq, int verb
 					fmtputc(out, "0123456789ABCDEF"[(c>>8)&15]);
 					fmtputc(out, "0123456789ABCDEF"[(c>>4)&15]);
 					fmtputc(out, "0123456789ABCDEF"[(c)&15]);
+				}
+				else
+				{
+					/* Use a surrogate pair */
+					int hi = 0xd800 + ((c - 0x10000) >> 10);
+					int lo = 0xdc00 + ((c - 0x10000) & 0x3ff);
+					fmtputc(out, '\\');
+					fmtputc(out, 'u');
+					fmtputc(out, "0123456789ABCDEF"[(hi>>12)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(hi>>8)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(hi>>4)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(hi)&15]);
+					fmtputc(out, '\\');
+					fmtputc(out, 'u');
+					fmtputc(out, "0123456789ABCDEF"[(lo>>12)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(lo>>8)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(lo>>4)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(lo)&15]);
 				}
 			} else {
 				if (c == sq || c == eq)
@@ -318,6 +336,123 @@ static void fmtquote_pdf(struct fmtbuf *out, const char *s, int sq, int eq)
 	fmtputc(out, eq);
 }
 
+int
+fz_is_valid_xml_char(int c)
+{
+	if (c == 9 || c == 10 || c == 13)
+		return 1;
+	if (c < 32)
+		return 0;
+	if (c < 0xd800)
+		return 1;
+	if (c < 0xe000)
+		return 0;
+	if (c <= 0xfffd)
+		return 1;
+	if (c < 0x10000)
+		return 0;
+	if (c <= 0x10FFFF)
+		return 1;
+	return 0;
+}
+
+int
+fz_is_valid_xml_string(const char *s)
+{
+	int c, n;
+	while (*s != 0) {
+		n = fz_chartorune(&c, s);
+		if (!fz_is_valid_xml_char(c))
+			return 0;
+		s += n;
+	}
+	return 1;
+}
+
+int
+fz_range_limit_xml_char(int c)
+{
+	if (fz_is_valid_xml_char(c))
+		return c;
+	return 0xFFFD;
+}
+
+static void fmtquote_xml(struct fmtbuf *out, const char *s)
+{
+	int c, n;
+	fmtputc(out, '"');
+	while (*s != 0) {
+		n = fz_chartorune(&c, s);
+		switch (c) {
+		case '"':
+			fmtputc(out, '&');
+			fmtputc(out, 'q');
+			fmtputc(out, 'u');
+			fmtputc(out, 'o');
+			fmtputc(out, 't');
+			fmtputc(out, ';');
+			break;
+		case '&':
+			fmtputc(out, '&');
+			fmtputc(out, 'a');
+			fmtputc(out, 'm');
+			fmtputc(out, 'p');
+			fmtputc(out, ';');
+			break;
+		case '<':
+			fmtputc(out, '&');
+			fmtputc(out, 'l');
+			fmtputc(out, 't');
+			fmtputc(out, ';');
+			break;
+		case '>':
+			fmtputc(out, '&');
+			fmtputc(out, 'g');
+			fmtputc(out, 't');
+			fmtputc(out, ';');
+			break;
+		default:
+			c = fz_range_limit_xml_char(c);
+			if (c < 32 || c >= 127)
+			{
+				fmtputc(out, '&');
+				fmtputc(out, '#');
+				fmtputc(out, 'x');
+				if (c > 65535)
+				{
+					fmtputc(out, "0123456789ABCDEF"[(c>>20)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(c>>16)&15]);
+				}
+				if (c > 255)
+				{
+					fmtputc(out, "0123456789ABCDEF"[(c>>12)&15]);
+					fmtputc(out, "0123456789ABCDEF"[(c>>8)&15]);
+				}
+				fmtputc(out, "0123456789ABCDEF"[(c>>4)&15]);
+				fmtputc(out, "0123456789ABCDEF"[(c)&15]);
+				fmtputc(out, ';');
+			}
+			else
+				fmtputc(out, c);
+			break;
+		}
+		s += n;
+	}
+	fmtputc(out, '"');
+}
+
+static void fmtquote_hex(struct fmtbuf *out, const char *s)
+{
+	int c;
+	fmtputc(out, '"');
+	while ((c = *s++) != 0)
+	{
+		fmtputc(out, "0123456789ABCDEF"[(c>>4)&15]);
+		fmtputc(out, "0123456789ABCDEF"[(c)&15]);
+	}
+	fmtputc(out, '"');
+}
+
 static void fmtname(struct fmtbuf *out, const char *s)
 {
 	int c;
@@ -337,7 +472,8 @@ void
 fz_format_string(fz_context *ctx, void *user, void (*emit)(fz_context *ctx, void *user, int c), const char *fmt, va_list args)
 {
 	struct fmtbuf out;
-	int c, s, z, p, w, q;
+	int c, s, z, p, ps, w, q;
+	int i, n;
 	int32_t i32;
 	int64_t i64;
 	const char *str;
@@ -397,6 +533,7 @@ fz_format_string(fz_context *ctx, void *user, void (*emit)(fz_context *ctx, void
 
 			/* precision */
 			p = 6;
+			ps = -1;
 			if (c == '.') {
 				c = *fmt++;
 				if (c == 0)
@@ -412,6 +549,7 @@ fz_format_string(fz_context *ctx, void *user, void (*emit)(fz_context *ctx, void
 						c = *fmt++;
 					}
 				}
+				ps = p;
 			}
 			if (c == 0)
 				break;
@@ -480,7 +618,7 @@ fz_format_string(fz_context *ctx, void *user, void (*emit)(fz_context *ctx, void
 					fmtputc(&out, c);
 				else {
 					char buf[10];
-					int i, n = fz_runetochar(buf, c);
+					n = fz_runetochar(buf, c);
 					for (i=0; i < n; ++i)
 						fmtputc(&out, buf[i]);
 				}
@@ -489,7 +627,6 @@ fz_format_string(fz_context *ctx, void *user, void (*emit)(fz_context *ctx, void
 				c = va_arg(args, int);
 				fmtputc(&out, c);
 				break;
-
 			case 'e':
 				fmtfloat_e(&out, va_arg(args, double), w, p);
 				break;
@@ -561,8 +698,16 @@ fz_format_string(fz_context *ctx, void *user, void (*emit)(fz_context *ctx, void
 				str = va_arg(args, const char*);
 				if (!str)
 					str = "(null)";
+				if (ps >= 0)
+				{
+					for (i=0; i < ps && ((c = *str++) != 0); ++i)
+						fmtputc(&out, c);
+				}
+				else
+				{
 				while ((c = *str++) != 0)
 					fmtputc(&out, c);
+				}
 				break;
 			case 'Q': /* quoted string (with verbatim unicode) */
 				str = va_arg(args, const char*);
@@ -573,6 +718,16 @@ fz_format_string(fz_context *ctx, void *user, void (*emit)(fz_context *ctx, void
 				str = va_arg(args, const char*);
 				if (!str) str = "";
 				fmtquote(&out, str, '"', '"', 0);
+				break;
+			case '<': /* quoted string for xml */
+				str = va_arg(args, const char*);
+				if (!str) str = "";
+				fmtquote_xml(&out, str);
+				break;
+			case '>': /* hex string */
+				str = va_arg(args, const char*);
+				if (!str) str = "";
+				fmtquote_hex(&out, str);
 				break;
 			case '(': /* pdf string */
 				str = va_arg(args, const char*);

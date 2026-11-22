@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -51,40 +51,65 @@ public class Document
 		pointer = p;
 	}
 
-	protected native static Document openNativeWithPath(String filename, String accelerator);
-	protected native static Document openNativeWithBuffer(String magic, byte[] buffer, byte[] accelerator);
-	protected native static Document openNativeWithStream(String magic, SeekableInputStream stream, SeekableInputStream accelerator);
-	protected native static Document openNativeWithPathAndStream(String filename, SeekableInputStream accelerator);
-
+	protected native static Document openNativeWithPath(String filename, String accelerator, Archive dir);
+	protected native static Document openNativeWithBuffer(byte[] buffer, String magic, byte[] accelerator, Archive dir);
+	protected native static Document openNativeWithStream(SeekableInputStream stream, String magic, SeekableInputStream accelerator, Archive dir);
+	protected native static Document openNativeWithPathAndStream(String filename, SeekableInputStream accelerator, Archive dir);
 	public static Document openDocument(String filename) {
-		return openNativeWithPath(filename, null);
+		return openNativeWithPath(filename, null, null);
 	}
-
+	public static Document openDocument(String filename, Archive dir) {
+		return openNativeWithPath(filename, null, dir);
+	}
 	public static Document openDocument(String filename, String accelerator) {
-		return openNativeWithPath(filename, accelerator);
+		return openNativeWithPath(filename, accelerator, null);
 	}
-
-	public static Document openDocument(String filename, SeekableInputStream accelerator) {
-		return openNativeWithPathAndStream(filename, accelerator);
+	public static Document openDocument(String filename, String accelerator, Archive dir) {
+		return openNativeWithPath(filename, accelerator, dir);
 	}
-
 	public static Document openDocument(byte[] buffer, String magic) {
-		return openNativeWithBuffer(magic, buffer, null);
+		return openNativeWithBuffer(buffer, magic, null, null);
 	}
-
+	public static Document openDocument(byte[] buffer, String magic, Archive dir) {
+		return openNativeWithBuffer(buffer, magic, null, dir);
+	}
 	public static Document openDocument(byte[] buffer, String magic, byte[] accelerator) {
-		return openNativeWithBuffer(magic, buffer, accelerator);
+		return openNativeWithBuffer(buffer, magic, accelerator, null);
 	}
-
+	public static Document openDocument(byte[] buffer, String magic, byte[] accelerator, Archive dir) {
+		return openNativeWithBuffer(buffer, magic, accelerator, dir);
+	}
 	public static Document openDocument(SeekableInputStream stream, String magic) {
-		return openNativeWithStream(magic, stream, null);
+		return openNativeWithStream(stream, magic, null, null);
 	}
-
+	public static Document openDocument(SeekableInputStream stream, String magic, Archive dir) {
+		return openNativeWithStream(stream, magic, null, dir);
+	}
 	public static Document openDocument(SeekableInputStream stream, String magic, SeekableInputStream accelerator) {
-		return openNativeWithStream(magic, stream, accelerator);
+		return openNativeWithStream(stream, magic, accelerator, null);
+	}
+	public static Document openDocument(SeekableInputStream stream, String magic, SeekableInputStream accelerator, Archive dir) {
+		return openNativeWithStream(stream, magic, accelerator, dir);
+	}
+	public static Document openDocument(String filename, SeekableInputStream accelerator) {
+		return openNativeWithPathAndStream(filename, accelerator, null);
+	}
+	public static Document openDocument(String filename, SeekableInputStream accelerator, Archive dir) {
+		return openNativeWithPathAndStream(filename, accelerator, dir);
 	}
 
 	public static native boolean recognize(String magic);
+	protected native static boolean recognizeContentWithPath(String filename);
+	protected native static boolean recognizeContentWithStream(SeekableInputStream stream, String magic, Archive dir);
+	public static boolean recognizeContent(String filename) {
+		return recognizeContentWithPath(filename);
+	}
+	public static boolean recognizeContent(SeekableInputStream stream, String magic) {
+		return recognizeContentWithStream(stream, magic, null);
+	}
+	public static boolean recognizeContent(SeekableInputStream stream, String magic, Archive dir) {
+		return recognizeContentWithStream(stream, magic, dir);
+	}
 
 	public native boolean supportsAccelerator();
 	public native void saveAccelerator(String filename);
@@ -192,8 +217,6 @@ public class Document
 		return -1;
 	}
 
-	public native Quad[][] search(int chapter, int page, String needle);
-
 	public native Location resolveLink(String uri);
 	public Location resolveLink(Outline link) {
 		return resolveLink(link.uri);
@@ -231,7 +254,7 @@ public class Document
 	public static final int PERMISSION_EDIT = (int) 'e';
 	public static final int PERMISSION_ANNOTATE = (int) 'n';
 	public static final int PERMISSION_FORM = (int) 'f';
-	public static final int PERMISSION_ACCESSBILITY = (int) 'y';
+	public static final int PERMISSION_ACCESSIBILITY = (int) 'y';
 	public static final int PERMISSION_ASSEMBLE = (int) 'a';
 	public static final int PERMISSION_PRINT_HQ = (int) 'h';
 
@@ -244,4 +267,6 @@ public class Document
 	public boolean isPDF() {
 		return false;
 	}
+
+	public native PDFDocument asPDF();
 }

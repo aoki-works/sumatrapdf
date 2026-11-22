@@ -32,7 +32,7 @@ bool HasBeenInstalled() {
         return false;
     }
 
-    TempStr exePath = GetExePathTemp();
+    TempStr exePath = GetSelfExePathTemp();
     if (!str::EndsWithI(installedPath, ".exe")) {
         installedPath = path::JoinTemp(installedPath, path::GetBaseNameTemp(exePath));
     }
@@ -62,7 +62,7 @@ static bool IsPathInDirSmart(const char* path, const char* dir) {
 }
 
 static bool IsExeInProgramFiles() {
-    TempStr exePath = GetExePathTemp();
+    TempStr exePath = GetSelfExePathTemp();
     TempStr dir = GetSpecialFolderTemp(CSIDL_PROGRAM_FILES);
     if (IsPathInDirSmart(exePath, dir)) {
         return true;
@@ -104,13 +104,20 @@ bool IsDllBuild() {
     return resSrc != nullptr;
 }
 
-// TODO: leaks
 static char* gAppDataDir = nullptr;
+
+void DeleteAppTools() {
+    str::FreePtr(&gAppDataDir);
+}
 
 void SetAppDataDir(const char* dir) {
     dir = path::NormalizeTemp(dir);
-    bool ok = dir::CreateAll(dir);
-    ReportIf(!ok);
+    // don't try to create root directories like d:\ (CreateAll would fail)
+    bool isRootDir = str::Len(dir) == 3 && dir[1] == ':' && dir[2] == '\\';
+    if (!isRootDir) {
+        bool ok = dir::CreateAll(dir);
+        ReportIf(!ok);
+    }
     str::ReplaceWithCopy(&gAppDataDir, dir);
 }
 
@@ -118,28 +125,27 @@ TempStr GetAppDataDirTemp() {
     if (gAppDataDir) {
         return gAppDataDir;
     }
-
-    TempStr dir;
-    if (IsRunningInPortableMode()) {
-        dir = GetExeDirTemp();
-    } else {
+    bool isPortable = IsRunningInPortableMode();
+    TempStr dir = nullptr;
+    if (isPortable) {
+        dir = GetSelfExeDirTemp();
+        // sometimes people put executable in directory like c:\windows
+        // and we can't write to it. in that case we'll fall back to %APPDATA%
+        if (!dir::HasWriteAccess(dir)) {
+            logf("GetAppDataDirTemp: no write access to '%s'\n", dir);
+            dir = nullptr;
+        }
+    }
+    if (!dir) {
         dir = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, true);
         if (!dir) {
-            ReportIf(!dir);
+            LogLastError();
+            ReportIf(true);
             dir = GetTempDirTemp(); // shouldn't happen, last chance thing
         }
         dir = path::JoinTemp(dir, kAppName);
-        // use a different path for store builds
-        if (gIsStoreBuild) {
-            // %APPLOCALDATA%/SumatraPDF Store
-            // %APPLOCALDATA%/SumatraPDF Store Preview
-            dir = str::JoinTemp(dir, " Store");
-            if (gIsPreReleaseBuild) {
-                dir = str::JoinTemp(dir, " Preview");
-            }
-        }
     }
-    logf("GetAppDataDirTemp(): '%s'\n", dir);
+    logf("GetAppDataDirTemp(): '%s'%s\n", dir, isPortable ? " (portable)" : "(installed)");
     SetAppDataDir(dir);
     return gAppDataDir;
 }
@@ -316,11 +322,9 @@ static TextEditor editorRules[] = {
     {
         "notepad.exe",
         "\"%f\"",
-        RegType::None,
-        nullptr,
-        nullptr,
-        "notepad.exe",
-        "notepad.exe \"%f\""
+        RegType::BinaryDir,
+        "Software\\Microsoft\\Windows NT\\CurrentVersion",
+        "SystemRoot",
     }
 };
 
@@ -538,7 +542,7 @@ static const WCHAR* Md5OfAppExe() {
         return str::Dup(gAppMd5.Get());
     }
 
-    auto appPath = GetExePathTemp();
+    auto appPath = GetSelfExePathTemp();
     if (appPath.empty()) {
         return {};
     }
@@ -643,79 +647,26 @@ const WCHAR* ExractUnrarDll() {
 }
 #endif
 
-constexpr double KB = 1024;
-constexpr double MB = (double)1024 * (double)1024;
-constexpr double GB = (double)1024 * (double)1024 * (double)1024;
-
 // Format the file size in a short form that rounds to the largest size unit
 // e.g. "3.48 GB", "12.38 MB", "23 KB"
-static TempStr FormatSizeSuccintTemp(i64 size) {
-    const char* unit = nullptr;
-    double s = (double)size;
-
-    if (s > GB) {
-        s = s / GB;
-        unit = _TRA("GB");
-    } else if (s > MB) {
-        s = s / MB;
-        unit = _TRA("MB");
-    } else {
-        s = s / KB;
-        unit = _TRA("KB");
-    }
-
-    char* sizestr = str::FormatFloatWithThousandSepTemp(s);
-    if (!unit) {
-        return sizestr;
-    }
-    return fmt::FormatTemp("%s %s", sizestr, unit);
-}
-
-// Format the file size in a short form that rounds to the largest size unit
-// e.g. "3.48 GB", "12.38 MB", "23 KB"
-// To be used in a context where translations are not yet available
-static TempStr FormatSizeSuccintNoTransTemp(i64 size) {
-    const char* unit = nullptr;
-    double s = (double)size;
-
-    if (s > GB) {
-        s = s / GB;
-        unit = "GB";
-    } else if (s > MB) {
-        s = s / MB;
-        unit = "MB";
-    } else {
-        s = s / KB;
-        unit = "KB";
-    }
-
-    char* sizestr = str::FormatFloatWithThousandSepTemp(s);
-    if (!unit) {
-        return sizestr;
-    }
-    return fmt::FormatTemp("%s %s", sizestr, unit);
+TempStr FormatSizeShortTransTemp(i64 size) {
+    const char* sizeUnits[3] = {
+        _TRA("GB"),
+        _TRA("MB"),
+        _TRA("KB"),
+    };
+    return str::FormatSizeShortTemp(size, sizeUnits);
 }
 
 // format file size in a readable way e.g. 1348258 is shown
 // as "1.29 MB (1,348,258 Bytes)"
-TempStr FormatFileSizeTemp(i64 size) {
+TempStr FormatFileSizeTransTemp(i64 size) {
     if (size <= 0) {
         return fmt::FormatTemp("%d", size);
     }
-    char* n1 = FormatSizeSuccintTemp(size);
+    char* n1 = FormatSizeShortTransTemp(size);
     char* n2 = str::FormatNumWithThousandSepTemp(size);
     return fmt::FormatTemp("%s (%s %s)", n1, n2, _TRA("Bytes"));
-}
-
-// format file size in a readable way e.g. 1348258 is shown
-// as "1.29 MB (1,348,258 Bytes)"
-TempStr FormatFileSizeNoTransTemp(i64 size) {
-    if (size <= 0) {
-        return str::FormatTemp("%d", (int)size);
-    }
-    char* n1 = FormatSizeSuccintNoTransTemp(size);
-    char* n2 = str::FormatNumWithThousandSepTemp(size);
-    return fmt::FormatTemp("%s (%s %s)", n1, n2, "Bytes");
 }
 
 // returns true if file exists
@@ -724,61 +675,15 @@ bool LaunchFileIfExists(const char* path) {
         return false;
     }
     if (!file::Exists(path)) {
+        logf("LaunchFileIfExists: !file::Exists('%s')\n", path);
         return false;
+    }
+    if (gIsStoreBuild) {
+        path = path::GetNonVirtualTemp(path);
+        logf("LaunchFileIfExists: gIsStoreBuild, path='%s'\n", path);
     }
     LaunchFileShell(path, nullptr, "open");
     return true;
-}
-
-// the only valid chars are 0-9, . and newlines.
-// a valid version has to match the regex /^\d+(\.\d+)*(\r?\n)?$/
-// Return false if it contains anything else.
-bool IsValidProgramVersion(const char* txt) {
-    if (!str::IsDigit(*txt)) {
-        return false;
-    }
-
-    for (; *txt; txt++) {
-        if (str::IsDigit(*txt)) {
-            continue;
-        }
-        if (*txt == '.' && str::IsDigit(*(txt + 1))) {
-            continue;
-        }
-        if (*txt == '\r' && *(txt + 1) == '\n') {
-            continue;
-        }
-        if (*txt == '\n' && !*(txt + 1)) {
-            continue;
-        }
-        return false;
-    }
-
-    return true;
-}
-
-static unsigned int ExtractNextNumber(const char** txt) {
-    unsigned int val = 0;
-    const char* next = str::Parse(*txt, "%u%?.", &val);
-    *txt = next ? next : *txt + str::Leni(*txt);
-    return val;
-}
-
-// compare two version string. Return 0 if they are the same,
-// > 0 if the first is greater than the second and < 0 otherwise.
-// e.g.
-//   0.9.3.900 is greater than 0.9.3
-//   1.09.300 is greater than 1.09.3 which is greater than 1.9.1
-//   1.2.0 is the same as 1.2
-int CompareVersion(const char* txt1, const char* txt2) {
-    while (*txt1 || *txt2) {
-        unsigned int v1 = ExtractNextNumber(&txt1);
-        unsigned int v2 = ExtractNextNumber(&txt2);
-        if (v1 != v2) {
-            return v1 - v2;
-        }
-    }
-    return 0;
 }
 
 // Updates the drive letter for a path that could have been on a removable drive,
@@ -837,12 +742,18 @@ bool IsUntrustedFile(const char* filePath, const char* fileURL) {
     return false;
 }
 
-// Draws the 'x' close button in regular state or onhover state
-// Tries to mimic visual style of Chrome tab close button
-void DrawCloseButton(HDC hdc, Rect& r, bool isHover) {
-    DrawCloseButtonArgs args;
-    args.hdc = hdc;
-    args.r = r;
-    args.isHover = isHover;
-    DrawCloseButton(args);
+// -1 : didn't check
+// 0  : checked and not signed
+// 1  : checked and signed
+static int gIsSigned = -1;
+
+bool IsSumatraSigned() {
+    if (gIsSigned < 0) {
+        gIsSigned = 0;
+        TempStr filePath = GetSelfExePathTemp();
+        if (IsPEFileSigned(filePath)) {
+            gIsSigned = 1;
+        }
+    }
+    return gIsSigned ? true : false;
 }

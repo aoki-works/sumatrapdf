@@ -4,7 +4,10 @@
 // class for decoding of byte buffer as a sequence of numbers
 class ByteOrderDecoder {
   public:
-    enum ByteOrder { LittleEndian, BigEndian };
+    enum ByteOrder {
+        LittleEndian,
+        BigEndian
+    };
 
     ByteOrderDecoder(const char* d, size_t len, ByteOrder order);
     ByteOrderDecoder(const u8* d, size_t len, ByteOrder order);
@@ -12,35 +15,23 @@ class ByteOrderDecoder {
     void Bytes(char* dst, size_t len);
 
     u8 UInt8();
-    char Char() {
-        return (char)UInt8();
-    }
+    char Char() { return (char)UInt8(); }
 
     u16 UInt16();
-    i16 Int16() {
-        return (i16)UInt16();
-    }
+    i16 Int16() { return (i16)UInt16(); }
 
     u32 UInt32();
-    i32 Int32() {
-        return (i32)UInt32();
-    }
+    i32 Int32() { return (i32)UInt32(); }
 
     u64 UInt64();
-    i64 Int64() {
-        return (i64)UInt64();
-    }
+    i64 Int64() { return (i64)UInt64(); }
 
     void Skip(size_t len);
     void Unskip(size_t len);
 
-    size_t Offset() const {
-        return curr - data;
-    }
+    size_t Offset() const { return curr - data; }
 
-    bool IsOk() const {
-        return ok;
-    };
+    bool IsOk() const { return ok; };
 
   protected:
     bool ok;

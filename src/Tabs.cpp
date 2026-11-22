@@ -24,6 +24,7 @@
 #include "GlobalPrefs.h"
 #include "SumatraPDF.h"
 #include "SumatraProperties.h"
+#include "Notifications.h"
 #include "MainWindow.h"
 #include "WindowTab.h"
 #include "resource.h"
@@ -135,7 +136,11 @@ void RemoveTab(WindowTab* tab) {
     }
     win->tabsCtrl->SetSelected(newIdx);
     tab = win->CurrentTab();
-    LoadModelIntoTab(tab);
+    // seen in crash report that tab was WindowTab::Type::None
+    // TODO: don't know how it could have happened
+    if (tab && tab->type != WindowTab::Type::None) {
+        LoadModelIntoTab(tab);
+    }
 #endif
 }
 
@@ -149,8 +154,23 @@ static void CloseWindowIfNoDocuments(MainWindow* win) {
     CloseWindow(win, true, true);
 }
 
-static void MigrateTab(WindowTab* tab, MainWindow* newWin) {
+static void MaybeMigrateTab(WindowTab* tab, MainWindow* newWin) {
     MainWindow* oldWin = tab->win;
+
+    // don't migrate if it's only one document tab and not
+    // dragging over a window
+    int nDocTabs = 0;
+    for (auto& t : oldWin->Tabs()) {
+        if (t->IsAboutTab()) continue;
+        nDocTabs++;
+    }
+    if (nDocTabs == 1 && !newWin) return;
+
+    auto engine = tab->GetEngine();
+    if (EngineHasUnsavedAnnotations(engine)) {
+        return;
+    }
+
     RemoveTab(tab);
 
     if (!newWin) {
@@ -169,12 +189,13 @@ static void MigrateTab(WindowTab* tab, MainWindow* newWin) {
     // newWin->ctrl = tab->ctrl;
     // UpdateUiForCurrentTab(newWin);
     // newWin->showSelection = tab->selectionOnPage != nullptr;
-    // SetFocus(newWin->hwndFrame);
+    // HwndSetFocus(newWin->hwndFrame);
     // newWin->RedrawAll(true);
     // TabsOnChangedDoc(newWin);
     WindowTab* newTab = new WindowTab(newWin);
     newTab->SetFilePath(tab->filePath);
     newWin->currentTabTemp = AddTabToWindow(newWin, newTab);
+    newWin->ctrl = nullptr;
     LoadArgs args(tab->filePath, newWin);
     args.forceReuse = true;
     args.noSavePrefs = true;
@@ -204,6 +225,8 @@ void TabsSelect(MainWindow* win, int tabIndex) {
         return;
     }
 
+    bool isShowingPageInfo = (GetNotificationForGroup(win->hwndCanvas, kNotifPageInfo) != nullptr);
+
     // same work as in onSelectionChanging and onSelectionChanged
     SaveCurrentWindowTab(win);
     int prevIdx = tabsCtrl->SetSelected(tabIndex);
@@ -212,6 +235,9 @@ void TabsSelect(MainWindow* win, int tabIndex) {
     }
     WindowTab* tab = tabs[tabIndex];
     LoadModelIntoTab(tab);
+    if (isShowingPageInfo) {
+        PostMessageW(win->hwndFrame, WM_COMMAND, CmdTogglePageInfo, 0);
+    }
 }
 
 // clang-format off
@@ -366,7 +392,7 @@ static void TabsContextMenu(ContextMenuEvent* ev) {
             break;
         }
         case CmdShowInFolder: {
-            SumatraOpenPathInExplorer(tabUnderMouse->filePath);
+            SumatraOpenPathInDefaultFileManager(tabUnderMouse->filePath);
             break;
         }
         case CmdCopyFilePath: {
@@ -398,9 +424,13 @@ static void MainWindowTabSelectionChanging(MainWindow* win, TabsCtrl::SelectionC
 }
 
 static void MainWindowTabSelectionChanged(MainWindow* win, TabsCtrl::SelectionChangedEvent* ev) {
+    bool isShowingPageInfo = (GetNotificationForGroup(win->hwndCanvas, kNotifPageInfo) != nullptr);
     int currentIdx = win->tabsCtrl->GetSelected();
     WindowTab* tab = win->Tabs()[currentIdx];
     LoadModelIntoTab(tab);
+    if (isShowingPageInfo) {
+        PostMessageW(win->hwndFrame, WM_COMMAND, CmdTogglePageInfo, 0);
+    }
 }
 
 static void MainWindowTabMigration(MainWindow* win, TabsCtrl::MigrationEvent* ev) {
@@ -417,24 +447,24 @@ static void MainWindowTabMigration(MainWindow* win, TabsCtrl::MigrationEvent* ev
         // don't re-add to the same window
         releaseWnd = nullptr;
     }
-    MigrateTab(tab, releaseWnd);
+    MaybeMigrateTab(tab, releaseWnd);
 }
 
 void CreateTabbar(MainWindow* win) {
-    TabsCtrl* tabsCtrl = new TabsCtrl();
-
-    tabsCtrl->onTabClosed = MkFunc1(MainWindowTabClosed, win);
-    tabsCtrl->onSelectionChanging = MkFunc1(MainWindowTabSelectionChanging, win);
-    tabsCtrl->onSelectionChanged = MkFunc1(MainWindowTabSelectionChanged, win);
-    tabsCtrl->onContextMenu = MkFunc1Void(TabsContextMenu);
-    tabsCtrl->onTabMigration = MkFunc1(MainWindowTabMigration, win);
-
     TabsCtrl::CreateArgs args;
     args.parent = win->hwndFrame;
     args.withToolTips = true;
     args.font = GetAppFont();
     int tabWidth = gGlobalPrefs->tabWidth;
     args.tabDefaultDx = tabWidth;
+    args.isRtl = IsUIRtl();
+
+    TabsCtrl* tabsCtrl = new TabsCtrl();
+    tabsCtrl->onTabClosed = MkFunc1(MainWindowTabClosed, win);
+    tabsCtrl->onSelectionChanging = MkFunc1(MainWindowTabSelectionChanging, win);
+    tabsCtrl->onSelectionChanged = MkFunc1(MainWindowTabSelectionChanged, win);
+    tabsCtrl->onContextMenu = MkFunc1Void(TabsContextMenu);
+    tabsCtrl->onTabMigration = MkFunc1(MainWindowTabMigration, win);
     tabsCtrl->Create(args);
     win->tabsCtrl = tabsCtrl;
     win->tabSelectionHistory = new Vec<WindowTab*>();
@@ -459,7 +489,7 @@ static NO_INLINE void VerifyWindowTab(MainWindow* win, WindowTab* tdata) {
             expectedTocVisibility = tdata->showTocPresentation;
         }
     }
-    ReportIf(win->tocVisible != expectedTocVisibility);
+    ReportDebugIf(win->tocVisible != expectedTocVisibility);
     ReportIf(tdata->canvasRc != win->canvasRc);
 }
 
@@ -467,6 +497,9 @@ static NO_INLINE void VerifyWindowTab(MainWindow* win, WindowTab* tdata) {
 // This happens when a new document is loaded or when another tab is selected.
 void SaveCurrentWindowTab(MainWindow* win) {
     if (!win) {
+        return;
+    }
+    if (!win->tabsCtrl) {
         return;
     }
 
@@ -479,7 +512,7 @@ void SaveCurrentWindowTab(MainWindow* win) {
     }
 
     WindowTab* tab = win->CurrentTab();
-    if (win->tocLoaded) {
+    if (win->tocLoaded && tab->ctrl) {
         TocTree* tocTree = tab->ctrl->GetToc();
         UpdateTocExpansionState(tab->tocState, win->tocTreeView, tocTree);
     }
@@ -493,6 +526,9 @@ void SaveCurrentWindowTab(MainWindow* win) {
 WindowTab* AddTabToWindow(MainWindow* win, WindowTab* tab) {
     ReportIf(!win);
     if (!win) {
+        return nullptr;
+    }
+    if (!win->tabsCtrl) {
         return nullptr;
     }
 
@@ -537,13 +573,23 @@ void TabsOnChangedDoc(MainWindow* win) {
         return;
     }
 
-    ReportIf(win->GetTabIdx(tab) != win->tabsCtrl->GetSelected());
+    int tabIdx = win->GetTabIdx(tab);
+    int selectedIdx = win->tabsCtrl->GetSelected();
+    if (tabIdx != selectedIdx) {
+        logf("TabsonChangeDoc: tabIdx (%d) != selectedIdx (%d)\n", tabIdx, selectedIdx);
+        ReportDebugIf(tabIdx != selectedIdx);
+    }
     VerifyWindowTab(win, tab);
     UpdateTabTitle(tab);
 }
 
 // Called when we're closing an entire window (quitting)
 void TabsOnCloseWindow(MainWindow* win) {
+    // TODO: I've seen a crash here where it seems like we've deleted the only main window
+    // but somehow we still process Esc and we get here. this might not be enough
+    if (!win->tabsCtrl) {
+        return;
+    }
     auto tabs = win->Tabs();
     DeleteVecMembers(tabs);
     win->tabsCtrl->RemoveAllTabs();
@@ -592,4 +638,22 @@ void TabsOnCtrlTab(MainWindow* win, bool reverse) {
     idx += count; // ensure > 0
     idx = idx % count;
     TabsSelect(win, idx);
+}
+
+void MoveTab(MainWindow* win, int dir) {
+    if (!win) {
+        return;
+    }
+    int nTabs = win->TabCount();
+    int idx = win->tabsCtrl->GetSelected();
+    int newIdx = idx + dir;
+    if (newIdx < 0) {
+        return;
+    }
+    if (newIdx >= nTabs) {
+        return;
+    }
+    win->tabsCtrl->SwapTabs(idx, newIdx);
+    win->tabsCtrl->SetSelected(newIdx);
+    win->tabsCtrl->LayoutTabs();
 }

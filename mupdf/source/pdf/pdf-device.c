@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -124,7 +124,11 @@ pdf_dev_stroke_state(fz_context *ctx, pdf_device *pdev, const fz_stroke_state *s
 
 	if (stroke_state == gs->stroke_state)
 		return;
-	if (gs->stroke_state && !memcmp(stroke_state, gs->stroke_state, sizeof(*stroke_state)))
+	if (gs->stroke_state &&
+		!memcmp(stroke_state, gs->stroke_state, sizeof(*stroke_state))
+		&& gs->stroke_state->dash_len == stroke_state->dash_len &&
+			(stroke_state->dash_len == 0 ||
+			!memcmp(&gs->stroke_state->dash_list[0], &stroke_state->dash_list[0], sizeof(stroke_state->dash_list[0]) * stroke_state->dash_len)))
 		return;
 	if (!gs->stroke_state || gs->stroke_state->linewidth != stroke_state->linewidth)
 	{
@@ -216,6 +220,28 @@ static void
 pdf_dev_path(fz_context *ctx, pdf_device *pdev, const fz_path *path)
 {
 	gstate *gs = CURRENT_GSTATE(pdev);
+	fz_rect bounds;
+
+	if (fz_path_is_rect_with_bounds(ctx, path, fz_identity, &bounds))
+	{
+		fz_append_printf(ctx, gs->buf, "%g %g %g %g re\n", bounds.x0, bounds.y0, bounds.x1-bounds.x0, bounds.y1-bounds.y0);
+		return;
+	}
+
+	fz_walk_path(ctx, path, &pdf_dev_path_proc, (void *)gs->buf);
+}
+
+static void
+pdf_dev_stroked_path(fz_context *ctx, pdf_device *pdev, const fz_path *path)
+{
+	gstate *gs = CURRENT_GSTATE(pdev);
+	fz_rect bounds;
+
+	if (fz_path_is_closed(ctx, path) && fz_path_is_rect_with_bounds(ctx, path, fz_identity, &bounds))
+	{
+		fz_append_printf(ctx, gs->buf, "%g %g %g %g re\n", bounds.x0, bounds.y0, bounds.x1-bounds.x0, bounds.y1-bounds.y0);
+		return;
+	}
 
 	fz_walk_path(ctx, path, &pdf_dev_path_proc, (void *)gs->buf);
 }
@@ -752,7 +778,7 @@ pdf_dev_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, const 
 	pdf_dev_color(ctx, pdev, colorspace, color, 1, color_params);
 	pdf_dev_ctm(ctx, pdev, ctm);
 	pdf_dev_stroke_state(ctx, pdev, stroke);
-	pdf_dev_path(ctx, pdev, path);
+	pdf_dev_stroked_path(ctx, pdev, path);
 	fz_append_string(ctx, gs->buf, "S\n");
 }
 
@@ -783,7 +809,7 @@ pdf_dev_clip_stroke_path(fz_context *ctx, fz_device *dev, const fz_path *path, c
 	 * with the next calls to the device interface until the next pop
 	 * when we pop the group. */
 	pdf_dev_ctm(ctx, pdev, ctm);
-	pdf_dev_path(ctx, pdev, path);
+	pdf_dev_stroked_path(ctx, pdev, path);
 	gs = CURRENT_GSTATE(pdev);
 	fz_append_string(ctx, gs->buf, "W n\n");
 }
@@ -817,6 +843,7 @@ pdf_dev_stroke_text(fz_context *ctx, fz_device *dev, const fz_text *text, const 
 	pdf_dev_ctm(ctx, pdev, ctm);
 	pdf_dev_alpha(ctx, pdev, alpha, 1);
 	pdf_dev_color(ctx, pdev, colorspace, color, 1, color_params);
+	pdf_dev_stroke_state(ctx, pdev, stroke);
 
 	for (span = text->head; span; span = span->next)
 	{
@@ -951,6 +978,8 @@ pdf_dev_fill_shade(fz_context *ctx, fz_device *dev, fz_shade *shade, fz_matrix c
 {
 	pdf_device *pdev = (pdf_device*)dev;
 
+	fz_warn(ctx, "the pdf device does not support shadings; output may be incomplete");
+
 	/* FIXME */
 	pdf_dev_end_text(ctx, pdev);
 }
@@ -997,6 +1026,8 @@ pdf_dev_clip_image_mask(fz_context *ctx, fz_device *dev, fz_image *image, fz_mat
 {
 	pdf_device *pdev = (pdf_device*)dev;
 
+	fz_warn(ctx, "the pdf device does not support image masks; output may be incomplete");
+
 	/* FIXME */
 	pdf_dev_end_text(ctx, pdev);
 	pdf_dev_push(ctx, pdev);
@@ -1030,6 +1061,8 @@ pdf_dev_begin_mask(fz_context *ctx, fz_device *dev, fz_rect bbox, int luminosity
 	fz_var(color_obj);
 
 	pdf_dev_end_text(ctx, pdev);
+
+	pdf_dev_ctm(ctx, pdev, fz_identity);
 
 	/* Make a new form to contain the contents of the softmask */
 	pdf_dev_new_form(ctx, &form_ref, pdev, bbox, 0, 0, 1, colorspace);
@@ -1100,18 +1133,23 @@ pdf_dev_begin_group(fz_context *ctx, fz_device *dev, fz_rect bbox, fz_colorspace
 
 	pdf_dev_end_text(ctx, pdev);
 
+	pdf_dev_ctm(ctx, pdev, fz_identity);
+
 	num = pdf_dev_new_form(ctx, &form_ref, pdev, bbox, isolated, knockout, alpha, cs);
 
 	/* Do we have an appropriate blending extgstate already? */
 	{
 		char text[32];
 		pdf_obj *obj;
-		fz_snprintf(text, sizeof(text), "ExtGState/BlendMode%d", blendmode);
-		obj = pdf_dict_getp(ctx, pdev->resources, text);
+		pdf_obj *egs = pdf_dict_get(ctx, pdev->resources, PDF_NAME(ExtGState));
+		if (egs == NULL)
+			egs = pdf_dict_put_dict(ctx, pdev->resources, PDF_NAME(ExtGState), 4);
+		fz_snprintf(text, sizeof(text), "BlendMode%d", blendmode);
+		obj = pdf_dict_gets(ctx, egs, text);
 		if (obj == NULL)
 		{
 			/* No, better make one */
-			obj = pdf_dict_puts_dict(ctx, pdev->resources, text, 2);
+			obj = pdf_dict_puts_dict(ctx, egs, text, 2);
 			pdf_dict_put(ctx, obj, PDF_NAME(Type), PDF_NAME(ExtGState));
 			pdf_dict_put_name(ctx, obj, PDF_NAME(BM), fz_blendmode_name(blendmode));
 		}
@@ -1143,9 +1181,11 @@ pdf_dev_end_group(fz_context *ctx, fz_device *dev)
 }
 
 static int
-pdf_dev_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id)
+pdf_dev_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id, int doc_id)
 {
 	pdf_device *pdev = (pdf_device*)dev;
+
+	fz_warn(ctx, "tiled patterns are not supported in the pdf-write device");
 
 	/* FIXME */
 	pdf_dev_end_text(ctx, pdev);

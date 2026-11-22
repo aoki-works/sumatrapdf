@@ -14,11 +14,12 @@ void ShowAboutWindow(MainWindow*);
 
 void DrawAboutPage(MainWindow* win, HDC hdc);
 
-char* GetStaticLinkTemp(Vec<StaticLinkInfo*>& linkInfo, int x, int y, StaticLinkInfo** info);
+TempStr GetStaticLinkAtTemp(Vec<StaticLink*>& linkInfo, int x, int y, StaticLink** info);
 
 constexpr const char* kLinkOpenFile = "<File,Open>";
 constexpr const char* kLinkShowList = "<View,ShowList>";
 constexpr const char* kLinkHideList = "<View,HideList>";
 
-void DrawHomePage(MainWindow* win, HDC hdc, const FileHistory& fileHistory, COLORREF textColor,
-                  COLORREF backgroundColor);
+void SetPromoString(const char*);
+
+void DrawHomePage(MainWindow* win, HDC hdc);

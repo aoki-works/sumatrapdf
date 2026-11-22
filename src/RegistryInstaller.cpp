@@ -14,14 +14,15 @@
 
 // All registry manipulation needed for installer / uninstaller
 
-// clang-format off
 // list of supported file extensions for which SumatraPDF.exe will
 // be registered as a candidate for the Open With dialog's suggestions
+// clang-format off
 static SeqStrings gSupportedExts = 
     ".pdf\0.xps\0.oxps\0.cbz\0.cbr\0.cb7\0.cbt\0" \
     ".djvu\0.chm\0.mobi\0.epub\0.azw\0.azw3\0.azw4\0" \
     ".fb2\0.fb2z\0.prc\0.tif\0.tiff\0.jp2\0.png\0" \
-    ".jpg\0.jpeg\0.tga\0.gif\0.avif\0.heic\0.webp\0";
+    ".jpg\0.jpeg\0.tga\0.gif\0.avif\0.heic\0.heif\0" \
+    ".jfif\0.webp\0";
 // clang-format on
 
 // notifies Shell that file associations changed.
@@ -38,17 +39,16 @@ static char* GetInstallDate() {
     return str::Format("%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
 }
 
-static void GetDirSizeCb(i64* totalSize, VisitDirData* data) {
-    i64 fileSize = GetFileSize(data->fd);
-    *totalSize += fileSize;
-}
-
 // Note: doesn't handle (total) sizes above 4GB
 static DWORD GetDirSize(const char* dir, bool recur) {
     logf("GetDirSize(%s)\n", dir);
     i64 totalSize = 0;
-    auto fn = MkFunc1(GetDirSizeCb, &totalSize);
-    DirTraverse(dir, recur, fn);
+    DirIter di{dir};
+    di.recurse = recur;
+    for (DirIterEntry* de : di) {
+        i64 fileSize = GetFileSize(de->fd);
+        totalSize += fileSize;
+    }
     return (DWORD)totalSize;
 }
 
@@ -287,7 +287,7 @@ UnregisterFromBeingDefaultViewer() and RemoveInstallRegistryKeys() in Installer.
 // TODO: this method no longer valid
 #if 0
 void DoAssociateExeWithPdfExtension(HKEY hkey) {
-    auto exePath = GetExePathTemp();
+    auto exePath = GetSelfExePathTemp();
     if (exePath.empty()) {
         return;
     }
@@ -404,7 +404,7 @@ bool IsExeAssociatedWithPdfExtension() {
         return false;
     }
 
-    auto exePath = GetExePathTemp().Get();
+    auto exePath = GetSelfExePathTemp().Get();
     if (!exePath || !str::Find(tmp, LR"("%1")")) {
         return false;
     }

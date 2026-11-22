@@ -2,6 +2,7 @@
 Support for accessing parse tree for MuPDF headers.
 '''
 
+import collections
 import os
 import sys
 import time
@@ -9,9 +10,10 @@ import time
 import jlib
 
 try:
-    import clang
+    import clang.cindex
 except ImportError as e:
-    jlib.log( 'Warning, could not import clang: {e}')
+    if '--venv' not in sys.argv:
+        jlib.log( 'Warning, could not import clang: {e}')
     clang = None
 
 from . import classes
@@ -487,6 +489,10 @@ class Arg:
 
 get_args_cache = dict()
 
+# get_args() needs to know how to get something hashable from a clang.cindex.Cursor.
+if clang:
+    g_cursor_is_hashable = issubclass(clang.cindex.Cursor, collections.abc.Hashable)
+
 def get_args( tu, cursor, include_fz_context=False, skip_first_alt=False, verbose=False):
     '''
     Yields Arg instance for each arg of the function at <cursor>.
@@ -509,7 +515,10 @@ def get_args( tu, cursor, include_fz_context=False, skip_first_alt=False, verbos
     #
     if verbose:
         jlib.log( '## Looking at args of {cursor.spelling=}')
-    key = tu, cursor.location.file, cursor.location.line, include_fz_context, skip_first_alt
+    if g_cursor_is_hashable:
+        key = tu, cursor, include_fz_context, skip_first_alt
+    else:
+        key = tu, cursor.location.file, cursor.location.line, include_fz_context, skip_first_alt
     ret = get_args_cache.get( key)
     if not verbose and state.state_.show_details(cursor.spelling):
         verbose = True
@@ -540,7 +549,7 @@ def get_args( tu, cursor, include_fz_context=False, skip_first_alt=False, verbos
                 if verbose:
                     jlib.log( '{extras.opaque=} {base_type_cursor.kind=} {base_type_cursor.is_definition()=}')
                 if extras.opaque:
-                    # E.g. we don't have access to defintion of fz_separation,
+                    # E.g. we don't have access to definition of fz_separation,
                     # but it is marked in classes.classextras with opaque=true,
                     # so there will be a wrapper class.
                     alt = base_type_cursor
@@ -874,7 +883,7 @@ def find_wrappable_function_with_arg0_type( tu, structname):
 
         First non-context param is <structname> (by reference, pointer or value).
 
-        If return type is a fz_* struc (by reference, pointer or value), the
+        If return type is a fz_* struct (by reference, pointer or value), the
         corresponding wrapper class has a raw constructor.
     '''
     find_wrappable_function_with_arg0_type_cache_populate( tu)

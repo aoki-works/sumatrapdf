@@ -14,7 +14,7 @@ SumatraPDF reader supports the following document types:
 - DjVu (.djv, .djvu)
 - Microsoft Compiled HTML Html (.chm)
 - XPS (.xps, .oxps, .xod);
-- images (.jpg, .png,.gif, .webp, .tiff, tga, .j2k, .bmp, .dib)
+- images (.jpg, .png, .gif, .webp, .tiff, tga, .j2k, .bmp, .dib)
 - HEIF (if codec installed, see below)
 
 If [Ghostscript](https://ghostscript.com/) is installed, we support PostScript (.ps, .eps) and PJL (Printer Job Language) files.

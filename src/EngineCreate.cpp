@@ -16,11 +16,13 @@
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
+#include "GlobalPrefs.h"
 #include "Flags.h"
 
 static bool gEnableEpubWithPdfEngine = true;
 
 bool IsSupportedFileType(Kind kind, bool enableEngineEbooks) {
+    if (!kind) return false;
     if (IsEngineMupdfSupportedFileType(kind)) {
         return true;
     } else if (IsEngineDjVuSupportedFileType(kind)) {
@@ -133,7 +135,7 @@ static EngineBase* CreateEngineForKind(Kind kind, const char* path, PasswordUI* 
         return engine;
     }
     if (kind == kindFileHTML) {
-        engine = CreateEnginePdbFromFile(path);
+        engine = CreateEngineHtmlFromFile(path);
         return engine;
     }
     return nullptr;
@@ -147,12 +149,16 @@ EngineBase* CreateEngineFromFile(const char* path, PasswordUI* pwdUI, bool enabl
     Kind kind = GuessFileTypeFromName(path);
     EngineBase* engine = CreateEngineForKind(kind, path, pwdUI, enableChmEngine);
     if (engine) {
+        engine->disableAntiAlias = gGlobalPrefs->disableAntiAlias;
         return engine;
     }
 
     Kind newKind = GuessFileTypeFromContent(path);
     if (kind != newKind) {
         engine = CreateEngineForKind(newKind, path, pwdUI, enableChmEngine);
+    }
+    if (engine) {
+        engine->disableAntiAlias = gGlobalPrefs->disableAntiAlias;
     }
     return engine;
 }

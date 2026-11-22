@@ -12,6 +12,8 @@ TempStr GetPathNoExtTemp(const char* path);
 TempStr GetDirTemp(const char* path);
 TempWStr GetDirTemp(const WCHAR* path);
 
+TempStr GetNonVirtualTemp(const char* virtualPath);
+
 char* Join(Allocator* allocator, const char* path, const char* fileName);
 char* Join(const char* path, const char* fileName);
 WCHAR* Join(const WCHAR* path, const WCHAR* fileName, const WCHAR* fileName2 = nullptr);
@@ -20,12 +22,14 @@ TempWStr JoinTemp(const WCHAR* path, const WCHAR* fileName, const WCHAR* fileNam
 
 bool IsDirectory(const char*);
 
-char* NormalizeTemp(const char* path);
+TempStr NormalizeTemp(const char* path);
 
 TempStr ShortPathTemp(const char* pathA);
 bool IsSame(const char* path1, const char* path2);
 bool HasVariableDriveLetter(const char* path);
 bool IsOnFixedDrive(const char* path);
+bool IsOnNetworkDrive(const char* path);
+bool SupportsChangeNotifications(const char* path);
 bool IsAbsolute(const char* path);
 
 bool Match(const char* path, const char* filter);
@@ -53,6 +57,7 @@ ByteSlice ReadFile(const char* path);
 int ReadN(const char* path, char* buf, size_t toRead);
 bool WriteFile(const char* path, const ByteSlice&);
 
+i64 GetSize(HANDLE h);
 i64 GetSize(const char*);
 bool Delete(const char* path);
 bool DeleteFileToTrash(const char* path);
@@ -84,6 +89,7 @@ bool Create(const char* dir);
 bool CreateForFile(const char* path);
 bool CreateAll(const char* dir);
 bool RemoveAll(const char* dir);
+bool HasWriteAccess(const char* dir);
 
 } // namespace dir
 

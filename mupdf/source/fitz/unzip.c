@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -570,7 +570,7 @@ static fz_buffer *read_zip_entry(fz_context *ctx, fz_archive *arch, const char *
 			z.next_out = ubuf->data;
 			z.avail_out = ent->usize;
 			z.next_in = cbuf;
-			z.avail_in = fz_read(ctx, file, cbuf, ent->csize);
+			z.avail_in = (uInt)fz_read(ctx, file, cbuf, ent->csize);
 			if (z.avail_in < ent->csize)
 				fz_warn(ctx, "premature end of compressed data for compressed archive entry");
 
@@ -686,13 +686,27 @@ fz_open_zip_archive_with_stream(fz_context *ctx, fz_stream *file)
 fz_archive *
 fz_open_zip_archive(fz_context *ctx, const char *filename)
 {
-	fz_archive *zip = NULL;
+	fz_archive *zip;
 	fz_stream *file;
 
 	file = fz_open_file(ctx, filename);
+	fz_try(ctx)
+		zip = fz_open_zip_archive_with_stream(ctx, file);
+	fz_always(ctx)
+		fz_drop_stream(ctx, file);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 
-	fz_var(zip);
+	return zip;
+}
 
+fz_archive *
+fz_open_zip_archive_with_memory(fz_context *ctx, const unsigned char *data, size_t size)
+{
+	fz_archive *zip;
+	fz_stream *file;
+
+	file = fz_open_memory(ctx, data, size);
 	fz_try(ctx)
 		zip = fz_open_zip_archive_with_stream(ctx, file);
 	fz_always(ctx)

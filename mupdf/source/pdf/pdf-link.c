@@ -228,27 +228,56 @@ get_file_stream_and_name(fz_context *ctx, pdf_obj *fs, pdf_obj **namep)
 	pdf_obj *ef = pdf_dict_get(ctx, fs, PDF_NAME(EF));
 	pdf_obj *name = pdf_dict_get(ctx, fs, PDF_NAME(UF));
 	pdf_obj *file = pdf_dict_get(ctx, ef, PDF_NAME(UF));
+	pdf_obj *any_name = name;
 
 	if (!name && !file)
 	{
 		name = pdf_dict_get(ctx, fs, PDF_NAME(F));
+		if (any_name == NULL)
+			any_name = name;
 		file = pdf_dict_get(ctx, ef, PDF_NAME(F));
 	}
 	if (!name && !file)
 	{
 		name = pdf_dict_get(ctx, fs, PDF_NAME(Unix));
+		if (any_name == NULL)
+			any_name = name;
 		file = pdf_dict_get(ctx, ef, PDF_NAME(Unix));
 	}
 	if (!name && !file)
 	{
 		name = pdf_dict_get(ctx, fs, PDF_NAME(DOS));
+		if (any_name == NULL)
+			any_name = name;
 		file = pdf_dict_get(ctx, ef, PDF_NAME(DOS));
 	}
 	if (!name && !file)
 	{
 		name = pdf_dict_get(ctx, fs, PDF_NAME(Mac));
+		if (any_name == NULL)
+			any_name = name;
 		file = pdf_dict_get(ctx, ef, PDF_NAME(Mac));
 	}
+
+	/* bug708587: Some bad files have the name under one
+	 * entry (e.g. UF), and the entry in EF under another
+	 * (e.g. F). Strictly speaking this is against the
+	 * spec, but we'd rather find the embedded file than
+	 * not. */
+	if (any_name && !file)
+{
+		name = any_name;
+		file = pdf_dict_get(ctx, ef, PDF_NAME(UF));
+		if (file == NULL)
+		file = pdf_dict_get(ctx, ef, PDF_NAME(F));
+		if (file == NULL)
+		file = pdf_dict_get(ctx, ef, PDF_NAME(Unix));
+		if (file == NULL)
+		file = pdf_dict_get(ctx, ef, PDF_NAME(DOS));
+		if (file == NULL)
+		file = pdf_dict_get(ctx, ef, PDF_NAME(Mac));
+	}
+
 	if (namep)
 		*namep = name;
 
@@ -306,12 +335,6 @@ pdf_is_embedded_file(fz_context *ctx, pdf_obj *fs)
 }
 
 void
-pdf_get_embedded_file_params(fz_context *ctx, pdf_obj *fs, pdf_embedded_file_params *out)
-{
-	pdf_get_filespec_params(ctx, fs, out);
-}
-
-void
 pdf_get_filespec_params(fz_context *ctx, pdf_obj *fs, pdf_filespec_params *out)
 {
 	pdf_obj *file, *params, *filename, *subtype;
@@ -319,6 +342,9 @@ pdf_get_filespec_params(fz_context *ctx, pdf_obj *fs, pdf_filespec_params *out)
 		return;
 
 	memset(out, 0, sizeof(*out));
+	out->created = -1;
+	out->modified = -1;
+	out->size = -1;
 
 	file = get_file_stream_and_name(ctx, fs, &filename);
 	if (!pdf_is_stream(ctx, file))
@@ -568,7 +594,7 @@ static void pdf_set_link_rect(fz_context *ctx, fz_link *link_, fz_rect rect)
 		return;
 
 	if (!link->page)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "link not bound to a page");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "link not bound to a page");
 
 	pdf_begin_operation(ctx, link->page->doc, "Set link rectangle");
 
@@ -592,7 +618,7 @@ static void pdf_set_link_uri(fz_context *ctx, fz_link *link_, const char *uri)
 		return;
 
 	if (!link->page)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "link not bound to a page");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "link not bound to a page");
 
 	pdf_begin_operation(ctx, link->page->doc, "Set link uri");
 
@@ -614,7 +640,7 @@ static void pdf_set_link_uri(fz_context *ctx, fz_link *link_, const char *uri)
 fz_link *pdf_new_link(fz_context *ctx, pdf_page *page, fz_rect rect, const char *uri, pdf_obj *obj)
 {
 	pdf_link *link = fz_new_derived_link(ctx, pdf_link, rect, uri);
-	link->super.drop = (fz_link_drop_link_fn*) pdf_drop_link_imp;
+	link->super.drop = pdf_drop_link_imp;
 	link->super.set_rect_fn = pdf_set_link_rect;
 	link->super.set_uri_fn = pdf_set_link_uri;
 	link->page = page; /* only borrowed, as the page owns the link */
@@ -707,6 +733,36 @@ pdf_load_link_annots(fz_context *ctx, pdf_document *doc, pdf_page *page, pdf_obj
 	}
 
 	return head;
+}
+
+void pdf_nuke_links(fz_context *ctx, pdf_page *page)
+{
+	pdf_link *link;
+	link = (pdf_link *) page->links;
+	while (link)
+	{
+		pdf_drop_obj(ctx, link->obj);
+		link->obj = NULL;
+		link = (pdf_link *) link->super.next;
+	}
+	fz_drop_link(ctx, page->links);
+	page->links = NULL;
+}
+
+void pdf_sync_links(fz_context *ctx, pdf_page *page)
+{
+	pdf_obj *annots;
+
+	pdf_nuke_links(ctx, page);
+
+	annots = pdf_dict_get(ctx, page->obj, PDF_NAME(Annots));
+	if (annots)
+	{
+		fz_rect page_cropbox;
+		fz_matrix page_ctm;
+		pdf_page_transform(ctx, page, &page_cropbox, &page_ctm);
+		page->links = pdf_load_link_annots(ctx, page->doc, page, annots, page->super.number, page_ctm);
+	}
 }
 
 #define isnanorzero(x) (isnan(x) || (x) == 0)

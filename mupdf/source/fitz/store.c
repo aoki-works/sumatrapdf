@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -385,9 +385,9 @@ ensure_space(fz_context *ctx, size_t tofree)
 
 	while (to_be_freed)
 	{
-		fz_item *item = to_be_freed;
 		int drop;
 
+		item = to_be_freed;
 		to_be_freed = to_be_freed->next;
 
 		/* Drop a reference to the value (freeing if required) */
@@ -991,7 +991,11 @@ fz_shrink_store(fz_context *ctx, unsigned int percent)
 #endif
 	fz_lock(ctx, FZ_LOCK_ALLOC);
 
+	if (store->max == FZ_STORE_UNLIMITED)
 	new_size = (size_t)(((uint64_t)store->size * percent) / 100);
+	else
+		new_size = (size_t)(((uint64_t)store->max * percent) / 100);
+
 	if (store->size > new_size)
 		scavenge(ctx, store->size - new_size);
 

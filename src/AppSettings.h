@@ -9,6 +9,10 @@ enum {
     WIN_STATE_MINIMIZED,
 };
 
+extern bool gDontSaveSettings;
+
+extern Vec<SessionData*>* gInitialSessionData;
+
 TempStr GetSettingsPathTemp();
 TempStr GetSettingsFileNameTemp();
 

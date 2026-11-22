@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -761,6 +761,23 @@ drop_pixmap_image(fz_context *ctx, fz_image *image_)
 	fz_drop_pixmap(ctx, image->tile);
 }
 
+int
+fz_is_lossy_image(fz_context *ctx, fz_image *image)
+{
+	fz_compressed_buffer *cbuf = fz_compressed_image_buffer(ctx, image);
+	if (cbuf)
+	{
+		switch (cbuf->params.type)
+		{
+		case FZ_IMAGE_JPEG:
+		case FZ_IMAGE_JPX:
+		case FZ_IMAGE_JXR:
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static fz_pixmap *
 compressed_image_get_pixmap(fz_context *ctx, fz_image *image_, fz_irect *subarea, int w, int h, int *l2factor)
 {
@@ -805,6 +822,11 @@ compressed_image_get_pixmap(fz_context *ctx, fz_image *image_, fz_irect *subarea
 		break;
 	case FZ_IMAGE_JPX:
 		tile = fz_load_jpx(ctx, image->buffer->buffer->data, image->buffer->buffer->len, image->super.colorspace);
+		if (image->super.use_decode &&
+			!fz_colorspace_is_indexed(ctx, image->super.colorspace) &&
+			!fz_colorspace_is_lab(ctx, image->super.colorspace)
+		)
+			fz_decode_tile(ctx, tile, image->super.decode);
 		break;
 	case FZ_IMAGE_PSD:
 		tile = fz_load_psd(ctx, image->buffer->buffer->data, image->buffer->buffer->len);
@@ -1073,6 +1095,58 @@ fz_get_pixmap_from_image(fz_context *ctx, fz_image *image, const fz_irect *subar
 }
 
 fz_pixmap *
+fz_get_pixmap_mask_from_image(fz_context *ctx, fz_image *image, const fz_irect *subarea, fz_matrix *ctm, int *dw, int *dh, int in_smask)
+{
+	fz_pixmap *pix1, *pix2;
+
+	pix1 = fz_get_pixmap_from_image(ctx, image, subarea, ctm, dw, dh);
+	if (pix1->n == 1 && pix1->alpha)
+		return pix1;
+
+	if (pix1->n == 1)
+	{
+		fz_warn(ctx, "convert gray to alpha for image mask");
+		fz_try(ctx)
+			pix2 = fz_alpha_from_gray(ctx, pix1);
+		fz_always(ctx)
+			fz_drop_pixmap(ctx, pix1);
+		fz_catch(ctx)
+			fz_rethrow(ctx);
+		return pix2;
+	}
+	else if (pix1->n == 3)
+	{
+		fz_warn(ctx, "convert rgb to alpha for image mask");
+		fz_try(ctx)
+			pix2 = fz_alpha_from_rgb(ctx, pix1);
+		fz_always(ctx)
+			fz_drop_pixmap(ctx, pix1);
+		fz_catch(ctx)
+			fz_rethrow(ctx);
+		return pix2;
+	}
+	else
+	{
+		fz_color_params cp = fz_default_color_params;
+
+		if (in_smask)
+			cp.ri |= FZ_RI_IN_SOFTMASK;
+
+		fz_warn(ctx, "strange colorspace for image mask (%s)", pix1->colorspace->name);
+		fz_try(ctx)
+			pix2 = fz_convert_pixmap(ctx, pix1, fz_device_gray(ctx), NULL, NULL, cp, 0);
+		fz_always(ctx)
+			fz_drop_pixmap(ctx, pix1);
+		fz_catch(ctx)
+			fz_rethrow(ctx);
+		fz_drop_colorspace(ctx, pix2->colorspace);
+		pix2->colorspace = NULL;
+		pix2->alpha = 1;
+		return pix2;
+	}
+}
+
+fz_pixmap *
 fz_get_unscaled_pixmap_from_image(fz_context *ctx, fz_image *image)
 {
 	return fz_get_pixmap_from_image(ctx, image, NULL /*subarea*/, NULL /*ctm*/, NULL /*dw*/, NULL /*dh*/);
@@ -1142,9 +1216,13 @@ fz_new_image_of_size(fz_context *ctx, int w, int h, int bpc, fz_colorspace *colo
 	image->colorspace = fz_keep_colorspace(ctx, colorspace);
 	image->interpolate = interpolate;
 	image->imagemask = imagemask;
+	image->intent = 0;
+	image->has_intent = 0;
+
 	image->use_colorkey = (colorkey != NULL);
 	if (colorkey)
 		memcpy(image->colorkey, colorkey, sizeof(int)*image->n*2);
+
 	image->use_decode = 0;
 	if (decode)
 	{
@@ -1153,12 +1231,13 @@ fz_new_image_of_size(fz_context *ctx, int w, int h, int bpc, fz_colorspace *colo
 	else
 	{
 		float maxval = fz_colorspace_is_indexed(ctx, colorspace) ? (1 << bpc) - 1 : 1;
-		for (i = 0; i < image->n; i++)
+		for (i = 0; i < FZ_MAX_COLORS; i++)
 		{
 			image->decode[2*i] = 0;
 			image->decode[2*i+1] = maxval;
 		}
 	}
+
 	/* ICC spaces have the default decode arrays pickled into them.
 	 * For most spaces this is fine, because [ 0 1 0 1 0 1 ] is
 	 * idempotent. For Lab, however, we need to adjust it. */
@@ -1261,6 +1340,7 @@ fz_image_type_name(int type)
 	case FZ_IMAGE_FLATE: return "flate";
 	case FZ_IMAGE_LZW: return "lzw";
 	case FZ_IMAGE_RLD: return "rld";
+	case FZ_IMAGE_BROTLI: return "brotli";
 	case FZ_IMAGE_BMP: return "bmp";
 	case FZ_IMAGE_GIF: return "gif";
 	case FZ_IMAGE_JBIG2: return "jbig2";
@@ -1282,6 +1362,7 @@ fz_lookup_image_type(const char *type)
 	if (!strcmp(type, "flate")) return FZ_IMAGE_FLATE;
 	if (!strcmp(type, "lzw")) return FZ_IMAGE_LZW;
 	if (!strcmp(type, "rld")) return FZ_IMAGE_RLD;
+	if (!strcmp(type, "brotli")) return FZ_IMAGE_BROTLI;
 	if (!strcmp(type, "bmp")) return FZ_IMAGE_BMP;
 	if (!strcmp(type, "gif")) return FZ_IMAGE_GIF;
 	if (!strcmp(type, "jbig2")) return FZ_IMAGE_JBIG2;
@@ -1336,7 +1417,7 @@ fz_new_image_from_buffer(fz_context *ctx, fz_buffer *buffer)
 {
 	fz_compressed_buffer *bc;
 	int w, h, xres, yres;
-	fz_colorspace *cspace;
+	fz_colorspace *cspace = NULL;
 	size_t len = buffer->len;
 	unsigned char *buf = buffer->data;
 	fz_image *image = NULL;
@@ -1355,7 +1436,7 @@ fz_new_image_from_buffer(fz_context *ctx, fz_buffer *buffer)
 		fz_load_pnm_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace);
 		break;
 	case FZ_IMAGE_JPX:
-		fz_load_jpx_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace);
+		fz_load_jpx_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace, NULL);
 		break;
 	case FZ_IMAGE_JPEG:
 		fz_load_jpeg_info(ctx, buf, len, &w, &h, &xres, &yres, &cspace, &orientation);
@@ -1405,6 +1486,32 @@ fz_new_image_from_buffer(fz_context *ctx, fz_buffer *buffer)
 		fz_rethrow(ctx);
 
 	return image;
+}
+
+fz_image *
+fz_new_jpx_image_from_buffer(fz_context *ctx, fz_buffer *buffer, fz_colorspace *defcs)
+{
+	fz_compressed_buffer *bc;
+	fz_colorspace *cs = NULL;
+	int w, h, xres, yres;
+	fz_image *img = NULL;
+
+	fz_load_jpx_info(ctx, buffer->data, buffer->len, &w, &h, &xres, &yres, &cs, defcs);
+
+	fz_try(ctx)
+	{
+		bc = fz_new_compressed_buffer(ctx);
+		bc->buffer = fz_keep_buffer(ctx, buffer);
+		bc->params.type = FZ_IMAGE_JPX;
+
+		img =  fz_new_image_from_compressed_buffer(ctx, w, h, 8, cs, xres, yres, 0, 0, NULL, NULL, bc, NULL);
+	}
+	fz_always(ctx)
+		fz_drop_colorspace(ctx, cs);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
+
+	return img;
 }
 
 int

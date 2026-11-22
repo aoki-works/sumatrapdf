@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2022 Artifex Software, Inc.
+/* Copyright (C) 2009-2025 Artifex Software, Inc.
    All Rights Reserved.
 
    This software is provided AS-IS with no warranty, either express or
@@ -1084,7 +1084,6 @@ static Memento_hashedST *Memento_getHashedStacktrace(void)
     count = 0;
 #endif
 
-    count -= skip;
     hash = hashStackTrace(&stack[skip], count);
     while (1) {
         h = &memento.stacktraces[hash & 0xff];
@@ -1169,7 +1168,8 @@ static void Memento_bt_internal(int skip2)
     int skip;
 
     count = Memento_getStacktrace(stack, &skip);
-    Memento_showStacktrace(&stack[skip+skip2], count-skip-skip2);
+    if (count > skip2)
+        Memento_showStacktrace(&stack[skip+skip2], count-skip);
 #endif
 }
 
@@ -2054,6 +2054,46 @@ static void Memento_listBlocksInternal(int include_known_leaks)
 void Memento_listBlocks()
 {
     Memento_listBlocksInternal(1 /*include_known_leaks*/);
+}
+
+void Memento_listLargeBlocks()
+{
+    Memento_BlkHeader *b;
+#define LARGE_BLOCKS 100
+    Memento_BlkHeader *blocks[LARGE_BLOCKS];
+    int i, n = 0;
+
+    MEMENTO_LOCK();
+
+    for (b = memento.used.head; b; b = b->next) {
+        size_t size = b->rawsize;
+        if (n < LARGE_BLOCKS || size > blocks[n - 1]->rawsize)
+        {
+            /* We need to insert this block into our list. */
+            int l = 0, r = n;
+            while (l < r)
+            {
+                int m = (l + r) >> 1;
+                if (size > blocks[m]->rawsize)
+                    r = m;
+                else if (blocks[m]->rawsize > size)
+                    l = m+1;
+                else
+                    l = r = m+1;
+            }
+            if (n < LARGE_BLOCKS)
+                n++;
+            if (l < n-1)
+                memmove(&blocks[l+1], &blocks[l], sizeof(void *) * (n - l - 1));
+            if (l < LARGE_BLOCKS)
+                blocks[l] = b;
+        }
+    }
+
+    for (i = 0; i < n; i++)
+        blockDisplay(blocks[i], 0);
+
+    MEMENTO_UNLOCK();
 }
 
 static int Memento_listNewBlock(Memento_BlkHeader *b,
@@ -3794,8 +3834,10 @@ static void *do_realloc(void *blk, size_t newsize, int type)
     int                flags, ret;
     size_t             oldsize;
 #ifdef MEMENTO_DETAILS
-    Memento_hashedST *st;
+    Memento_hashedST  *st;
 #endif
+    char              oldptrstr[100];
+
 
     if (Memento_failThisEventLocked()) {
         errno = ENOMEM;
@@ -3900,6 +3942,7 @@ static void *do_realloc(void *blk, size_t newsize, int type)
     Memento_removeBlock(&memento.used, memblk);
     VALGRIND_MAKE_MEM_DEFINED(memblk, sizeof(*memblk));
     flags = memblk->flags;
+    snprintf(oldptrstr, sizeof(oldptrstr), FMTP, MEMBLK_TOBLK(memblk));
     newmemblk  = MEMENTO_UNDERLYING_REALLOC(memblk, newsizemem);
     if (newmemblk == NULL)
     {
@@ -3972,15 +4015,15 @@ static void *do_realloc(void *blk, size_t newsize, int type)
             fprintf(stderr, "\n");
             memento.verboseNewlineSuppressed = 0;
         }
-        fprintf(stderr, "%s "FMTP"=>"FMTP":(size="FMTZ"=>"FMTZ", num=%d, now=%d",
+        fprintf(stderr, "%s %s=>"FMTP":(size="FMTZ"=>"FMTZ", num=%d, now=%d",
                 eventType[type],
-                MEMBLK_TOBLK(memblk), MEMBLK_TOBLK(newmemblk),
+                oldptrstr, MEMBLK_TOBLK(newmemblk),
                 (FMTZ_CAST)oldsize, (FMTZ_CAST)newsize,
                 newmemblk->sequence, memento.sequence);
 #ifdef MEMENTO_DETAILS
         fprintf(stderr, ",hash=%x", st->hash);
 #endif
-        if (memblk->label)
+        if (newmemblk->label)
             fprintf(stderr, ") (%s", newmemblk->label);
         fprintf(stderr, ")\n");
         break;
@@ -3995,7 +4038,7 @@ static void *do_realloc(void *blk, size_t newsize, int type)
 #ifdef MEMENTO_DETAILS
         fprintf(stderr, ",hash=%x", st->hash);
 #endif
-        if (memblk->label)
+        if (newmemblk->label)
             fprintf(stderr, ") (%s", newmemblk->label);
         fprintf(stderr, ")\n");
         break;
@@ -4630,6 +4673,10 @@ void (Memento_listBlocks)(void)
 }
 
 void (Memento_listNewBlocks)(void)
+{
+}
+
+void (Memento_listLargeBlocks)(void)
 {
 }
 

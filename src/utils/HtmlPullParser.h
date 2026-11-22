@@ -26,26 +26,19 @@ struct HtmlToken {
         Error
     };
 
-    enum ParsingError { NoError, ExpectedElement, UnclosedTag, InvalidTag };
+    enum ParsingError {
+        NoError,
+        ExpectedElement,
+        UnclosedTag,
+        InvalidTag
+    };
 
-    bool IsStartTag() const {
-        return type == StartTag;
-    }
-    bool IsEndTag() const {
-        return type == EndTag;
-    }
-    bool IsEmptyElementEndTag() const {
-        return type == EmptyElementTag;
-    }
-    bool IsTag() const {
-        return IsStartTag() || IsEndTag() || IsEmptyElementEndTag();
-    }
-    bool IsText() const {
-        return type == Text;
-    }
-    bool IsError() const {
-        return type == Error;
-    }
+    bool IsStartTag() const { return type == StartTag; }
+    bool IsEndTag() const { return type == EndTag; }
+    bool IsEmptyElementEndTag() const { return type == EmptyElementTag; }
+    bool IsTag() const { return IsStartTag() || IsEndTag() || IsEmptyElementEndTag(); }
+    bool IsText() const { return type == Text; }
+    bool IsError() const { return type == Error; }
 
     const char* GetReparsePoint() const;
     void SetTag(TokenType new_type, const char* new_s, const char* end);
@@ -85,23 +78,14 @@ class HtmlPullParser {
     HtmlToken currToken{};
 
   public:
-    HtmlPullParser(const char* s, size_t len) : currPos(s), end(s + len), start(s), len(len) {
-    }
-    HtmlPullParser(const char* s, const char* end) : currPos(s), end(end), start(s), len(end - s) {
-    }
+    HtmlPullParser(const char* s, size_t len) : currPos(s), end(s + len), start(s), len(len) {}
+    HtmlPullParser(const char* s, const char* end) : currPos(s), end(end), start(s), len(end - s) {}
     explicit HtmlPullParser(const ByteSlice& d)
-        : currPos((char*)d.data()), end((char*)d.data() + d.size()), start((char*)d.data()), len(d.size()) {
-    }
+        : currPos((char*)d.data()), end((char*)d.data() + d.size()), start((char*)d.data()), len(d.size()) {}
 
-    void SetCurrPosOff(ptrdiff_t off) {
-        currPos = start + off;
-    }
-    size_t Len() const {
-        return len;
-    }
-    const char* Start() const {
-        return start;
-    }
+    void SetCurrPosOff(ptrdiff_t off) { currPos = start + off; }
+    size_t Len() const { return len; }
+    const char* Start() const { return start; }
 
     HtmlToken* Next();
 };

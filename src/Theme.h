@@ -1,13 +1,10 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
 License: GPLv3 */
 
-#include "utils/BaseUtil.h"
-
 void SetTheme(const char* name);
 void SetCurrentThemeFromSettings();
 void SelectNextTheme();
 void CreateThemeCommands();
-int GetCurrentThemeCmdId(int* firstId, int* lastId);
 
 COLORREF ThemeDocumentColors(COLORREF&);
 COLORREF ThemeMainWindowBackgroundColor();
@@ -23,6 +20,9 @@ COLORREF ThemeNotificationsHighlightColor();
 COLORREF ThemeNotificationsHighlightTextColor();
 COLORREF ThemeNotificationsProgressColor();
 bool ThemeColorizeControls();
+bool IsCurrentThemeDefault();
+void FreeThemes();
+bool UseDarkModeLib();
 
 extern int gFirstSetThemeCmdId;
 extern int gLastSetThemeCmdId;

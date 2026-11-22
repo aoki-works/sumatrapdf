@@ -61,10 +61,29 @@ static const char* getWinError(DWORD errCode) {
 }
 #endif
 
-static void logToPipe(const char* s, size_t n = 0) {
-    if (!gLogToPipe) {
-        return;
+static LARGE_INTEGER lastPipeOpenTryTime = {};
+
+static void maybeOpenLogPipe() {
+    // only re-try every 10 secs to minimize cost because pipe is rarely
+    // opened and logging is frequent
+    if (lastPipeOpenTryTime.QuadPart != 0) {
+        LARGE_INTEGER freq;
+        QueryPerformanceFrequency(&freq);
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        double diffSecs =
+            static_cast<double>(now.QuadPart - lastPipeOpenTryTime.QuadPart) / static_cast<double>(freq.QuadPart);
+        if (diffSecs < 10.0f) {
+            return;
+        }
     }
+    QueryPerformanceCounter(&lastPipeOpenTryTime);
+    hLogPipe = CreateFileW(kPipeName, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    // TODO: retry if ERROR_PIPE_BUSY?
+}
+
+static void logToPipe(const char* s, size_t n = 0) {
+    if (!gLogToPipe) return;
     if (!s || (*s == 0)) {
         return;
     }
@@ -76,12 +95,8 @@ static void logToPipe(const char* s, size_t n = 0) {
     BOOL ok = false;
     bool didConnect = false;
     if (!IsValidHandle(hLogPipe)) {
-        // try open pipe for logging
-        hLogPipe = CreateFileW(kPipeName, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        maybeOpenLogPipe();
         if (!IsValidHandle(hLogPipe)) {
-            // TODO: retry if ERROR_PIPE_BUSY ?
-            // TODO: maybe remember when last we tried to open it and don't try to open for the
-            // next 10 secs, to minimize CreateFileW() calls
             return;
         }
         didConnect = true;
@@ -117,7 +132,40 @@ static void logToPipe(const char* s, size_t n = 0) {
     }
 }
 
-void log(const char* s, bool always) {
+// to use in
+void logPipe(const char* fmt, ...) {
+    if (!gLogToPipe) return;
+    va_list args;
+    va_start(args, fmt);
+    AutoFreeStr s = str::FmtV(fmt, args);
+    logToPipe(s.Get());
+    va_end(args);
+}
+
+// verbose log, only to pipe
+// used to log to debugger but 10x shows it and is really slow
+void logv(const char* s) {
+    // if (gLogToDebugger || IsDebuggerPresent()) {
+    //     OutputDebugStringA(s);
+    // }
+    logToPipe(s);
+}
+
+void logvf(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    AutoFreeStr s = str::FmtV(fmt, args);
+    logv(s.Get());
+    va_end(args);
+}
+
+// logs value that is byte size to pipe
+void logValueSize(const char* name, i64 v) {
+    TempStr s = str::FormatTemp(":v %s size %lld\n", name, v);
+    logToPipe(s);
+}
+
+static void log2(const char* s, bool always) {
     bool skipLog = !always && gSkipDuplicateLines && gLogBuf && gLogBuf->Contains(s);
 
     if (!skipLog) {
@@ -179,11 +227,16 @@ void log(const char* s, bool always) {
     logToPipe(s, n);
     gLogMutex.Unlock();
 }
+
+void log(const char* s) {
+    log2(s, false);
+}
+
 void loga(const char* s) {
     if (gDestroyedLogging) {
         return;
     }
-    log(s, true);
+    log2(s, true);
 }
 
 void logf(const char* fmt, ...) {
@@ -194,7 +247,7 @@ void logf(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     AutoFreeStr s = str::FmtV(fmt, args);
-    log(s.Get(), false);
+    log2(s.Get(), false);
     va_end(args);
 }
 
@@ -206,7 +259,7 @@ void logfa(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     char* s = str::FmtV(fmt, args);
-    log(s, true);
+    log2(s, true);
     str::Free(s);
     va_end(args);
 }
@@ -220,6 +273,7 @@ void StartLogToFile(const char* path, bool removeIfExists) {
 }
 
 bool WriteCurrentLogToFile(const char* path) {
+    if (!gLogBuf) return false;
     ByteSlice slice = gLogBuf->AsByteSlice();
     if (slice.empty()) {
         return false;

@@ -9,20 +9,20 @@ jobs:
     name: Build
     #runs-on: SumatraBuilder
     runs-on: windows-latest
-    #runs-on: windows-2019
     steps:
-      # - name: Set up Go
-      #   uses: actions/setup-go@v4
-      #   with:
-      #     go-version: "1.21"
-
       - name: Check out source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # needed to calc build number via git log --oneline
           fetch-depth: 0
 
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Build
         env:
-          CERT_PWD: ${{ secrets.CERT_PWD }}
-        run: .\doit.bat -ci
+          R2_SECRET: ${{ secrets.R2_SECRET }}
+          R2_ACCESS: ${{ secrets.R2_ACCESS }}
+          BB_SECRET: ${{ secrets.BB_SECRET }}
+          BB_ACCESS: ${{ secrets.BB_ACCESS }}
+        run: bun .\cmd\ci-build.ts

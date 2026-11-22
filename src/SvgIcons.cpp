@@ -129,50 +129,6 @@ static const char* gIconRotateRight =
   <circle cx="11" cy="19.94" r="0.15"/>
 </svg>)";
 
-// CPS Lab (NET : N)
-static const char* gIconNet =
-    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-  <path stroke-width="2" stroke="#0000ff" d="M 3.5 6.0 10.0 6.0 14.0 2.0 20.5 2.0"/>
-  <rect stroke-width="1" height="3" width="3" x="0.5"  y="4.5" stroke="#000" fill="#222222"/>
-  <rect stroke-width="1" height="3" width="3" x="20.5" y="0.0" stroke="#000" fill="#222222"/>
-  <path stroke-width="2" stroke="#0000ff" d="M 3.5 14.0 10.0 14.0 14.0 10.0 20.5 10.0"/>
-  <rect stroke-width="1" height="3" width="3" x="0.5"  y="12.5" stroke="#000" fill="#222222"/>
-  <rect stroke-width="1" height="3" width="3" x="20.5" y="8.0"  stroke="#000" fill="#222222"/>
-  <path stroke-width="2" stroke="#0000ff" d="M 3.5 22.0 10.0 22.0 14.0 18.0 20.5 18.0"/>
-  <rect stroke-width="1" height="3" width="3" x="0.5"  y="20.5" stroke="#000" fill="#222222"/>
-  <rect stroke-width="1" height="3" width="3" x="20.5" y="16.0" stroke="#000" fill="#222222"/>
-</svg>)";
-
-// CPS Lab (CELL : P)
-static const char* gIconCell =
-    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="2.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="7.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="13.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="0.0" y="18.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="2.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="7.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="13.0" width="4.0" height="3.0" />
-  <rect stroke-width="1" fill="#fff" stroke="#000" x="20.0" y="18.5" width="4.0" height="3.0" />
-  <rect stroke-width="1" stroke="#000" fill="#444444" x="6.0" y="2.0" width="12.0" height="20.0" />
-</svg>)";
-
-// CPS Lab (PIN : T)
-static const char* gIconPin =
-    R"(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <path id="pin" stroke-width="2" d="M 12 20 12 4" />
-  <circle cx="12" cy="5" r="5" stroke-width="0" fill="#0000ff"/>
-  <path id="round"
-        stroke-width="1"
-        d="M 8.49,14.91
-           C 6.64,14.87 0.95,17.43 0.93,19.00
-             0.94,20.88 6.44,22.82 7.56,22.80
-             7.56,22.80 17.69,22.78 17.69,22.78
-             18.84,22.62 23.49,20.02 23.49,18.84
-             23.46,16.89 19.39,14.87 15.33,14.87" />
-</svg>)";
-
-
 // must match order in enum class TbIcon
 // clang-format off
 static const char* gIcons[] = {
@@ -191,9 +147,6 @@ static const char* gIcons[] = {
     gIconSave,
     gIconRotateLeft,
     gIconRotateRight,
-    gIconNet,
-    gIconCell,
-    gIconPin,
 };
 // clang-format on
 

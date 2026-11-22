@@ -6,14 +6,14 @@
 constexpr int RENDER_DELAY_UNDEFINED = std::numeric_limits<int>::max() - 1;
 constexpr int RENDER_DELAY_FAILED = std::numeric_limits<int>::max() - 2;
 
-#define INVALID_TILE_RES ((USHORT)-1)
+#define INVALID_TILE_RES ((USHORT) - 1)
 
 #define MAX_PAGE_REQUESTS 8
 // keep this value reasonably low, else we'll run out of
 // GDI resources/memory when caching many larger bitmaps
 // TODO: this should be based on amount of memory taken by rendered pages
 // i.e. one big page can use as much memory as lots of small pages
-#define MAX_BITMAPS_CACHED 64
+#define MAX_BITMAPS_CACHED 128
 
 struct PageInfo;
 
@@ -60,9 +60,7 @@ struct BitmapCacheEntry {
         this->tile = tile;
         this->bitmap = bitmap;
     }
-    ~BitmapCacheEntry() {
-        delete bitmap;
-    }
+    ~BitmapCacheEntry() { delete bitmap; }
 };
 
 /* Even though this looks a lot like a BitmapCacheEntry, we keep it
@@ -105,6 +103,7 @@ struct RenderCache {
 
     /* Interface for page rendering thread */
     HANDLE startRendering = nullptr;
+    AtomicBool shouldExit = 0;
 
     RenderCache();
     RenderCache(RenderCache const&) = delete;
@@ -132,9 +131,7 @@ struct RenderCache {
     USHORT GetMaxTileRes(DisplayModel* dm, int pageNo, int rotation);
     bool ReduceTileSize();
 
-    bool IsRenderQueueFull() const {
-        return requestCount == MAX_PAGE_REQUESTS;
-    }
+    bool IsRenderQueueFull() const { return requestCount == MAX_PAGE_REQUESTS; }
     int GetRenderDelay(DisplayModel* dm, int pageNo, TilePosition tile);
     void RequestRendering(DisplayModel* dm, int pageNo, TilePosition tile, bool clearQueueForPage = true);
     bool Render(DisplayModel* dm, int pageNo, int rotation, float zoom, TilePosition* tile = nullptr,
@@ -142,14 +139,13 @@ struct RenderCache {
     void ClearQueueForDisplayModel(DisplayModel* dm, int pageNo = kInvalidPageNo, TilePosition* tile = nullptr);
     void AbortCurrentRequest();
 
-    static DWORD WINAPI RenderCacheThread(LPVOID data);
-
     BitmapCacheEntry* Find(DisplayModel* dm, int pageNo, int rotation, float zoom = kInvalidZoom,
                            TilePosition* tile = nullptr);
     bool DropCacheEntry(BitmapCacheEntry* entry);
-    void FreePage(DisplayModel* dm = nullptr, int pageNo = -1, TilePosition* tile = nullptr);
+    void FreePage(DisplayModel* dm, int pageNo, TilePosition* tile = nullptr);
     void FreeNotVisible();
 
     int PaintTile(HDC hdc, Rect bounds, DisplayModel* dm, int pageNo, TilePosition tile, Rect tileOnScreen,
                   bool renderMissing, bool* renderOutOfDateCue, bool* renderedReplacement);
+    void LogCacheSize();
 };

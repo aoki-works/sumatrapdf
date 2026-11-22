@@ -98,7 +98,7 @@ static void UninstallerThread() {
     // also kill the original uninstaller, if it's just spawned
     // a DELETE_ON_CLOSE copy from the temp directory
     TempStr exePath = GetInstalledExePathTemp();
-    TempStr ownPath = GetExePathTemp();
+    TempStr ownPath = GetSelfExePathTemp();
     if (!path::IsSame(exePath, ownPath)) {
         KillProcessesWithModule(exePath, true);
     }
@@ -151,9 +151,10 @@ static void OnButtonExit() {
 }
 
 void OnUninstallationFinished() {
+    auto isRtl = IsUIRtl();
     delete gButtonUninstaller;
     gButtonUninstaller = nullptr;
-    gButtonExit = CreateDefaultButton(gHwndFrame, _TRA("Close"));
+    gButtonExit = CreateDefaultButton(gHwndFrame, _TRA("Close"), isRtl);
     gButtonExit->onClick = MkFunc0Void(OnButtonExit);
     SetMsg(_TRA("SumatraPDF has been uninstalled."), gMsgError ? COLOR_MSG_FAILED : COLOR_MSG_OK);
     gMsgError = gFirstError;
@@ -190,7 +191,8 @@ static void CreateUninstallerWindow() {
     DpiScale(gHwndFrame, dx, dy);
     HwndResizeClientSize(gHwndFrame, dx, dy);
 
-    gButtonUninstaller = CreateDefaultButton(gHwndFrame, _TRA("Uninstall SumatraPDF"));
+    auto isRtl = IsUIRtl();
+    gButtonUninstaller = CreateDefaultButton(gHwndFrame, _TRA("Uninstall SumatraPDF"), isRtl);
     gButtonUninstaller->onClick = MkFunc0Void(OnButtonUninstall);
 }
 
@@ -344,7 +346,7 @@ static void RelaunchMaybeElevatedFromTempDirectory(Flags* cli) {
     }
 
     char* installerTempPath = GetUninstallerPathInTemp();
-    char* ownPath = GetExePathTemp();
+    char* ownPath = GetSelfExePathTemp();
     if (str::EqI(installerTempPath, ownPath)) {
         if (!gCli->allUsers) {
             log("  already running from temp dir\n");
@@ -410,7 +412,7 @@ static char* GetSelfDeleteBatchPathInTemp() {
 // we create a bash script that deletes us
 static void InitSelfDelete() {
     log("InitSelfDelete()\n");
-    TempStr exePath = GetExePathTemp();
+    TempStr exePath = GetSelfExePathTemp();
     str::Str script;
     // wait 2 seconds to give our process time to exit
     // alternatively use ping,
@@ -450,7 +452,7 @@ int RunUninstaller() {
     gCli->installDir = GetExistingInstallationDir();
     char* instDir = gCli->installDir;
     TempStr cmdLine = ToUtf8Temp(GetCommandLineW());
-    TempStr exePath = GetExePathTemp();
+    TempStr exePath = GetSelfExePathTemp();
     logf("Running uninstaller '%s' with args '%s' for '%s'\n", exePath, cmdLine, instDir);
 
     if (false) {
@@ -521,10 +523,10 @@ int RunUninstaller() {
 
     // re-register if we un-registered but uninstallation was cancelled
     if (gWasSearchFilterInstalled) {
-        RegisterSearchFilter(gCli->allUsers);
+        RegisterSearchFilter(gCli->allUsers, gCli->installDir);
     }
     if (gWasPreviewInstaller) {
-        RegisterPreviewer(gCli->allUsers);
+        RegisterPreviewer(gCli->allUsers, gCli->installDir);
     }
     InitSelfDelete();
     LaunchFileIfExists(uninstallerLogPath);

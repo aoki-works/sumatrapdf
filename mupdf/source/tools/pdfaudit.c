@@ -1,4 +1,4 @@
-// Copyright (C) 2023-2024 Artifex Software, Inc.
+// Copyright (C) 2023-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -289,7 +289,6 @@ typedef struct
 	pdf_document *doc;
 	int structparents;
 	pdf_processor *mine;
-	pdf_processor *chain;
 	pdf_filter_options *global_options;
 	op_usage_t *op_usage;
 	fz_buffer *buffer;
@@ -493,13 +492,13 @@ pdf_opcount_gs_ca(fz_context *ctx, pdf_processor *proc, float alpha)
 }
 
 static void
-pdf_opcount_gs_SMask(fz_context *ctx, pdf_processor *proc, pdf_obj *smask, float *bc, int luminosity, pdf_obj *obj)
+pdf_opcount_gs_SMask(fz_context *ctx, pdf_processor *proc, pdf_obj *smask, fz_colorspace *smask_cs, float *bc, int luminosity, pdf_obj *obj)
 {
 	pdf_opcount_processor *p = (pdf_opcount_processor*)proc;
 	size_t z = p->buffer->len;
 
 	if (p->mine->op_gs_SMask)
-		p->mine->op_gs_SMask(ctx, p->mine, smask, bc, luminosity, obj);
+		p->mine->op_gs_SMask(ctx, p->mine, smask, smask_cs, bc, luminosity, obj);
 
 	z = p->buffer->len - z;
 	p->op_usage->len[OP_gs_SMask] += z;
@@ -1417,7 +1416,7 @@ pdf_close_opcount_processor(fz_context *ctx, pdf_processor *proc)
 	pdf_opcount_processor *p = (pdf_opcount_processor*)proc;
 
 	pdf_close_processor(ctx, p->mine);
-	pdf_close_processor(ctx, p->chain);
+	pdf_close_processor(ctx, p->super.chain);
 }
 
 static void
@@ -1592,7 +1591,7 @@ pdf_new_opcount_filter(
 	proc->super.op_END = pdf_opcount_END;
 
 	proc->global_options = global_options;
-	proc->chain = chain;
+	proc->super.chain = chain;
 
 	return (pdf_processor*)proc;
 }
@@ -1691,7 +1690,7 @@ typedef struct
 } walk_stack_t;
 
 static void
-walk(fz_context *ctx, walk_stack_t *ws, obj_info_t *oi, pdf_obj *obj, audit_type_t type)
+walk(fz_context *ctx, walk_stack_t *ws, int n, obj_info_t *oi, pdf_obj *obj, audit_type_t type)
 {
 	int num = 0;
 	do
@@ -1699,6 +1698,8 @@ walk(fz_context *ctx, walk_stack_t *ws, obj_info_t *oi, pdf_obj *obj, audit_type
 		if (pdf_is_indirect(ctx, obj))
 		{
 			num = pdf_to_num(ctx, obj);
+			if (num < 0 || num >= n)
+				fz_throw(ctx, FZ_ERROR_GENERIC, "object outside of xref range");
 			if (oi[num].type != AUDIT_UNKNOWN)
 				goto visited;
 			if (pdf_mark_obj(ctx, obj))
@@ -1843,19 +1844,19 @@ visited:
 			else if (pdf_is_array(ctx, obj))
 				goto step_next_array_child;
 			else
-				assert("Never happens" == NULL);
+				fz_throw(ctx, FZ_ERROR_GENERIC, "this should never happen!");
 		}
 	}
 	while (ws->len > 0);
 }
 
 static void
-classify_by_walking(fz_context *ctx, pdf_document *doc, obj_info_t *oi)
+classify_by_walking(fz_context *ctx, pdf_document *doc, int n, obj_info_t *oi)
 {
 	walk_stack_t ws = { 0 };
 
 	fz_try(ctx)
-		walk(ctx, &ws, oi, pdf_trailer(ctx, doc), AUDIT_TRAILER);
+		walk(ctx, &ws, n, oi, pdf_trailer(ctx, doc), AUDIT_TRAILER);
 	fz_always(ctx)
 		fz_free(ctx, ws.stack);
 	fz_catch(ctx)
@@ -1886,6 +1887,9 @@ filter_file(fz_context *ctx, fz_output *out, const char *filename)
 	{
 		pdf = pdf_open_document(ctx, filename);
 
+		/* ensure we don't get tripped up by repair */
+		pdf_check_document(ctx, pdf);
+
 		n = pdf_xref_len(ctx, pdf);
 		oi = fz_malloc_array(ctx, n, obj_info_t);
 		memset(oi, 0, n * sizeof(obj_info_t));
@@ -1896,14 +1900,13 @@ filter_file(fz_context *ctx, fz_output *out, const char *filename)
 				for (; i <n; i++)
 				{
 					pdf_xref_entry *entry = pdf_cache_object(ctx, pdf, i);
-					int is_in_objstm = entry->type == 'o';
 					pdf_obj *type, *subtype;
 					char text[128];
 
-					if (entry->obj == NULL)
+					if (entry == NULL || entry->obj == NULL)
 						continue;
-					oi[i].is_in_objstm = is_in_objstm;
-					if (!is_in_objstm)
+					oi[i].is_in_objstm = entry->type == 'o';
+					if (!oi[i].is_in_objstm)
 					{
 						sprintf(text, "%d 0 obj\nendobj\n", i);
 						oi[i].overhead = strlen(text);
@@ -1947,7 +1950,7 @@ filter_file(fz_context *ctx, fz_output *out, const char *filename)
 		}
 
 		/* Walk the doc structure. */
-		classify_by_walking(ctx, pdf, oi);
+		classify_by_walking(ctx, pdf, n, oi);
 
 		/* Filter the content streams to establish operator usage */
 		filter_page_streams(ctx, pdf, &ou);
@@ -2002,7 +2005,7 @@ filter_file(fz_context *ctx, fz_output *out, const char *filename)
 				output_size(ctx, out, pdf->file_size, audit_type[i], counts[i].obj, counts[i].objstm);
 			}
 			fz_write_printf(ctx, out, "</table>\n");
-			fz_write_printf(ctx, out, "<p>NOTE: The percentanges are as percentages of the complete file. This again means that"
+			fz_write_printf(ctx, out, "<p>NOTE: The percentages are as percentages of the complete file. This again means that"
 						" the percentages in the &quot;in objstms&quot; column are misleading as the objstms are"
 						" typically compressed!</p>\n");
 		}
@@ -2039,7 +2042,7 @@ filter_file(fz_context *ctx, fz_output *out, const char *filename)
 				fz_write_printf(ctx, out, "<tr align=right><td align=left>%s<td>%,zd<td>%.2f%%</tr>\n", op_names[i], ou.len[i], 100.f * ou.len[i] / total);
 			}
 			fz_write_printf(ctx, out, "</table>\n");
-			fz_write_printf(ctx, out, "<p>NOTE: The percentanges are of the operator stream content found.</p>\n");
+			fz_write_printf(ctx, out, "<p>NOTE: The percentages are of the operator stream content found.</p>\n");
 		}
 
 	}
@@ -2056,7 +2059,7 @@ filter_file(fz_context *ctx, fz_output *out, const char *filename)
 static int usage(void)
 {
 	fprintf(stderr,
-		"usage: mutool audit [options] input.pdf+\n"
+		"usage: mutool audit [options] input.pdf [input2.pdf ...]\n"
 		"\t-o -\toutput file\n"
 		);
 	return 1;
@@ -2079,7 +2082,7 @@ int pdfaudit_main(int argc, char **argv)
 	{
 		switch (c)
 		{
-		case 'o': outfile = fz_optarg; break;
+		case 'o': outfile = fz_optpath(fz_optarg); break;
 		case 0:
 		{
 			SWITCH(fz_optlong->opaque)
@@ -2114,21 +2117,16 @@ int pdfaudit_main(int argc, char **argv)
 
 	fz_try(ctx)
 	{
-		if (strcmp(outfile, "-") == 0)
-			out = fz_stdout(ctx);
-		else
-			out = fz_new_output_with_path(ctx, outfile, append);
+		out = fz_new_output_with_path(ctx, outfile, append);
 		while (fz_optind < argc)
 			filter_file(ctx, out, argv[fz_optind++]);
-		if (strcmp(outfile, "-") != 0)
-			fz_close_output(ctx, out);
+		fz_close_output(ctx, out);
 	}
 	fz_always(ctx)
-		if (strcmp(outfile, "-") != 0)
-			fz_drop_output(ctx, out);
+		fz_drop_output(ctx, out);
 	fz_catch(ctx)
 	{
-		fz_log_error(ctx, fz_caught_message(ctx));
+		fz_report_error(ctx);
 		errors++;
 	}
 	fz_drop_context(ctx);

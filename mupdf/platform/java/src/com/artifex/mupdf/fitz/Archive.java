@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -36,15 +36,15 @@ public class Archive
 		finalize();
 	}
 
-	private native long newNativeArchive(String path);
-	private native long newNativeMultiArchive();
+	private native long newNativeArchiveWithPath(String path);
+	private native long newNativeArchiveWithStream(SeekableInputStream stream);
 
 	public Archive(String path) {
-		pointer = newNativeArchive(path);
+		pointer = newNativeArchiveWithPath(path);
 	}
 
-	public Archive() {
-		pointer = newNativeMultiArchive();
+	public Archive(SeekableInputStream stream) {
+		pointer = newNativeArchiveWithStream(stream);
 	}
 
 	protected Archive(long p) {
@@ -53,7 +53,7 @@ public class Archive
 
 	public native String getFormat();
 	public native int countEntries();
-	public native String listEntries();
+	public native String listEntry(int idx);
 	public native boolean hasEntry(String name);
 	public native Buffer readEntry(String name);
 }

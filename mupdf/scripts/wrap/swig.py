@@ -1,5 +1,5 @@
 '''
-Support for using SWIG to generate langauge bindings from the C++ bindings.
+Support for using SWIG to generate language bindings from the C++ bindings.
 '''
 
 import inspect
@@ -92,8 +92,8 @@ def _csharp_unicode_prefix():
 
 
 def build_swig(
-        state_,
-        build_dirs,
+        state_: state.State,
+        build_dirs: state.BuildDirs,
         generated,
         language='python',
         swig_command='swig',
@@ -173,7 +173,11 @@ def build_swig(
                 static std::string to_stdstring(PyObject* s)
                 {{
                     PyObject* repr_str = PyUnicode_AsEncodedString(s, "utf-8", "~E~");
-                    const char* repr_str_s = PyBytes_AS_STRING(repr_str);
+                    #ifdef Py_LIMITED_API
+                        const char* repr_str_s = PyBytes_AsString(repr_str);
+                    #else
+                        const char* repr_str_s = PyBytes_AS_STRING(repr_str);
+                    #endif
                     std::string ret = repr_str_s;
                     Py_DECREF(repr_str);
                     Py_DECREF(s);
@@ -312,43 +316,6 @@ def build_swig(
                     std::vector<unsigned char>  ret(length);
                     {rename.namespace_fn('fz_memrnd')}(&ret[0], length);
                     return ret;
-                }}
-
-
-                /* mupdfpy optimisation for copying pixmap. Copies first <n>
-                bytes of each pixel from <src> to <pm>. <pm> and <src> must
-                have same `.w` and `.h` */
-                void ll_fz_pixmap_copy( fz_pixmap* pm, const fz_pixmap* src, int n)
-                {{
-                    assert( pm->w == src->w);
-                    assert( pm->h == src->h);
-                    assert( n <= pm->n);
-                    assert( n <= src->n);
-
-                    if (pm->n == src->n)
-                    {{
-                        // identical samples
-                        assert( pm->stride == src->stride);
-                        memcpy( pm->samples, src->samples, pm->w * pm->h * pm->n);
-                    }}
-                    else
-                    {{
-                        for ( int y=0; y<pm->h; ++y)
-                        {{
-                            for ( int x=0; x<pm->w; ++x)
-                            {{
-                                memcpy(
-                                        pm->samples + pm->stride * y + pm->n * x,
-                                        src->samples + src->stride * y + src->n * x,
-                                        n
-                                        );
-                                if (pm->alpha)
-                                {{
-                                    src->samples[ src->stride * y + src->n * x] = 255;
-                                }}
-                            }}
-                        }}
-                    }}
                 }}
 
                 /* mupdfpy optimisation for copying raw data into pixmap. `samples` must
@@ -612,29 +579,31 @@ def build_swig(
                     int n
                     )
             {{
+                #define PDF_NAME2(X) {rename.namespace_class('pdf_obj')}(PDF_NAME(X))
                 for ( int i=0; i<n; ++i)
                 {{
                     {rename.namespace_class('pdf_obj')} o = {rename.namespace_fn('pdf_array_get')}( old_annots, i);
                     if ({rename.namespace_fn('pdf_dict_gets')}( o, "IRT").m_internal)
                         continue;
-                    {rename.namespace_class('pdf_obj')} subtype = {rename.namespace_fn('pdf_dict_get')}( o, PDF_NAME(Subtype));
-                    if ( {rename.namespace_fn('pdf_name_eq')}( subtype, PDF_NAME(Link)))
+                    {rename.namespace_class('pdf_obj')} subtype = {rename.namespace_fn('pdf_dict_get')}( o, PDF_NAME2(Subtype));
+                    if ( {rename.namespace_fn('pdf_name_eq')}( subtype, PDF_NAME2(Link)))
                         continue;
-                    if ( {rename.namespace_fn('pdf_name_eq')}( subtype, PDF_NAME(Popup)))
+                    if ( {rename.namespace_fn('pdf_name_eq')}( subtype, PDF_NAME2(Popup)))
                         continue;
-                    if ( {rename.namespace_fn('pdf_name_eq')}( subtype, PDF_NAME(Widget)))
+                    if ( {rename.namespace_fn('pdf_name_eq')}( subtype, PDF_NAME2(Widget)))
                     {{
                         /* fixme: C++ API doesn't yet wrap fz_warn() - it
                         excludes all variadic fns. */
                         //mupdf::fz_warn( "skipping widget annotation");
                         continue;
                     }}
-                    {rename.namespace_fn('pdf_dict_del')}( o, PDF_NAME(Popup));
-                    {rename.namespace_fn('pdf_dict_del')}( o, PDF_NAME(P));
+                    {rename.namespace_fn('pdf_dict_del')}( o, PDF_NAME2(Popup));
+                    {rename.namespace_fn('pdf_dict_del')}( o, PDF_NAME2(P));
                     {rename.namespace_class('pdf_obj')} copy_o = {rename.namespace_fn('pdf_graft_mapped_object')}( graft_map, o);
                     {rename.namespace_class('pdf_obj')} annot = {rename.namespace_fn('pdf_new_indirect')}( doc_des, {rename.namespace_fn('pdf_to_num')}( copy_o), 0);
                     {rename.namespace_fn('pdf_array_push')}( new_annots, annot);
                 }}
+                #undef PDF_NAME2
             }}
             ''')
 
@@ -644,6 +613,36 @@ def build_swig(
     text = ''
 
     text += '%module(directors="1") mupdf\n'
+
+    jlib.log(f'{build_dirs.Py_LIMITED_API=}')
+
+    text += f'%begin %{{\n'
+
+    if build_dirs.Py_LIMITED_API:  # e.g. 0x03080000
+        text += textwrap.dedent(f'''
+                /* Use Python Stable ABI with earliest Python version that we
+                support. */
+                #define Py_LIMITED_API {build_dirs.Py_LIMITED_API}
+
+                /* These seem to be mistakenly undefined when Py_LIMITED_API
+                is defined, so we force the values from Python.h. Also see
+                https://github.com/python/cpython/issues/98680. */
+                #ifndef PyBUF_READ
+                    #define PyBUF_READ 0x100
+                #endif
+                #ifndef PyBUF_WRITE
+                    #define PyBUF_WRITE 0x200
+                #endif
+                ''')
+
+        text += textwrap.dedent(f'''
+                /* This seems to be necessary on some Windows machines with
+                Py_LIMITED_API, otherwise compilation can fail because free()
+                and malloc() are not declared. */
+                #include <stdlib.h>
+                ''')
+
+    text += f'%}}\n'
 
     # https://www.mono-project.com/docs/advanced/pinvoke/
     #
@@ -681,7 +680,7 @@ def build_swig(
 
             6. SWIG Director C++ code (here). We raise a C++ exception.
             5. MuPDF C++ API Director wrapper converts the C++ exception into a MuPDF fz_try/catch exception.
-            4. MuPDF C code allows the exception to propogate or catches and rethrows or throws a new fz_try/catch exception.
+            4. MuPDF C code allows the exception to propagate or catches and rethrows or throws a new fz_try/catch exception.
             3. MuPDF C++ API wrapper function converts the fz_try/catch exception into a C++ exception.
             2. SWIG C++ code converts the C++ exception into a Python exception.
             1. Python code receives the Python exception.
@@ -691,7 +690,7 @@ def build_swig(
             finally back into a Python exception.
 
             Each of these stages is necessary. In particular we cannot let the
-            first C++ exception propogate directly through MuPDF C code without
+            first C++ exception propagate directly through MuPDF C code without
             being a fz_try/catch exception, because it would mess up MuPDF C
             code's fz_try/catch exception stack.
 
@@ -800,7 +799,7 @@ def build_swig(
                 std::cerr << "========\\n";
             }
 
-            /* SWIG 4.1 documention talks about throwing a
+            /* SWIG 4.1 documentation talks about throwing a
             Swig::DirectorMethodException here, but this doesn't work for us
             because it sets Python's error state again, which makes the
             next SWIG call of a C/C++ function appear to fail.
@@ -976,6 +975,8 @@ def build_swig(
                 %template(map_string_int) map<std::string, int>;
                 %template(vectorq) vector<{rename.namespace_class("fz_quad")}>;
                 %template(vector_search_page2_hit) vector<fz_search_page2_hit>;
+                %template(vector_fz_font_ucs_gid) vector<fz_font_ucs_gid>;
+                %template(vector_fz_point) vector<fz_point>;
             }};
 
             // Make sure that operator++() gets converted to __next__().
@@ -1005,6 +1006,9 @@ def build_swig(
 
     if language == 'python':
         text += generated.swig_python_exceptions.getvalue()
+
+    if language == 'csharp':
+        text += generated.swig_csharp_exceptions.getvalue()
 
     text += textwrap.dedent(f'''
             // Ensure SWIG handles OUTPUT params.
@@ -1055,6 +1059,7 @@ def build_swig(
 
                 %pythoncode %{{
 
+                import codecs
                 import inspect
                 import os
                 import re
@@ -1063,6 +1068,25 @@ def build_swig(
 
                 def log( text):
                     print( text, file=sys.stderr)
+
+                # We modify SWIG code's default translation of C strings into
+                # Unicode to handle MuPDF's special-casing of zero bytes.
+                #
+                # SWIG's default is to call PyUnicode_DecodeUTF8()
+                # with errors="surrogateescape". We change this in the
+                # SWIG-generated C++ code to errors="surrogateescape_mupdf".
+                #
+                # And here in Python, we add a corresponding error handler.
+                #
+                surrogateescape = codecs.lookup_error('surrogateescape')
+
+                def surrogateescape_mupdf(e):
+                    if isinstance(e, (UnicodeDecodeError, UnicodeTranslateError)):
+                        if e.object[e.start:e.start+2] == b'\\xc0\\x80':
+                            return '\\0', e.start+2
+                    return surrogateescape(e)
+
+                codecs.register_error('surrogateescape_mupdf', surrogateescape_mupdf)
 
                 g_mupdf_trace_director = (os.environ.get('MUPDF_trace_director') == '1')
 
@@ -1151,28 +1175,46 @@ def build_swig(
 
                     Iterators must have the following methods:
 
-                        __increment__(): move to next item in the container.
+                        __increment__():
+                            Move to next item in the container. Needs Swig
+                            `%rename(__increment__) *::operator++;`.
                         __ref__(): return reference to item in the container.
+                            Automatically generated from C++ operator*().
 
                     Must also be able to compare two iterators for equality.
 
+                    If a class supports C++ iteration with begin() and end()
+                    methods, then one can allow Python iteration by adding
+                    a .__iter__() method that returns a instance of this
+                    class. For example:
+
+                    # A container class that supports C++ iteration with
+                    # .begin() and .end() methods.
+                    class Foo:
+                        def begin(): ...
+                        def end(): ...
+                        ...
+
+                    # Make Foo support Python iteration.
+                    Foo.__iter__ = lambda self: IteratorWrap(self)
+
+                    # Usage.
+                    foo = Foo()
+                    for i in foo:
+                        ...
                     """
                     def __init__( self, container):
-                        self.container = container
-                        self.pos = None
+                        self.begin = container.begin()
                         self.end = container.end()
-                    def __iter__( self):
-                        return self
-                    def __next__( self):    # for python2.
+                        self.pos = None
+                    def __next__( self):
                         if self.pos is None:
-                            self.pos = self.container.begin()
+                            self.pos = self.begin
                         else:
                             self.pos.__increment__()
                         if self.pos == self.end:
                             raise StopIteration()
                         return self.pos.__ref__()
-                    def next( self):    # for python3.
-                        return self.__next__()
 
                 # The auto-generated Python class method
                 # {rename.class_('fz_buffer')}.{rename.method('fz_buffer', 'fz_buffer_extract')}() returns (size, data).
@@ -1579,7 +1621,7 @@ def build_swig(
                         if isinstance( arg, FzOutput2):
                             assert not out, "More than one FzOutput2 passed to FzDocumentWriter.__init__()"
                             out = arg
-                    if out:
+                    if out is not None:
                         self._out = out
                     return FzDocumentWriter__init__0(self, *args)
                 FzDocumentWriter.__init__ = FzDocumentWriter__init__1
@@ -1648,6 +1690,8 @@ def build_swig(
                             f_fallback,
                             )
                     fz_install_load_system_font_funcs2(g_fz_install_load_system_font_funcs_args)
+
+                Py_LIMITED_API = {repr(build_dirs.Py_LIMITED_API) if build_dirs.Py_LIMITED_API else 'None'}
                 ''')
 
         # Add __iter__() methods for all classes with begin() and end() methods.
@@ -1679,32 +1723,6 @@ def build_swig(
 
         text += '%}\n'
 
-    text2_code = textwrap.dedent( '''
-            ''')
-
-    if text2_code.strip():
-        text2 = textwrap.dedent( f'''
-                %{{
-                    #include "mupdf/fitz.h"
-                    #include "mupdf/classes.h"
-                    #include "mupdf/classes2.h"
-                    #include <vector>
-
-                    {text2_code}
-                %}}
-
-                %include std_vector.i
-
-                namespace std
-                {{
-                    %template(vectori) vector<int>;
-                }};
-
-                {text2_code}
-                ''')
-    else:
-        text2 = ''
-
     if 1:   # lgtm [py/constant-conditional-expression]
         # This is a horrible hack to avoid swig failing because
         # include/mupdf/pdf/object.h defines an enum which contains a #include.
@@ -1729,10 +1747,10 @@ def build_swig(
         assert oo != o
         jlib.fs_update( oo, f'{build_dirs.dir_mupdf}/platform/python/include/mupdf/pdf/object.h')
 
-    swig_i      = f'{build_dirs.dir_mupdf}/platform/{language}/mupdfcpp_swig.i'
+    swig_i      = build_dirs.mupdfcpp_swig_i(language)
+    swig_cpp    = build_dirs.mupdfcpp_swig_cpp(language)
     include1    = f'{build_dirs.dir_mupdf}/include/'
     include2    = f'{build_dirs.dir_mupdf}/platform/c++/include'
-    swig_cpp    = f'{build_dirs.dir_mupdf}/platform/{language}/mupdfcpp_swig.cpp'
     swig_py     = f'{build_dirs.dir_so}/mupdf.py'
 
     swig2_i     = f'{build_dirs.dir_mupdf}/platform/{language}/mupdfcpp2_swig.i'
@@ -1742,10 +1760,7 @@ def build_swig(
     os.makedirs( f'{build_dirs.dir_mupdf}/platform/{language}', exist_ok=True)
     os.makedirs( f'{build_dirs.dir_so}', exist_ok=True)
     util.update_file_regress( text, swig_i, check_regress)
-    if text2:
-        util.update_file_regress( text2, swig2_i, check_regress)
-    else:
-        jlib.fs_update( '', swig2_i)
+    jlib.fs_update( '', swig2_i)
 
     # Disable some unhelpful SWIG warnings. Must not use -Wall as it overrides
     # all warning disables.
@@ -1789,7 +1804,7 @@ def build_swig(
             # include/mupdf/fitz/heap.h. Otherwise swig's preprocessor seems to
             # ignore #undef's in include/mupdf/fitz/heap-imp.h then complains
             # about redefinition of macros in include/mupdf/fitz/heap.h.
-            command = (f'''
+            command = f'''
                     "{swig_command}"
                         {"-D_WIN32" if state_.windows else ""}
                         -c++
@@ -1798,7 +1813,7 @@ def build_swig(
                         -Wextra
                         {disable_swig_warnings}
                         -module {module}
-                        -outdir {os.path.relpath(build_dirs.dir_so)}
+                        -outdir {os.path.relpath(build_dirs.dir_mupdf)}/platform/python
                         -o {cpp}
                         -includeall
                         {os.environ.get('XCXXFLAGS', '')}
@@ -1808,66 +1823,68 @@ def build_swig(
                         -ignoremissing
                         -DMUPDF_FITZ_HEAP_H
                         {swig_i}
-                    ''')
+                    '''
             return command
 
-        def modify_py( rebuilt, swig_py, do_enums):
-            if not rebuilt:
-                return
-            swig_py_leaf = os.path.basename( swig_py)
-            assert swig_py_leaf.endswith( '.py')
-            so = f'_{swig_py_leaf[:-3]}.so'
-            swig_py_tmp = f'{swig_py}-'
-            jlib.fs_remove( swig_py_tmp)
-            os.rename( swig_py, swig_py_tmp)
-            with open( swig_py_tmp) as f:
-                swig_py_content = f.read()
+        def modify_py( path_in, path_out):
+            with open( path_in) as f:
+                text = f.read()
 
-            if state_.windows:
-                jlib.log('Adding prefix to {swig_cpp=}')
-                prefix = ''
-                postfix = ''
-                with open( swig_cpp) as f:
-                    swig_py_content = prefix + swig_py_content + postfix
+            # Change all our PDF_ENUM_NAME_* enums so that they are actually
+            # PdfObj instances so that they can be used like any other PdfObj.
+            #
+            #jlib.log('{len(generated.c_enums)=}')
+            for enum_type, enum_names in generated.c_enums.items():
+                for enum_name in enum_names:
+                    if enum_name.startswith( 'PDF_ENUM_NAME_'):
+                        text += f'{enum_name} = {rename.class_("pdf_obj")}( obj_enum_to_obj( {enum_name}))\n'
 
-            if do_enums:
-                # Change all our PDF_ENUM_NAME_* enums so that they are actually
-                # PdfObj instances so that they can be used like any other PdfObj.
-                #
-                #jlib.log('{len(generated.c_enums)=}')
-                for enum_type, enum_names in generated.c_enums.items():
-                    for enum_name in enum_names:
-                        if enum_name.startswith( 'PDF_ENUM_NAME_'):
-                            swig_py_content += f'{enum_name} = {rename.class_("pdf_obj")}( obj_enum_to_obj( {enum_name}))\n'
+            # 2024-09-28: important to not include PDF_LIMIT here, because
+            # pdf_drop_obj() treats all pdf_obj*'s as real pointers if they are
+            # >= PDF_LIMIT.
+            for name in ('NULL', 'TRUE', 'FALSE'):
+                text += f'PDF_{name} = {rename.class_("pdf_obj")}( obj_enum_to_obj( PDF_ENUM_{name}))\n'
 
-            with open( swig_py_tmp, 'w') as f:
-                f.write( swig_py_content)
-            os.rename( swig_py_tmp, swig_py)
+            jlib.fs_update(text, path_out)
 
-        if text2:
-            # Make mupdf2, for mupdfpy optimisations.
-            jlib.log( 'Running SWIG to generate mupdf2 .cpp')
-            command = make_command( 'mupdf2', swig2_cpp, swig2_i)
-            rebuilt = jlib.build(
-                    (swig2_i, include1, include2),
-                    (swig2_cpp, swig2_py),
-                    command,
-                    force_rebuild,
-                    )
-            modify_py( rebuilt, swig2_py, do_enums=False)
-        else:
-            jlib.fs_update( '', swig2_cpp)
-            jlib.fs_remove( swig2_py)
+        def modify_cpp(path_in, path_out):
+            a = jlib.fs_read(path_in)
+            # Change SWIG's call of
+            # PyUnicode_DecodeUTF8(str, len, "surrogateescape")
+            # to
+            # PyUnicode_DecodeUTF8(str, len, "surrogateescape_mupdf")
+            #
+            b = a.replace('"surrogateescape"', '"surrogateescape_mupdf"')
+            assert b != a
+            jlib.fs_write(path_out, b)
 
-        # Make main mupdf .so.
-        command = make_command( 'mupdf', swig_cpp, swig_i)
+        jlib.fs_update( '', swig2_cpp)
+        jlib.fs_remove( swig2_py)
+
+        # Make main mupdf .so. We use intermediate .cpp and .py filenames to
+        # allow us to post-process them.
+        swig_cpp_ = f'{build_dirs.dir_mupdf}/platform/python/mupdf.intermediate.cpp'
+        swig_py_ = f'{build_dirs.dir_mupdf}/platform/python/mupdf.py'
+        command = make_command( 'mupdf', swig_cpp_, swig_i)
         rebuilt = jlib.build(
                 (swig_i, include1, include2),
-                (swig_cpp, swig_py),
+                (swig_cpp_, swig_py_),
                 command,
                 force_rebuild,
                 )
-        modify_py( rebuilt, swig_py, do_enums=True)
+        jlib.log(f'swig => {rebuilt=}.')
+        jlib.build(
+                (swig_py_, __file__),
+                swig_py,
+                lambda: modify_py(swig_py_, swig_py),
+                force_rebuild,
+                )
+        jlib.build(
+                (swig_cpp_, __file__),
+                swig_cpp,
+                lambda: modify_cpp(swig_cpp_, swig_cpp),
+                force_rebuild,
+                )
 
 
     elif language == 'csharp':
@@ -1886,9 +1903,14 @@ def build_swig(
             # swig generated c dll reference to a c sharp project".
             #
             dllimport = 'mupdfcsharp.dll'
+
+        # See https://www.swig.org/Doc4.2/CSharp.html `23.3.1 Primitive types`
+        # for description of SWIGWORDSIZE64. If we were to build on 32-bit Linux
+        # we would have to remove the `-DSWIGWORDSIZE64` flag.
         command = (f'''
                 "{swig_command}"
                     {"-D_WIN32" if state_.windows else ""}
+                    {"-DSWIGWORDSIZE64" if state_.linux else ""}
                     -c++
                     -csharp
                     -Wextra
@@ -1940,7 +1962,8 @@ def build_swig(
     else:
         assert 0
 
-    if swig_cpp_old:
+    # Disabled; see above for explanation.
+    if 0 and swig_cpp_old:
         with open( swig_cpp_old) as f:
             swig_cpp_contents_old = f.read()
         with open(swig_cpp) as f:
@@ -1997,16 +2020,117 @@ def test_swig():
             )
 
 
-def test_swig_csharp():
+def test_swig_csharp_internal(name, code_i, code_test, x32):
+    '''
+    Builds and tests a SWIG-generated C# library.
+
+    name:
+        Name of module to build from <code_i>.
+    code_i
+        Module SWIG input.
+    code_test
+        C# test code.
+    x32
+        If true we build for x32-only with `csc -platform:x86`.
+
+    In a temporary directory (whose name contains <name>):
+
+    * Writes swig input <code_i> to <name>.i
+    * Writes <code_test> to test.cs.
+    * Uses swig and c++ to build <name>.i into <name>.dll and <name>.cs.
+    * Builds test.cs and <name>.cs into an executable 'test.exe'.
+    * Runs the executable.
+    '''
+
+    build_dir = f'test_swig_csharp_{name}'
+    os.makedirs( build_dir, exist_ok=True)
+
+    with open(f'{build_dir}/{name}.i', 'w') as f:
+        f.write(f'%module {name}\n')
+        f.write(code_i)
+
+    # Run swig on `{name}.i` to generate `{name}.cs` and `{name}.cpp`.
+    #
+    jlib.system(
+            f'''
+            cd {build_dir} && swig
+                -D_WIN32
+                -c++
+                -csharp
+                -Wextra
+                -Wall
+                -dllimport {name}.dll
+                -outdir .
+                -outfile {name}.cs
+                -o {name}.cpp
+                {name}.i
+            ''')
+
+    # Compile/link {name}.cpp to create {name}.dll.
+    #
+    if state.state_.windows:
+        import wdev
+        vs = wdev.WindowsVS(cpu = wdev.WindowsCpu('x32') if x32 else None)
+        jlib.system(
+                f'''
+                cd {build_dir} && "{vs.vcvars}"&&"{vs.cl}"
+                    /nologo                     #
+                    /c                          # Compiles without linking.
+                    /EHsc                       # Enable "Standard C++ exception handling".
+                    /MD
+                    /Tp{name}.cpp               # /Tp specifies C++ source file.
+                    /Fo{name}.cpp.obj           # Output file.
+                    /permissive-                # Set standard-conformance mode.
+                    /FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
+                    /W3                         # Sets which warning level to output. /W3 is IDE default.
+                    /diagnostics:caret          # Controls the format of diagnostic messages.
+                ''')
+
+        jlib.system(
+                f'''
+                cd {build_dir} && "{vs.vcvars}"&&"{vs.link}"
+                    /nologo                     #
+                    /DLL
+                    /IMPLIB:{name}.lib        # Overrides the default import library name.
+                    /OUT:{name}.dll           # Specifies the output file name.
+                    /nologo
+                    {name}.cpp.obj
+                ''')
+    else:
+        assert not x32, '.net x32 builds not supported on non-windows.'
+        jlib.system(
+                f'''
+                cd {build_dir} && c++
+                    -fPIC
+                    --shared
+                    -o {name}.dll
+                    {name}.cpp
+                ''')
+
+    # Build C# test programme.
+    with open(f'{build_dir}/test.cs', 'w') as f:
+        f.write(code_test)
+
+    # Use `csc` to compile `test.cs` and `{name}.cs`, and create `test.exe`.
+    #
+    csc, mono, _ = csharp.csharp_settings(None)
+    jlib.system(f'cd {build_dir} && "{csc}"{" -platform:x86" if x32 else ""} -out:test.exe test.cs {name}.cs')
+
+    # Run `test.exe`.
+    #
+    jlib.system(f'cd {build_dir} && {mono} test.exe')
+
+
+def test_swig_csharp_unicode(x32):
     '''
     Checks behaviour with and without our custom string marshalling code from
     _csharp_unicode_prefix().
     '''
-    test_swig_csharp_internal(fix=0)
-    test_swig_csharp_internal(fix=1)
+    test_swig_csharp_unicode_internal(x32, fix=0)
+    test_swig_csharp_unicode_internal(x32, fix=1)
 
 
-def test_swig_csharp_internal(fix):
+def test_swig_csharp_unicode_internal(x32, fix):
     '''
     Test utf8 string handling, with/without use of _csharp_unicode_prefix().
     '''
@@ -2014,16 +2138,12 @@ def test_swig_csharp_internal(fix):
     # C++ and .NET/Mono build commands.
     #
 
-    build_dir = f'test_swig_{fix}'
-    os.makedirs( build_dir, exist_ok=True)
-
     print('')
-    print(f'### test_swig_internal(): {fix=}', flush=1)
+    print(f'### test_swig_csharp_unicode_internal(): {fix=}', flush=1)
 
-    # Create SWIG input file `test.i`.
-    #
-    test_i = '%module test\n'
+    name = f'test_swig_unicode_{fix}'
 
+    test_i = ''
     if fix:
         test_i += _csharp_unicode_prefix()
 
@@ -2049,7 +2169,7 @@ def test_swig_csharp_internal(fix):
                 std::string foo2(const std::string& text)
                 {{
                     std::string ret;
-                    for (int i=0; i<text.size(); ++i)
+                    for (unsigned i=0; i<text.size(); ++i)
                     {{
                         char buffer[8];
                         snprintf(buffer, sizeof(buffer), " \\\\x%02x", (unsigned char) text[i]);
@@ -2090,70 +2210,8 @@ def test_swig_csharp_internal(fix):
                 }}
             %}}
             ''')
-    with open(f'{build_dir}/test.i', 'w') as f:
-        f.write(test_i)
 
-    # Run swig on `test.i` to generate `test.cs` and `test.cpp`.
-    #
-    jlib.system(
-            f'''
-            cd {build_dir} && swig
-                {'-DSWIG_CSHARP_NO_STRING_HELPER=1 -DSWIG_CSHARP_NO_EXCEPTION_HELPER=1' if 0 and fix else ''}
-                -D_WIN32
-                -c++
-                -csharp
-                -Wextra
-                -Wall
-                -dllimport test.dll
-                -outdir .
-                -outfile test.cs
-                -o test.cpp
-                test.i
-            ''')
-
-    # Compile/link test.cpp to create test.dll.
-    #
-    if state.state_.windows:
-        import wdev
-        vs = wdev.WindowsVS()
-        jlib.system(
-                f'''
-                cd {build_dir} && "{vs.vcvars}"&&"{vs.cl}"
-                    /nologo                     #
-                    /c                          # Compiles without linking.
-                    /EHsc                       # Enable "Standard C++ exception handling".
-                    /MD
-                    /Tptest.cpp                 # /Tp specifies C++ source file.
-                    /Fotest.cpp.obj             # Output file.
-                    /permissive-                # Set standard-conformance mode.
-                    /FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
-                    /W3                         # Sets which warning level to output. /W3 is IDE default.
-                    /diagnostics:caret          # Controls the format of diagnostic messages.
-                ''')
-
-        jlib.system(
-                f'''
-                cd {build_dir} && "{vs.vcvars}"&&"{vs.link}"
-                    /nologo                     #
-                    /DLL
-                    /IMPLIB:test.lib        # Overrides the default import library name.
-                    /OUT:test.dll           # Specifies the output file name.
-                    /nologo
-                    test.cpp.obj
-                ''')
-    else:
-        jlib.system(
-                f'''
-                cd {build_dir} && c++
-                    -fPIC
-                    --shared
-                    -o test.dll
-                    test.cpp
-                ''')
-
-    # Create C# test programme `testfoo.cs`.
-    #
-    cs = textwrap.dedent(f'''
+    code_test = textwrap.dedent(f'''
             public class HelloWorld
             {{
                 public static void Main(string[] args)
@@ -2166,19 +2224,19 @@ def test_swig_csharp_internal(fix):
                     string text = System.Text.Encoding.UTF8.GetString(text_utf8);
 
                     // Escaped representation of text_utf8, as returned by
-                    // calls of test.foo1() and test.foo2() below.
+                    // calls of {name}.foo1() and {name}.foo2() below.
                     //
                     string text_utf8_escaped = " \\\\xf0 \\\\x90 \\\\x90 \\\\xb7";
                     string incorrect_utf8_escaped = " \\\\x3f \\\\x3f";
 
-                    // test.foo1()/test.foo2() return a `const
+                    // {name}.foo1()/{name}.foo2() return a `const
                     // char*`/`std::string` containing an escaped
                     // representation of the string that they were given. If
                     // things are working correctly, this will be an escaped
                     // representation of `text_utf8`.
                     //
 
-                    string foo1 = test.foo1(text);
+                    string foo1 = {name}.foo1(text);
                     System.Console.WriteLine("foo1: " + foo1);
                     string foo_expected_escaped = (expect_fix) ? text_utf8_escaped : incorrect_utf8_escaped;
                     if (foo1 != foo_expected_escaped)
@@ -2189,7 +2247,7 @@ def test_swig_csharp_internal(fix):
                                 );
                     }}
 
-                    string foo2 = test.foo2(text);
+                    string foo2 = {name}.foo2(text);
                     System.Console.WriteLine("foo2: " + foo2);
                     if (foo2 != foo_expected_escaped)
                     {{
@@ -2199,7 +2257,7 @@ def test_swig_csharp_internal(fix):
                                 );
                     }}
 
-                    // test.bar1() and test.bar2() return a `const
+                    // {name}.bar1() and {name}.bar2() return a `const
                     // char*`/`std::string` containing the bytes of
                     // `text_utf8`. If things are working correctly we will see
                     // exactly these bytes.
@@ -2207,7 +2265,7 @@ def test_swig_csharp_internal(fix):
                     byte[] bar_expected_utf8_incorrect = {{ 0xc3, 0xb0, 0xc2, 0x90, 0xc2, 0x90, 0xc2, 0xb7, }};
                     byte[] bar_expected_utf8 = (expect_fix) ? text_utf8 : bar_expected_utf8_incorrect;
 
-                    string ret3 = test.bar();
+                    string ret3 = {name}.bar();
                     byte[] ret3_utf8 = System.Text.Encoding.UTF8.GetBytes(ret3);
                     print_bytes_as_string("ret3_utf8:", ret3_utf8);
                     if (!equal(ret3_utf8, bar_expected_utf8))
@@ -2215,7 +2273,7 @@ def test_swig_csharp_internal(fix):
                         throw new System.Exception("ret3 != bar_expected_utf8");
                     }}
 
-                    string ret4 = test.bar2();
+                    string ret4 = {name}.bar2();
                     byte[] ret4_utf8 = System.Text.Encoding.UTF8.GetBytes(ret4);
                     print_bytes_as_string("ret4_utf8:", ret4_utf8);
                     if (!equal(ret4_utf8, bar_expected_utf8))
@@ -2246,14 +2304,96 @@ def test_swig_csharp_internal(fix):
                 }}
             }}
             ''')
-    with open(f'{build_dir}/testfoo.cs', 'w') as f:
-        f.write(cs)
 
-    # Use `csc` to compile `testfoo.cs` and create `testfoo.exe`.
-    #
-    csc, mono, _ = csharp.csharp_settings(None)
-    jlib.system(f'cd {build_dir} && "{csc}" -out:testfoo.exe testfoo.cs test.cs')
+    test_swig_csharp_internal(name, test_i, code_test, x32)
 
-    # Run `testfoo.exe`.
+
+def test_swig_charp_exceptions(x32):
+
+    '''
+    Test SWIG-generated handling of C++ exceptions.
+
+    As of 2025-08-20, works ok on Windows, fails on Linux/Mono.
+    '''
+
+    code_i = textwrap.dedent(f'''
+            %include "std_string.i"
+            ''')
+
+    # On Windows, exceptions are automatically converted into
+    # System.Runtime.InteropServices.SEHException instances.
     #
-    jlib.system(f'cd {build_dir} && {mono} testfoo.exe')
+    # On Mono this doesn't seem to happen and std::terminate() is called.
+    #
+    # So if we are not on Windows we use swig's `%exception {...}` to
+    # explicitly convert exceptions to .net. In the fuiture we could follow
+    # the Python bindings and convert each of the various MuPDF C++ exception
+    # classes into the equivalent C# class.
+    #
+    if not state.state_.windows:
+        code_i += textwrap.dedent(f'''
+                %exception
+                {{
+                    try
+                    {{
+                        $action
+                    }}
+                    catch (std::exception& e)
+                    {{
+                        std::cout << "%exception: Received exception: " << e.what() << "\\n" << std::flush;
+                        SWIG_CSharpSetPendingException(SWIG_CSharpApplicationException, e.what());
+                        std::cout << "%exception: after SWIG_CSharpSetPendingException.\\n" << std::flush;
+                    }}
+                }}
+                ''')
+
+    code_i += textwrap.dedent(f'''
+            int check1();
+            int check2();
+
+            %{{
+                #include <stdexcept>
+                #include <iostream>
+
+                // Returns string containing escaped description of `text`.
+                int check1()
+                {{
+                    return 0;
+                }}
+
+                int check2()
+                {{
+                    throw std::runtime_error("check2() deliberate exception.");
+                    return 0;
+                }}
+
+            %}}
+            ''')
+
+    code_test = textwrap.dedent(f'''
+            public class HelloWorld
+            {{
+                public static void Main(string[] args)
+                {{
+                    int i1 = exceptions.check1();
+                    System.Console.WriteLine("exceptions.check1() => " + i1);
+                    int received_exception = 0;
+                    try
+                    {{
+                        int i2 = exceptions.check2();
+                    }}
+                    catch (System.Exception e)
+                    {{
+                        received_exception = 1;
+                        System.Console.WriteLine("Received expected exception: " + e.Message);
+                        System.Console.WriteLine("e.GetType(): " + e.GetType());
+                    }}
+                    if (received_exception != 1)
+                    {{
+                        throw new System.Exception("Did not receive expected exception");
+                    }}
+                }}
+            }}
+            ''')
+
+    test_swig_csharp_internal('exceptions', code_i, code_test, x32)

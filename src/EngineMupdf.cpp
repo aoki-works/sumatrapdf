@@ -5,7 +5,6 @@ extern "C" {
 #include <mupdf/fitz.h>
 #include <mupdf/pdf.h>
 #include "../mupdf/source/fitz/color-imp.h"
-#include "../mupdf/source/pdf/pdf-annot-imp.h"
 }
 
 #include "utils/BaseUtil.h"
@@ -34,24 +33,18 @@ extern "C" {
 #include "EbookDoc.h"
 #include "SumatraConfig.h"
 #include "Settings.h"
-#include "GlobalPrefs.h"
 
 #include "utils/Log.h"
 
 // A5
-static float layoutA5DxPt = 420.f;
-static float layoutA5DyPt = 595.f;
+static float layoutA5DxPt = 420.F;
+static float layoutA5DyPt = 595.F;
 
 // A4
-static float layoutA4DxPt = 595.f;
-static float layoutA4DyPt = 842.f;
+static float layoutA4DxPt = 595.F;
+static float layoutA4DyPt = 842.F;
 
-static float layoutFontEm = 11.f;
-
-// maximum size of a file that's entirely loaded into memory before parsed
-// and displayed; larger files will be kept open while they're displayed
-// so that their content can be loaded on demand in order to preserve memory
-constexpr i64 kMaxMemoryFileSize = 32 * 1024 * 1024;
+static float layoutFontEm = 11.F;
 
 // in mupdf_load_system_font.c
 extern "C" void install_load_windows_font_funcs(fz_context* ctx);
@@ -74,13 +67,11 @@ class FitzAbortCookie : public AbortCookie {
     fz_cookie cookie;
     FitzAbortCookie() {
         memset(&cookie, 0, sizeof(cookie));
+        // Unknown progress avoids MuPDF pre-counting annotations; the cookie is only used for aborting.
+        cookie.progress_max = (size_t)-1;
     }
-    void Abort() override {
-        cookie.abort = 1;
-    }
-    void* GetData() override {
-        return (void*)&cookie;
-    }
+    void Abort() override { cookie.abort = 1; }
+    void* GetData() override { return (void*)&cookie; }
 };
 
 // copy of fz_is_external_link without ctx
@@ -264,7 +255,9 @@ static bool IsPointInRect(fz_rect rect, fz_point pt) {
 fz_matrix FzCreateViewCtm(fz_rect mediabox, float zoom, int rotation) {
     fz_matrix ctm = fz_pre_scale(fz_rotate((float)rotation), zoom, zoom);
 
-    ReportIf(0 != mediabox.x0 || 0 != mediabox.y0);
+    // TODO: this is happening quite often so don't report it
+    // not sure if it indicates an actual issue
+    // ReportIf(0 != mediabox.x0 || 0 != mediabox.y0);
     rotation = (rotation + 360) % 360;
     if (90 == rotation) {
         ctm = fz_pre_translate(ctm, 0, -mediabox.y1);
@@ -284,16 +277,16 @@ fz_matrix FzCreateViewCtm(fz_rect mediabox, float zoom, int rotation) {
 
 // TODO: maybe make dpi a float as well
 static float DpiScale(float x, int dpi) {
-    ReportIf(dpi < 70.f);
+    ReportIf(dpi < 70.F);
     // TODO: maybe implement step scaling like mupdf
     float res = x * (float)dpi;
-    res = res / 96.f;
+    res = res / 96.F;
     return res;
 }
 
 static float FzRectOverlap(fz_rect r1, fz_rect r2) {
     if (fz_is_empty_rect(r1)) {
-        return 0.0f;
+        return 0.0F;
     }
     fz_rect isect = fz_intersect_rect(r1, r2);
     return (isect.x1 - isect.x0) * (isect.y1 - isect.y0) / ((r1.x1 - r1.x0) * (r1.y1 - r1.y0));
@@ -301,7 +294,7 @@ static float FzRectOverlap(fz_rect r1, fz_rect r2) {
 
 static float FzRectOverlap(fz_rect r1, RectF r2f) {
     if (fz_is_empty_rect(r1)) {
-        return 0.0f;
+        return 0.0F;
     }
     fz_rect r2 = ToFzRect(r2f);
     fz_rect isect = fz_intersect_rect(r1, r2);
@@ -333,6 +326,11 @@ static WCHAR* PdfCleanStringInPlace(WCHAR* s) {
         WCHAR c = *curr;
         if (c < 0x20) {
             *curr = ' ';
+        } else if (c == 0xfffd) {
+            // https://github.com/sumatrapdfreader/sumatrapdf/issues/4965
+            // TODO: was there mupdf change that caused this?
+            *curr = 0;
+            break;
         }
         curr++;
     }
@@ -410,45 +408,98 @@ static void* FzMemdup(fz_context* ctx, void* p, size_t size) {
     return res;
 }
 
-static fz_stream* FzOpenFile2(fz_context* ctx, const char* path) {
+static fz_stream* FzStreamFromData(fz_context* ctx, const u8* data, int size) {
+    fz_stream* stm = nullptr;
+    // TODO: we copy so that the memory ends up in chunk allocated
+    // by libmupdf so that it works across dll boundaries.
+    // We can either use  fz_new_buffer_from_shared_data
+    // and free the data on the side or create Allocator that
+    // uses fz_malloc_no_throw and pass it to ReadFileWithAllocator
+    void* dataCopy = FzMemdup(ctx, (void*)data, size);
+    if (!dataCopy) {
+        return nullptr;
+    }
+
+    fz_buffer* buf = fz_new_buffer_from_data(ctx, (u8*)dataCopy, size);
+    fz_var(buf);
+    fz_try(ctx) {
+        stm = fz_open_buffer(ctx, buf);
+    }
+    fz_always(ctx) {
+        fz_drop_buffer(ctx, buf);
+    }
+    fz_catch(ctx) {
+        stm = nullptr;
+        fz_report_error(ctx);
+    }
+    return stm;
+}
+
+// maximum size of a file that's entirely loaded into memory before parsed
+// and displayed; larger files will be kept open while they're displayed
+// so that their content can be loaded on demand in order to preserve memory
+constexpr i64 kMaxMemoryFileSize = 32 * 1024 * 1024;
+
+static fz_stream* FzReadFileIfSmall(fz_context* ctx, const char* path) {
     fz_stream* stm = nullptr;
     i64 fileSize = file::GetSize(path);
     // load small files entirely into memory so that they can be
     // overwritten even by programs that don't open files with FILE_SHARE_READ
-    if (fileSize > 0 && fileSize < kMaxMemoryFileSize) {
-        ByteSlice dataTmp = file::ReadFile(path);
-        if (dataTmp.empty()) {
-            // failed to read
-            return nullptr;
-        }
-
-        // TODO: we copy so that the memory ends up in chunk allocated
-        // by libmupdf so that it works across dll boundaries.
-        // We can either use  fz_new_buffer_from_shared_data
-        // and free the data on the side or create Allocator that
-        // uses fz_malloc_no_throw and pass it to ReadFileWithAllocator
-        size_t size = dataTmp.size();
-        void* data = FzMemdup(ctx, (void*)dataTmp.data(), size);
-        if (!data) {
-            return nullptr;
-        }
-        dataTmp.Free();
-
-        fz_buffer* buf = fz_new_buffer_from_data(ctx, (u8*)data, size);
-        fz_var(buf);
-        fz_try(ctx) {
-            stm = fz_open_buffer(ctx, buf);
-        }
-        fz_always(ctx) {
-            fz_drop_buffer(ctx, buf);
-        }
-        fz_catch(ctx) {
-            stm = nullptr;
-            fz_report_error(ctx);
-        }
-        return stm;
+    bool isSmallFile = fileSize > 0 && fileSize < kMaxMemoryFileSize;
+    if (!isSmallFile) {
+        return nullptr;
     }
 
+    ByteSlice d = file::ReadFile(path);
+    if (d.empty()) {
+        // failed to read
+        return nullptr;
+    }
+
+    stm = FzStreamFromData(ctx, d.data(), d.Size());
+    d.Free();
+    return stm;
+}
+
+/*
+https://github.com/sumatrapdfreader/sumatrapdf/issues/4514
+Some PDF files have garbage at the beginning, before the %PDF- marker
+Sometimes removing this garbage fixes the file for mupdf
+*/
+static fz_stream* FzReadMaybeFixPDF(fz_context* ctx, const char* path) {
+    fz_stream* stm;
+    // fast fail: read enough to check if this is PDF file with garbage
+    char buf[1024];
+    size_t bufSize = dimof(buf);
+    int n = file::ReadN(path, buf, bufSize);
+    if (n < 1024) {
+        return nullptr;
+    }
+    n = str::BufFind(buf, (int)bufSize, "%PDF-");
+    if (n <= 0) {
+        // not PDF or no garbage at the beginning
+        return nullptr;
+    }
+
+    ByteSlice d = file::ReadFile(path);
+    if (d.empty()) {
+        // failed to read
+        return nullptr;
+    }
+
+    // strip garbage
+    const u8* data = d.data() + n;
+    int size = d.Size() - n;
+    stm = FzStreamFromData(ctx, data, size);
+    d.Free();
+    return stm;
+}
+
+static fz_stream* FzOpenOrReadFile(fz_context* ctx, const char* path) {
+    fz_stream* stm = FzReadFileIfSmall(ctx, path);
+    if (stm) {
+        return stm;
+    }
     WCHAR* pathW = ToWStrTemp(path);
     fz_try(ctx) {
         stm = fz_open_file_w(ctx, pathW);
@@ -799,7 +850,8 @@ static RenderedBitmap* TryRenderAsPaletteImage(fz_pixmap* pixmap) {
         return nullptr;
     }
 
-    ScopedMem<BITMAPINFO> bmi((BITMAPINFO*)calloc(1, sizeof(BITMAPINFO) + 255 * sizeof(RGBQUAD)));
+    size_t sz = sizeof(BITMAPINFO) + (255 * sizeof(RGBQUAD));
+    ScopedMem<BITMAPINFO> bmi((BITMAPINFO*)calloc(1, sz));
 
     u8* dest = bmpData;
     u8* source = pixmap->samples;
@@ -974,6 +1026,10 @@ static TocItem* NewTocItemWithDestination(TocItem* parent, char* title, IPageDes
 
 // TODO: could be optimized
 static bool RectFullyContains(RectF r1, RectF r2) {
+    // if same size, we don't consider it that one covers another
+    if (r1 == r2) {
+        return false;
+    }
     return r1.Contains(r2.TL()) && r1.Contains(r2.BR());
 }
 
@@ -1002,18 +1058,29 @@ static bool RemoveHeWhoFullyContains(Vec<IPageElement*>& els) {
 // that is fully obscured by all other elements
 // if not fully obscured, return the first one
 static IPageElement* PickBestElement(Vec<IPageElement*>& els) {
-    if (els.Size() == 0) {
+    int n = els.Size();
+    if (n == 0) {
         return nullptr;
     }
-
-Encore:
-    int n = els.Size();
     if (n == 1) {
         return els[0];
     }
+
+    // for https://github.com/sumatrapdfreader/sumatrapdf/issues/5200
+    // priority for destinations (e.g. links) over images
+    for (IPageElement* el : els) {
+        if (el->GetKind() == kindPageElementDest) {
+            return el;
+        }
+    }
+Encore:
     bool didRemove = RemoveHeWhoFullyContains(els);
     if (didRemove) {
         ReportIf(els.Size() != n - 1);
+        n = els.Size();
+        if (n == 1) {
+            return els[0];
+        }
         goto Encore;
     }
     return els[0];
@@ -1261,7 +1328,8 @@ static ByteSlice PdfLoadAttachment(fz_context* ctx, pdf_document* doc, int no) {
         for (int i = 0; i < n; i++) {
             pdf_obj* fs = pdf_dict_get_val(ctx, dict, i);
 
-            if (!pdf_is_embedded_file(ctx, fs)) {
+            // https://github.com/sumatrapdfreader/sumatrapdf/issues/1666
+            if (false && !pdf_is_embedded_file(ctx, fs)) {
                 continue;
             }
             if (no == i + 1) {
@@ -1301,13 +1369,14 @@ static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc, const 
         for (int i = 0; i < pdf_dict_len(ctx, dict); i++) {
             pdf_obj* fs = pdf_dict_get_val(ctx, dict, i);
 
-            if (!pdf_is_embedded_file(ctx, fs)) {
+            // https://github.com/sumatrapdfreader/sumatrapdf/issues/1666
+            if (false && !pdf_is_embedded_file(ctx, fs)) {
                 continue;
             }
-            pdf_embedded_file_params fileParams = {};
-            pdf_get_embedded_file_params(ctx, fs, &fileParams);
+            pdf_filespec_params fileParams = {};
+            pdf_get_filespec_params(ctx, fs, &fileParams);
             const char* nameStr = fileParams.filename;
-            if (str::IsEmpty(nameStr)) {
+            if (str::IsEmpty(nameStr) || (fileParams.size < 0)) {
                 continue;
             }
             fz_outline* link = fz_new_outline(ctx);
@@ -1504,6 +1573,19 @@ static void fz_unlock_context_cs(void* user, int lock) {
 }
 
 static void fz_print_cb(void* user, const char* msg) {
+    static AtomicBool seenMsg = 0;
+    if (str::Contains(msg, "generic error: couldn't find system font")) {
+        // this floods the log in some files
+        // it shows a font name like this:
+        // generic error: couldn't find system font 'AngsanaUPC-Bold'
+        // generic error: couldn't find system font 'AngsanaUPC'
+        // we only show the first missed font. Could use StrVec() to log every
+        // missing font
+        if (AtomicBoolGet(&seenMsg)) {
+            return;
+        }
+        AtomicBoolSet(&seenMsg, true);
+    }
     if (!str::EndsWith(msg, "\n")) {
         msg = str::JoinTemp(msg, "\n");
     }
@@ -1523,43 +1605,87 @@ struct ContextThreadID {
 
 static Vec<ContextThreadID>* gPerThreadContexts;
 static CRITICAL_SECTION gPerThreadContextsCs;
+static AtomicInt gEngineCount = 0;
 
-void InitializeEngineMupdf() {
+static void InitializeEngineMupdf() {
+    auto n = AtomicIntInc(&gEngineCount);
+    if (n != 1) return;
     ReportIf(gPerThreadContexts);
     InitializeCriticalSection(&gPerThreadContextsCs);
     gPerThreadContexts = new Vec<ContextThreadID>();
 }
 
+static void DeInitializeEngineMupdf() {
+    auto n = AtomicIntDec(&gEngineCount);
+    if (n > 0) return;
+    ReportIf(n < 0);
+    DeleteCriticalSection(&gPerThreadContextsCs);
+    delete gPerThreadContexts;
+    gPerThreadContexts = nullptr;
+}
+
 fz_context* GetOrClonePerThreadContext(EngineMupdf* engine, fz_context* ctx) {
     DWORD threadID = GetCurrentThreadId();
-    ScopedCritSec cs(&gPerThreadContextsCs);
-    for (auto& el : *gPerThreadContexts) {
-        if (el.engine == engine && el.threadID == threadID) {
-            return el.ctx;
+    {
+        ScopedCritSec cs(&gPerThreadContextsCs);
+        for (auto& el : *gPerThreadContexts) {
+            if (el.engine == engine && el.threadID == threadID) {
+                return el.ctx;
+            }
         }
     }
+    // clone context without holding gPerThreadContextsCs to avoid deadlock
+    // with threads that hold fz_locks (e.g. ctxAccess) and then call Ctx()
+    // safe because only current thread can create a context for its own threadID
     auto newCtx = fz_clone_context(ctx);
-    ContextThreadID el{engine, newCtx, threadID};
-    gPerThreadContexts->Append(el);
+    {
+        ScopedCritSec cs(&gPerThreadContextsCs);
+        ContextThreadID el{engine, newCtx, threadID};
+        gPerThreadContexts->Append(el);
+    }
     return newCtx;
 }
 
 void ReleasePerThreadContext(EngineMupdf* engine) {
     DWORD threadID = GetCurrentThreadId();
-    ScopedCritSec cs(&gPerThreadContextsCs);
-    auto n = gPerThreadContexts->Size();
-    for (int i = 0; i < n; i++) {
-        auto& el = gPerThreadContexts->at(i);
-        if (el.engine == engine && el.threadID == threadID) {
-            auto ctx = el.ctx;
-            fz_drop_context(ctx);
-            gPerThreadContexts->RemoveAtFast(i);
-            return;
+    fz_context* ctxToDrop = nullptr;
+    {
+        ScopedCritSec cs(&gPerThreadContextsCs);
+        auto n = gPerThreadContexts->Size();
+        for (int i = 0; i < n; i++) {
+            auto& el = gPerThreadContexts->at(i);
+            if (el.engine == engine && el.threadID == threadID) {
+                ctxToDrop = el.ctx;
+                gPerThreadContexts->RemoveAtFast(i);
+                break;
+            }
         }
+    }
+    if (ctxToDrop) {
+        fz_drop_context(ctxToDrop);
+    }
+}
+
+// Release all per-thread contexts for a given engine (called from destructor)
+static void ReleaseAllPerThreadContexts(EngineMupdf* engine) {
+    Vec<fz_context*> ctxsToDrop;
+    {
+        ScopedCritSec cs(&gPerThreadContextsCs);
+        for (int i = (int)gPerThreadContexts->Size() - 1; i >= 0; i--) {
+            auto& el = gPerThreadContexts->at(i);
+            if (el.engine == engine) {
+                ctxsToDrop.Append(el.ctx);
+                gPerThreadContexts->RemoveAtFast(i);
+            }
+        }
+    }
+    for (auto ctx : ctxsToDrop) {
+        fz_drop_context(ctx);
     }
 }
 
 EngineMupdf::EngineMupdf() {
+    InitializeEngineMupdf();
     kind = kindEngineMupdf;
     defaultExt = str::Dup(".pdf");
     fileDPI = 72.0f;
@@ -1574,6 +1700,11 @@ EngineMupdf::EngineMupdf() {
     fz_locks_ctx.lock = fz_lock_context_cs;
     fz_locks_ctx.unlock = fz_unlock_context_cs;
     _ctx = fz_new_context(nullptr, &fz_locks_ctx, FZ_STORE_DEFAULT);
+    if (!_ctx) {
+        // can happen when out of memory. Load() will fail
+        log("EngineMupdf: fz_new_context() failed\n");
+        return;
+    }
     InstallFitzErrorCallbacks(_ctx);
 
     install_load_windows_font_funcs(_ctx);
@@ -1581,13 +1712,18 @@ EngineMupdf::EngineMupdf() {
 }
 
 fz_context* EngineMupdf::Ctx() const {
-    return _ctx;
+    if (!_ctx) {
+        // fz_new_context() failed in the constructor, likely OOM
+        return nullptr;
+    }
+    return GetOrClonePerThreadContext(const_cast<EngineMupdf*>(this), _ctx);
 }
 
 EngineMupdf::~EngineMupdf() {
     EnterCriticalSection(&pagesAccess);
 
-    auto ctx = Ctx();
+    ReleaseAllPerThreadContexts(this);
+    auto ctx = _ctx;
     for (FzPageInfo* pi : pages) {
         DeleteVecMembers(pi->links);
         DeleteVecMembers(pi->autoLinks);
@@ -1613,6 +1749,9 @@ EngineMupdf::~EngineMupdf() {
     }
 
     fz_drop_document(ctx, _doc);
+    if (ctx) {
+        fz_purge_glyph_cache(ctx);
+    }
     fz_drop_context(ctx);
 
     delete pageLabels;
@@ -1624,15 +1763,15 @@ EngineMupdf::~EngineMupdf() {
     }
     LeaveCriticalSection(&pagesAccess);
     DeleteCriticalSection(&pagesAccess);
+
+    DeInitializeEngineMupdf();
 }
 
 class PasswordCloner : public PasswordUI {
     u8* cryptKey = nullptr;
 
   public:
-    explicit PasswordCloner(u8* cryptKey) {
-        this->cryptKey = cryptKey;
-    }
+    explicit PasswordCloner(u8* cryptKey) { this->cryptKey = cryptKey; }
 
     char* GetPassword(const char*, u8*, u8 decryptionKeyOut[32], bool* saveKey) override {
         memcpy(decryptionKeyOut, cryptKey, 32);
@@ -1664,6 +1803,8 @@ EngineBase* EngineMupdf::Clone() {
         return nullptr;
     }
     delete pwdUI;
+
+    clone->disableAntiAlias = disableAntiAlias;
 
     if (!decryptionKey && pdfdoc && pdfdoc->crypt) {
         free(clone->decryptionKey);
@@ -1736,7 +1877,7 @@ ByteSlice EngineMupdf::LoadStreamFromPDFFile(const char* filePath) {
 ByteSlice LoadEmbeddedPDFFile(const char* filePath) {
     EngineMupdf* engine = new EngineMupdf();
     auto res = engine->LoadStreamFromPDFFile(filePath);
-    engine->Release();
+    SafeEngineRelease(&engine);
     return res;
 }
 
@@ -1800,9 +1941,13 @@ static ByteSlice PalmDocToHTML(const char* path) {
 }
 
 bool EngineMupdf::Load(const char* path, PasswordUI* pwdUI) {
+    bool ok;
     const char* pathA = path;
     auto ctx = Ctx();
-    ReportIf(FilePath() || _doc || !ctx);
+    ReportIf(FilePath() || _doc);
+    if (!ctx) {
+        return false;
+    }
     SetFilePath(path);
 
     auto ext = path::GetExtTemp(path);
@@ -1848,25 +1993,31 @@ bool EngineMupdf::Load(const char* path, PasswordUI* pwdUI) {
         return FinishLoading();
     }
 
-    fz_stream* file = nullptr;
-
-    fz_var(file);
-    fz_try(ctx) {
-        file = FzOpenFile2(ctx, fnCopy);
-    }
-    fz_catch(ctx) {
-        fz_report_error(ctx);
-        file = nullptr;
-    }
-
-    if (!LoadFromStream(file, FilePath(), pwdUI)) {
+    fz_stream* file = FzOpenOrReadFile(ctx, fnCopy);
+    ok = LoadFromStream(file, FilePath(), pwdUI);
+    if (!ok) {
         return false;
     }
 
     if (streamNo < 0) {
+        ok = FinishLoading();
+        if (ok) {
+            return true;
+        }
+        fz_drop_document(ctx, _doc);
+        _doc = nullptr;
+        file = FzReadMaybeFixPDF(ctx, FilePath());
+        if (!file) {
+            return false;
+        }
+        ok = LoadFromStream(file, FilePath(), pwdUI);
+        if (!ok) {
+            return false;
+        }
         return FinishLoading();
     }
 
+    // load a stream from inside a pdf document
     pdfdoc = pdf_specifics(ctx, _doc);
     if (pdfdoc) {
         if (!pdf_obj_num_is_stream(ctx, pdfdoc, streamNo)) {
@@ -1898,33 +2049,10 @@ bool EngineMupdf::Load(const char* path, PasswordUI* pwdUI) {
     return FinishLoading();
 }
 
-#if 0
-const char* custom_css = R"(
-* {
-    background-color: #f3f3f3;
-    line-height: 1.3em;
-}
-@page{
-    margin:2em 2em;    
-}
-)";
-#endif
-
-const char* custom_css = nullptr;
-
-/*
-line-height: 2.5em;
-font-family: "Consolas";
-
-    line-height: 2.5em;
-    font-family: Consolas;
-
-*/
-
 // TODO: need to do stuff to support .txt etc.
 bool EngineMupdf::Load(IStream* stream, const char* nameHint, PasswordUI* pwdUI) {
     auto ctx = Ctx();
-    ReportIf(FilePath() || _doc || !ctx);
+    ReportIf(FilePath() || _doc);
     if (!ctx) {
         return false;
     }
@@ -1947,10 +2075,18 @@ bool EngineMupdf::Load(IStream* stream, const char* nameHint, PasswordUI* pwdUI)
     return FinishLoading();
 }
 
+// is implemented in SumatraPDF.exe, PdfFilter and PdfPreview
+// TODO: allow setting per
+extern EBookUI* GetEBookUI();
+
+// stm is either freed or retained via _doc
 bool EngineMupdf::LoadFromStream(fz_stream* stm, const char* nameHint, PasswordUI* pwdUI) {
     if (!stm) {
         return false;
     }
+    // a 3rd-party DLL might have unmasked fp exceptions on this thread, which
+    // would crash mupdf on benign NaN comparisons e.g. in pdf_resolve_link_dest()
+    MaskFpExceptions();
     auto ctx = Ctx();
 
 #if 0
@@ -1972,8 +2108,22 @@ bool EngineMupdf::LoadFromStream(fz_stream* stm, const char* nameHint, PasswordU
         lfontDy = 8.f;
     }
 
-    if (custom_css) {
-        fz_set_user_css(ctx, custom_css);
+    auto eBookUI = GetEBookUI();
+    if (eBookUI) {
+        if (eBookUI->fontSize > 6 && eBookUI->fontSize < 30) {
+            lfontDy = eBookUI->fontSize;
+        }
+        if (eBookUI->layoutDx > 100) {
+            ldx = eBookUI->layoutDx;
+        }
+        if (eBookUI->layoutDy > 100) {
+            ldy = eBookUI->layoutDy;
+        }
+        if (eBookUI->customCSS) {
+            fz_set_user_css(ctx, eBookUI->customCSS);
+        }
+        bool useDocCss = !eBookUI->ignoreDocumentCSS;
+        fz_set_use_document_css(ctx, useDocCss);
     }
 
     float dx, dy, fontDy;
@@ -1999,8 +2149,6 @@ bool EngineMupdf::LoadFromStream(fz_stream* stm, const char* nameHint, PasswordU
     if (!_doc) {
         return false;
     }
-
-    docStream = stm;
 
     isPasswordProtected = fz_needs_password(ctx, _doc);
     if (!isPasswordProtected) {
@@ -2032,25 +2180,25 @@ bool EngineMupdf::LoadFromStream(fz_stream* stm, const char* nameHint, PasswordU
         }
 
         // MuPDF expects passwords to be UTF-8 encoded
-        AutoFreeStr pwdA = str::Dup(pwd);
-        ok = fz_authenticate_password(ctx, _doc, pwdA.Get());
+        TempStr pwdA = pwd.Get();
+        ok = fz_authenticate_password(ctx, _doc, pwdA);
         // according to the spec (1.7 ExtensionLevel 3), the password
         // for crypt revisions 5 and above are in SASLprep normalization
         if (!ok) {
             // TODO: this is only part of SASLprep
             pwd.Set(NormalizeString(pwd, 5 /* NormalizationKC */));
             if (pwd) {
-                pwdA = str::Dup(pwd);
-                ok = fz_authenticate_password(ctx, _doc, pwdA.Get());
+                pwdA = pwd.Get();
+                ok = fz_authenticate_password(ctx, _doc, pwdA);
             }
         }
         // older Acrobat versions seem to have considered passwords to be in codepage 1252
         // note: such passwords aren't portable when stored as Unicode text
         if (!ok && GetACP() != 1252) {
-            AutoFreeStr pwd_ansi = str::Dup(pwd.Get());
-            AutoFreeWStr pwd_cp1252(strconv::StrToWStr(pwd_ansi.Get(), 1252));
-            pwdA = ToUtf8(pwd_cp1252);
-            ok = fz_authenticate_password(ctx, _doc, pwdA.Get());
+            TempStr pwd_ansi = pwd.Get();
+            TempWStr pwdCp1252 = strconv::StrCPToWStrTemp(pwd_ansi, 1252);
+            pwdA = ToUtf8Temp(pwdCp1252);
+            ok = fz_authenticate_password(ctx, _doc, pwdA);
         }
     }
 
@@ -2058,7 +2206,7 @@ bool EngineMupdf::LoadFromStream(fz_stream* stm, const char* nameHint, PasswordU
         memcpy(digest + 16, pdf_crypt_key(ctx, pdfdoc->crypt), 32);
         decryptionKey = _MemToHex(&digest);
     }
-
+    // TODO: if !ok,
     return ok;
 }
 
@@ -2567,10 +2715,10 @@ static void RebuildCommentsFromAnnotationsInner(fz_context* ctx, pdf_annot* anno
     if (PDF_ANNOT_FILE_ATTACHMENT == tp) {
         logf("found file attachment annotation\n");
 
-        pdf_embedded_file_params fileParams = {};
+        pdf_filespec_params fileParams = {};
         pdf_obj* fs = pdf_annot_filespec(ctx, annot);
         int num = pdf_to_num(ctx, pdf_annot_obj(ctx, annot));
-        pdf_get_embedded_file_params(ctx, fs, &fileParams);
+        pdf_get_filespec_params(ctx, fs, &fileParams);
         const char* attname = fileParams.filename;
         fz_rect rect = pdf_bound_annot(ctx, annot);
         if (str::IsEmpty(attname) || fz_is_empty_rect(rect) || !pdf_is_embedded_file(ctx, fs)) {
@@ -2667,8 +2815,7 @@ fz_stext_page* fz_new_stext_page_from_page2(fz_context* ctx, fz_page* page, cons
 
     fz_var(dev);
 
-    if (page == NULL)
-        return NULL;
+    if (page == NULL) return NULL;
 
     text = fz_new_stext_page(ctx, fz_bound_page(ctx, page));
     fz_try(ctx) {
@@ -2697,8 +2844,14 @@ FzPageInfo* EngineMupdf::GetFzPageInfo(int pageNo, bool loadQuick, fz_cookie* co
     ScopedCritSec scope(&pagesAccess);
 
     ReportIf(pageNo < 1 || pageNo > pageCount);
+    if (pageNo < 1 || pageNo > pageCount) {
+        return nullptr;
+    }
     int pageIdx = pageNo - 1;
     FzPageInfo* pageInfo = pages[pageIdx];
+    if (!pageInfo) {
+        return nullptr;
+    }
 
     ScopedCritSec ctxScope(ctxAccess);
     if (!pageInfo->page) {
@@ -2773,6 +2926,8 @@ FzPageInfo* EngineMupdf::GetFzPageInfo(int pageNo, bool loadQuick, fz_cookie* co
 }
 
 RectF EngineMupdf::PageMediabox(int pageNo) {
+    ReportIf(pageNo < 1 || pageNo > pageCount);
+    if (pageNo < 1 || pageNo > pageCount) return {};
     FzPageInfo* pi = pages[pageNo - 1];
     return pi->mediabox;
 }
@@ -2874,6 +3029,13 @@ RenderedBitmap* EngineMupdf::RenderPage(RenderPageArgs& args) {
 
     ScopedCritSec cs(ctxAccess);
 
+    if (disableAntiAlias) {
+        fz_set_aa_level(ctx, 0);
+    } else {
+        // 8 seems to be the default
+        fz_set_aa_level(ctx, 8);
+    }
+
     auto pageRect = args.pageRect;
     auto zoom = args.zoom;
     auto rotation = args.rotation;
@@ -2915,7 +3077,12 @@ RenderedBitmap* EngineMupdf::RenderPage(RenderPageArgs& args) {
             // TODO: in printing different style. old code use pdf_run_page_with_usage(), with usage ="View"
             // or "Print". "Export" is not used
             dev = fz_new_draw_device(ctx, ctm, pix);
-            pdf_run_page_with_usage(ctx, pdfpage, dev, fz_identity, usage, fzcookie);
+            if (hideAnnotations) {
+                pdf_run_page_contents_with_usage(ctx, pdfpage, dev, fz_identity, usage, fzcookie);
+                pdf_run_page_widgets_with_usage(ctx, pdfpage, dev, fz_identity, usage, fzcookie);
+            } else {
+                pdf_run_page_with_usage(ctx, pdfpage, dev, fz_identity, usage, fzcookie);
+            }
             bitmap = NewRenderedFzPixmap(ctx, pix);
             fz_close_device(ctx, dev);
         }
@@ -2982,6 +3149,9 @@ void HandleLinkMupdf(EngineMupdf* e, IPageDestination* dest, ILinkHandler* linkH
     const char* uri = link->outline ? link->outline->uri : nullptr;
     if (!link->outline) {
         uri = link->link->uri;
+    }
+    if (!uri) {
+        return;
     }
     if (IsExternalLink(uri)) {
         linkHandler->LaunchURL(uri);
@@ -3116,75 +3286,6 @@ RenderedBitmap* EngineMupdf::GetPageImage(int pageNo, RectF rect, int imageIdx) 
 
     return bmp;
 }
-
-// CPSLab.
-void EngineMupdf::ExtractPageBlocks(
-    int pageNo,
-    Vec<PageText*>& blocks,
-    Vec<IPageElement*>& images
-) {
-    auto ctx = Ctx();
-
-    RenderPageArgs args(pageNo, 100, 0);
-    RenderPage(args);
-
-    //FzPageInfo* pageInfo = GetFzPageInfo(pageNo, true);
-    FzPageInfo* pageInfo = GetFzPageInfo(pageNo, false);
-    if (!pageInfo) {
-        return;
-    }
-
-    ScopedCritSec scope(ctxAccess);
-    fz_stext_page* stext = nullptr;
-    fz_var(stext);
-    fz_stext_options opts{};
-    opts.flags = FZ_STEXT_PRESERVE_IMAGES;
-    fz_try(ctx) {
-        stext = fz_new_stext_page_from_page(ctx, pageInfo->page, &opts);
-    }
-    fz_catch(ctx) {
-        fz_report_error(ctx);
-    }
-    if (stext) {
-        const WCHAR* lineSep = L"\n";
-        size_t lineSepLen = str::Len(lineSep);
-        Vec<Rect> rects;
-        fz_stext_block* bk = stext->first_block;
-        while (bk) {
-            if (bk->type == FZ_STEXT_BLOCK_TEXT) {
-                str::WStr content;
-                fz_stext_line* line = bk->u.t.first_line;
-                while (line) {
-                    fz_stext_char* c = line->first_char;
-                    while (c) {
-                        AddChar(line, c, content, rects);
-                        c = c->next;
-                    }
-                    AddLineSep(content, rects, lineSep, lineSepLen);
-                    line = line->next;
-                }
-                WCHAR* text = content.StealData();
-                PageText* res = new PageText();
-                res->text = text;
-                res->len = (int)str::Len(text);
-                res->coords = rects.StealData();
-                blocks.Append(res);
-            } else {
-                printf("%d\n", bk->type);
-            }
-            bk = bk->next;
-        }
-    }
-
-
-    for (auto& img : pageInfo->images) {
-        //auto bitmap = GetImageForPageElement(img->imageElement);
-        images.Append(img->imageElement);
-    }
-
-    return;
-}
-
 
 PageText EngineMupdf::ExtractPageText(int pageNo) {
     auto ctx = Ctx();
@@ -3393,6 +3494,7 @@ static const char* mupdfPropsMap[] = {
 
 TempStr EngineMupdf::GetPropertyTemp(const char* name) {
     auto ctx = Ctx();
+    ScopedCritSec ctxScope(ctxAccess);
 
     const char* key = GetMatchingString(mupdfPropsMap, name);
     if (key) {
@@ -3560,8 +3662,8 @@ bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, const ShowErro
     if (!engine) {
         return false;
     }
-    EngineMupdf* epdf = (EngineMupdf*)engine;
-    if (!epdf->pdfdoc) {
+    EngineMupdf* epdf = AsEngineMupdf(engine);
+    if (!epdf || !epdf->pdfdoc) {
         return false;
     }
     if (!EngineMupdfHasUnsavedAnnotations(engine)) {
@@ -3574,6 +3676,7 @@ bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, const ShowErro
         path = currPath;
     }
     auto ctx = epdf->Ctx();
+    ScopedCritSec scope(epdf->ctxAccess);
 
     pdf_write_options save_opts{};
     save_opts = pdf_default_write_options2;
@@ -3719,7 +3822,7 @@ EngineBase* CreateEngineMupdfFromFile(const char* path, Kind kind, int displayDP
         }
         engine->displayDPI = displayDPI;
         if (!engine->Load(stream, "foo.fb2", pwdUI)) {
-            engine->Release();
+            SafeEngineRelease(&engine);
             return nullptr;
         }
         engine->SetFilePath(path);
@@ -3731,8 +3834,12 @@ EngineBase* CreateEngineMupdfFromFile(const char* path, Kind kind, int displayDP
     }
     engine->displayDPI = displayDPI;
     if (!engine->Load(path, pwdUI)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
+    }
+    const char* ext = GetExtForKind(kind);
+    if (ext) {
+        str::ReplaceWithCopy(&engine->defaultExt, ext);
     }
     return engine;
 }
@@ -3740,7 +3847,7 @@ EngineBase* CreateEngineMupdfFromFile(const char* path, Kind kind, int displayDP
 EngineBase* CreateEngineMupdfFromStream(IStream* stream, const char* nameHint, PasswordUI* pwdUI) {
     EngineMupdf* engine = new EngineMupdf();
     if (!engine->Load(stream, nameHint, pwdUI)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -3750,7 +3857,7 @@ EngineBase* CreateEngineMupdfFromData(const ByteSlice& data, const char* nameHin
     EngineMupdf* engine = new EngineMupdf();
     IStream* stream = CreateStreamFromData(data);
     if (!engine->Load(stream, nameHint, pwdUI)) {
-        engine->Release();
+        SafeEngineRelease(&engine);
         return nullptr;
     }
     return engine;
@@ -3776,7 +3883,7 @@ void EngineMupdfGetAnnotations(EngineBase* engine, Vec<Annotation*>& annotsOut) 
 
 bool EngineMupdfHasUnsavedAnnotations(EngineBase* engine) {
     EngineMupdf* epdf = AsEngineMupdf(engine);
-    if (!epdf->pdfdoc) {
+    if (!epdf || !epdf->pdfdoc) {
         return false;
     }
 #if 0
@@ -3797,6 +3904,9 @@ bool EngineMupdfHasUnsavedAnnotations(EngineBase* engine) {
 
 bool EngineMupdfSupportsAnnotations(EngineBase* engine) {
     EngineMupdf* epdf = AsEngineMupdf(engine);
+    if (!epdf) {
+        return false;
+    }
     return (epdf->pdfdoc != nullptr);
 }
 
@@ -3927,8 +4037,11 @@ NO_INLINE void MarkNotificationAsModified(EngineMupdf* e, Annotation* annot, Ann
     } else {
         ReportIf(change != AnnotationChange::Modify);
     }
-    auto ctx = e->Ctx();
-    RebuildCommentsFromAnnotations(ctx, pageInfo);
+    {
+        auto ctx = e->Ctx();
+        ScopedCritSec ctxScope(e->ctxAccess);
+        RebuildCommentsFromAnnotations(ctx, pageInfo);
+    }
     pageInfo->elementsNeedRebuilding = true;
 }
 

@@ -127,28 +127,29 @@ struct DjVuContext {
     ddjvu_context_t* ctx = nullptr;
     int refCount = 1;
     CRITICAL_SECTION lock;
+    CRITICAL_SECTION spinLock;
 
     DjVuContext() {
         InitializeCriticalSection(&lock);
+        InitializeCriticalSection(&spinLock);
         ctx = ddjvu_context_create("DjVuEngine");
         // reset the locale to "C" as most other code expects
         setlocale(LC_ALL, "C");
         ReportIf(!ctx);
     }
 
+    // refCount is protected by gDjVuContextAccess (not by lock: ~EngineDjVu
+    // holds lock while calling ReleaseDjVuContext() which takes
+    // gDjVuContextAccess, so taking lock here would invert the lock order
+    // vs. GetDjVuContext() and could deadlock)
     int AddRef() {
-        EnterCriticalSection(&lock);
         ++refCount;
-        int res = refCount;
-        LeaveCriticalSection(&lock);
-        return res;
+        return refCount;
     }
 
     int Release() {
-        EnterCriticalSection(&lock);
         ReportIf(refCount <= 0);
         --refCount;
-        LeaveCriticalSection(&lock);
         return refCount;
     }
 
@@ -159,6 +160,7 @@ struct DjVuContext {
         }
         LeaveCriticalSection(&lock);
         DeleteCriticalSection(&lock);
+        DeleteCriticalSection(&spinLock);
     }
 
     void SpinMessageLoop(bool wait = true) const {
@@ -177,6 +179,20 @@ struct DjVuContext {
             }
             ddjvu_message_pop(ctx);
         }
+    }
+
+    // temporarily release the lock and process any pending libdjvu messages.
+    // spinLock serializes message processing so only one thread peeks/pops
+    // at a time, preventing use-after-free on the returned message pointer.
+    // uses non-blocking peek to avoid two threads both blocking inside
+    // GMonitor::wait() on the same ddjvu_context, which corrupts monitor state
+    void SpinMessageLoopWithUnlock() {
+        LeaveCriticalSection(&lock);
+        EnterCriticalSection(&spinLock);
+        SpinMessageLoop(false);
+        LeaveCriticalSection(&spinLock);
+        Sleep(10);
+        EnterCriticalSection(&lock);
     }
 
     ddjvu_document_t* OpenFile(const char* fileName) {
@@ -202,21 +218,30 @@ struct DjVuContext {
 // in djvu which got deleted first
 static DjVuContext* gDjVuContext;
 
+// engines are created / destroyed on multiple threads (async document loads),
+// so creation of gDjVuContext and refCount changes must be serialized.
+// SRWLOCK because it can be statically initialized
+static SRWLOCK gDjVuContextAccess = SRWLOCK_INIT;
+
 static DjVuContext* GetDjVuContext() {
+    AcquireSRWLockExclusive(&gDjVuContextAccess);
     if (!gDjVuContext) {
         gDjVuContext = new DjVuContext();
     } else {
         gDjVuContext->AddRef();
     }
-    return gDjVuContext;
+    DjVuContext* res = gDjVuContext;
+    ReleaseSRWLockExclusive(&gDjVuContextAccess);
+    return res;
 }
 
 static void ReleaseDjVuContext() {
+    AcquireSRWLockExclusive(&gDjVuContextAccess);
     ReportIf(!gDjVuContext);
-    int refCount = gDjVuContext->Release();
-    if (refCount != 0) {
-        return;
+    if (gDjVuContext) {
+        gDjVuContext->Release();
     }
+    ReleaseSRWLockExclusive(&gDjVuContextAccess);
 }
 
 void CleanupEngineDjVu() {
@@ -269,8 +294,8 @@ class EngineDjVu : public EngineBase {
     TempStr GetPageLabeTemp(int pageNo) const override;
     int GetPageByLabel(const char* label) const override;
 
-    static EngineBase* CreateFromFile(const char* path);
-    static EngineBase* CreateFromStream(IStream* stream);
+    bool Load(const char* fileName);
+    bool Load(IStream* stream);
 
   protected:
     IStream* stream = nullptr;
@@ -287,8 +312,6 @@ class EngineDjVu : public EngineBase {
     bool ExtractPageText(miniexp_t item, str::WStr& extracted, Vec<Rect>& coords);
     TempStr ResolveNamedDestTemp(const char* name);
     TocItem* BuildTocTree(TocItem* parent, miniexp_t entry, int& idCounter);
-    bool Load(const char* fileName);
-    bool Load(IStream* stream);
     bool FinishLoading();
     bool LoadMediaboxes();
 };
@@ -328,11 +351,11 @@ EngineDjVu::~EngineDjVu() {
 
 EngineBase* EngineDjVu::Clone() {
     if (stream != nullptr) {
-        return CreateFromStream(stream);
+        return CreateEngineDjVuFromStream(stream);
     }
     const char* path = FilePath();
     if (path) {
-        return CreateFromFile(path);
+        return CreateEngineDjVuFromFile(path);
     }
     return nullptr;
 }
@@ -465,7 +488,7 @@ bool EngineDjVu::FinishLoading() {
     ScopedCritSec scope(&gDjVuContext->lock);
 
     while (!ddjvu_document_decoding_done(doc)) {
-        gDjVuContext->SpinMessageLoop();
+        gDjVuContext->SpinMessageLoopWithUnlock();
     }
 
     if (ddjvu_document_decoding_error(doc)) {
@@ -487,7 +510,7 @@ bool EngineDjVu::FinishLoading() {
             ddjvu_status_t status;
             ddjvu_pageinfo_t info;
             while ((status = ddjvu_document_get_pageinfo(doc, i, &info)) < DDJVU_JOB_OK) {
-                gDjVuContext->SpinMessageLoop();
+                gDjVuContext->SpinMessageLoopWithUnlock();
             }
             if (DDJVU_JOB_OK == status) {
                 DjVuPageInfo* pi = pages[i];
@@ -500,7 +523,7 @@ bool EngineDjVu::FinishLoading() {
     }
 
     while ((outline = ddjvu_document_get_outline(doc)) == miniexp_dummy) {
-        gDjVuContext->SpinMessageLoop();
+        gDjVuContext->SpinMessageLoopWithUnlock();
     }
     if (!miniexp_consp(outline) || miniexp_car(outline) != miniexp_symbol("bookmarks")) {
         ddjvu_miniexp_release(doc, outline);
@@ -512,7 +535,7 @@ bool EngineDjVu::FinishLoading() {
         ddjvu_status_t status;
         ddjvu_fileinfo_s info;
         while ((status = ddjvu_document_get_fileinfo(doc, i, &info)) < DDJVU_JOB_OK) {
-            gDjVuContext->SpinMessageLoop();
+            gDjVuContext->SpinMessageLoopWithUnlock();
         }
         if (DDJVU_JOB_OK == status && info.type == 'P' && info.pageno >= 0) {
             fileInfos.Append(info);
@@ -560,7 +583,12 @@ RenderedBitmap* EngineDjVu::CreateRenderedBitmap(const char* bmpData, Size size,
 }
 
 RenderedBitmap* EngineDjVu::RenderPage(RenderPageArgs& args) {
-    ScopedCritSec scope(&gDjVuContext->lock);
+    ddjvu_page_t* page = nullptr;
+    ddjvu_format_t* fmt = nullptr;
+    RenderedBitmap* bmp = nullptr;
+
+    EnterCriticalSection(&gDjVuContext->lock);
+
     auto pageRect = args.pageRect;
     auto zoom = args.zoom;
     auto pageNo = args.pageNo;
@@ -570,14 +598,17 @@ RenderedBitmap* EngineDjVu::RenderPage(RenderPageArgs& args) {
     Rect full = Transform(PageMediabox(pageNo), pageNo, zoom, rotation).Round();
     screen = full.Intersect(screen);
 
-    ddjvu_page_t* page = ddjvu_page_create_by_pageno(doc, pageNo - 1);
+    page = ddjvu_page_create_by_pageno(doc, pageNo - 1);
     if (!page) {
+        LeaveCriticalSection(&gDjVuContext->lock);
         return nullptr;
     }
     while (!ddjvu_page_decoding_done(page)) {
-        gDjVuContext->SpinMessageLoop();
+        gDjVuContext->SpinMessageLoopWithUnlock();
     }
     if (ddjvu_page_decoding_error(page)) {
+        LeaveCriticalSection(&gDjVuContext->lock);
+        ddjvu_page_release(page);
         return nullptr;
     }
 
@@ -605,26 +636,23 @@ RenderedBitmap* EngineDjVu::RenderPage(RenderPageArgs& args) {
 
     bool isBitonal = DDJVU_PAGETYPE_BITONAL == ddjvu_page_get_type(page);
     ddjvu_format_style_t style = isBitonal ? DDJVU_FORMAT_GREY8 : DDJVU_FORMAT_BGR24;
-    ddjvu_format_t* fmt = ddjvu_format_create(style, 0, nullptr);
-
-    defer {
-        ddjvu_format_release(fmt);
-        ddjvu_page_release(page);
-    };
+    fmt = ddjvu_format_create(style, 0, nullptr);
 
     int topToBottom = TRUE;
     ddjvu_format_set_row_order(fmt, topToBottom);
     ddjvu_rect_t prect = {full.x, full.y, (uint)full.dx, (uint)full.dy};
     ddjvu_rect_t rrect = {screen.x, 2 * full.y - screen.y + full.dy - screen.dy, (uint)screen.dx, (uint)screen.dy};
 
-    RenderedBitmap* bmp = nullptr;
     size_t bytesPerPixel = isBitonal ? 1 : 3;
     size_t dx = (size_t)screen.dx;
     size_t dy = (size_t)screen.dy;
     size_t stride = ((dx * bytesPerPixel + 3) / 4) * 4;
     size_t nBytes = stride * (dy + 5);
-    char* bmpData = AllocArrayTemp<char>(nBytes);
+    char* bmpData = (char*)calloc(nBytes, 1);
     if (!bmpData) {
+        LeaveCriticalSection(&gDjVuContext->lock);
+        ddjvu_format_release(fmt);
+        ddjvu_page_release(page);
         return nullptr;
     }
 
@@ -636,34 +664,40 @@ RenderedBitmap* EngineDjVu::RenderPage(RenderPageArgs& args) {
         isBitonal = true;
     }
     bmp = CreateRenderedBitmap(bmpData, screen.Size(), isBitonal);
+    free(bmpData);
+
+    // release the lock before releasing djvu objects to avoid deadlock:
+    // ddjvu_page_release can trigger DjVuFile::~DjVuFile -> GMonitor::~GMonitor
+    // which acquires libdjvu internal locks
+    LeaveCriticalSection(&gDjVuContext->lock);
+    ddjvu_format_release(fmt);
+    ddjvu_page_release(page);
 
     return bmp;
 }
 
 RectF EngineDjVu::PageContentBox(int pageNo, RenderTarget) {
-    ScopedCritSec scope(&gDjVuContext->lock);
+    EnterCriticalSection(&gDjVuContext->lock);
 
     RectF pageRc = PageMediabox(pageNo);
     ddjvu_page_t* page = ddjvu_page_create_by_pageno(doc, pageNo - 1);
     if (!page) {
+        LeaveCriticalSection(&gDjVuContext->lock);
         return pageRc;
     }
 
     while (!ddjvu_page_decoding_done(page)) {
-        gDjVuContext->SpinMessageLoop();
+        gDjVuContext->SpinMessageLoopWithUnlock();
     }
     if (ddjvu_page_decoding_error(page)) {
+        LeaveCriticalSection(&gDjVuContext->lock);
+        ddjvu_page_release(page);
         return pageRc;
     }
     ddjvu_page_set_rotation(page, DDJVU_ROTATE_0);
 
     // render the page in 8-bit grayscale up to 250x250 px in size
     ddjvu_format_t* fmt = ddjvu_format_create(DDJVU_FORMAT_GREY8, 0, nullptr);
-
-    defer {
-        ddjvu_format_release(fmt);
-        ddjvu_page_release(page);
-    };
 
     ddjvu_format_set_row_order(fmt, /* top_to_bottom */ TRUE);
     float zoom = std::min(std::min(250.0f / pageRc.dx, 250.0f / pageRc.dy), 1.0f);
@@ -673,11 +707,20 @@ RectF EngineDjVu::PageContentBox(int pageNo, RenderTarget) {
 
     char* bmpData = AllocArrayTemp<char>(full.dx * full.dy + 1);
     if (!bmpData) {
+        // release the lock before releasing djvu objects to avoid deadlock:
+        // ddjvu_page_release can trigger DjVuFile::~DjVuFile -> GMonitor::~GMonitor
+        // which acquires libdjvu internal locks
+        LeaveCriticalSection(&gDjVuContext->lock);
+        ddjvu_format_release(fmt);
+        ddjvu_page_release(page);
         return pageRc;
     }
 
     int ok = ddjvu_page_render(page, DDJVU_RENDER_MASKONLY, &prect, &rrect, fmt, full.dx, bmpData);
     if (!ok) {
+        LeaveCriticalSection(&gDjVuContext->lock);
+        ddjvu_format_release(fmt);
+        ddjvu_page_release(page);
         return pageRc;
     }
 
@@ -716,6 +759,13 @@ RectF EngineDjVu::PageContentBox(int pageNo, RenderTarget) {
         content.dy /= zoom;
         pageRc = ToRectF(content.Round());
     }
+
+    // release the lock before releasing djvu objects to avoid deadlock:
+    // ddjvu_page_release can trigger DjVuFile::~DjVuFile -> GMonitor::~GMonitor
+    // which acquires libdjvu internal locks
+    LeaveCriticalSection(&gDjVuContext->lock);
+    ddjvu_format_release(fmt);
+    ddjvu_page_release(page);
 
     return pageRc;
 }
@@ -856,7 +906,7 @@ PageText EngineDjVu::ExtractPageText(int pageNo) {
 
     miniexp_t pagetext;
     while ((pagetext = ddjvu_document_get_pagetext(doc, pageNo - 1, nullptr)) == miniexp_dummy) {
-        gDjVuContext->SpinMessageLoop();
+        gDjVuContext->SpinMessageLoopWithUnlock();
     }
     if (miniexp_nil == pagetext) {
         return {};
@@ -866,6 +916,7 @@ PageText EngineDjVu::ExtractPageText(int pageNo) {
     Vec<Rect> coords;
     bool success = ExtractPageText(pagetext, extracted, coords);
     ddjvu_miniexp_release(doc, pagetext);
+    minilisp_gc();
     if (!success) {
         return {};
     }
@@ -879,7 +930,7 @@ PageText EngineDjVu::ExtractPageText(int pageNo) {
     ddjvu_status_t status;
     ddjvu_pageinfo_t info;
     while ((status = ddjvu_document_get_pageinfo(doc, pageNo - 1, &info)) < DDJVU_JOB_OK) {
-        gDjVuContext->SpinMessageLoop();
+        gDjVuContext->SpinMessageLoopWithUnlock();
     }
     float dpiFactor = 1.0;
     if (DDJVU_JOB_OK == status) {
@@ -911,6 +962,9 @@ PageText EngineDjVu::ExtractPageText(int pageNo) {
 Vec<IPageElement*> EngineDjVu::GetElements(int pageNo) {
     ReportIf(pageNo < 1 || pageNo > PageCount());
     auto pi = pages[pageNo - 1];
+
+    ScopedCritSec scope(&gDjVuContext->lock);
+
     if (pi->gotAllElements) {
         return pi->allElements;
     }
@@ -918,11 +972,10 @@ Vec<IPageElement*> EngineDjVu::GetElements(int pageNo) {
     auto& els = pi->allElements;
 
     if (pi->annos == miniexp_dummy) {
-        ScopedCritSec scope(&gDjVuContext->lock);
         while (pi->annos == miniexp_dummy) {
             pi->annos = ddjvu_document_get_pageanno(doc, pageNo - 1);
             if (pi->annos == miniexp_dummy) {
-                gDjVuContext->SpinMessageLoop();
+                gDjVuContext->SpinMessageLoopWithUnlock();
             }
         }
     }
@@ -931,14 +984,12 @@ Vec<IPageElement*> EngineDjVu::GetElements(int pageNo) {
         return els;
     }
 
-    ScopedCritSec scope(&gDjVuContext->lock);
-
     Rect page = PageMediabox(pageNo).Round();
 
     ddjvu_status_t status;
     ddjvu_pageinfo_t info;
     while ((status = ddjvu_document_get_pageinfo(doc, pageNo - 1, &info)) < DDJVU_JOB_OK) {
-        gDjVuContext->SpinMessageLoop();
+        gDjVuContext->SpinMessageLoopWithUnlock();
     }
     float dpiFactor = 1.0;
     if (DDJVU_JOB_OK == status) {
@@ -1063,6 +1114,13 @@ bool EngineDjVu::HandleLink(IPageDestination* dest, ILinkHandler* linkHandler) {
     }
 
     int pageNo = ParseDjVuLink(link);
+    if ((pageNo < 1) || (pageNo > pageCount)) {
+        // try resolving as a named destination (e.g. "#vii" for named pages)
+        TempStr resolved = ResolveNamedDestTemp(link);
+        if (resolved) {
+            pageNo = ParseDjVuLink(resolved);
+        }
+    }
     if ((pageNo < 1) || (pageNo > pageCount)) {
         logf("EngineDjVu::HandleLink: invalid page in a link '%s', pageNo: %d, number of pages: %d\n", link, pageNo,
              pageCount);
@@ -1193,32 +1251,24 @@ int EngineDjVu::GetPageByLabel(const char* label) const {
     return EngineBase::GetPageByLabel(label);
 }
 
-EngineBase* EngineDjVu::CreateFromFile(const char* path) {
-    EngineDjVu* engine = new EngineDjVu();
-    if (!engine->Load(path)) {
-        engine->Release();
-        return nullptr;
-    }
-    return engine;
-}
-
-EngineBase* EngineDjVu::CreateFromStream(IStream* stream) {
-    EngineDjVu* engine = new EngineDjVu();
-    if (!engine->Load(stream)) {
-        engine->Release();
-        return nullptr;
-    }
-    return engine;
-}
-
 bool IsEngineDjVuSupportedFileType(Kind kind) {
     return kind == kindFileDjVu;
 }
 
-EngineBase* CreateEngineDjVuFromFile(const char* path) {
-    return EngineDjVu::CreateFromFile(path);
+EngineBase* CreateEngineDjVuFromStream(IStream* stream) {
+    EngineDjVu* engine = new EngineDjVu();
+    if (engine->Load(stream)) {
+        return engine;
+    }
+    SafeEngineRelease(&engine);
+    return nullptr;
 }
 
-EngineBase* CreateEngineDjVuFromStream(IStream* stream) {
-    return EngineDjVu::CreateFromStream(stream);
+EngineBase* CreateEngineDjVuFromFile(const char* path) {
+    EngineDjVu* engine = new EngineDjVu();
+    if (engine->Load(path)) {
+        return engine;
+    }
+    SafeEngineRelease(&engine);
+    return nullptr;
 }

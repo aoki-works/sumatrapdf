@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2023 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -494,6 +494,20 @@ static inline jobject to_DOM_safe(fz_context *ctx, JNIEnv *env, fz_xml *xml)
 	return jxml;
 }
 
+static inline jobject to_Shade_safe(fz_context *ctx, JNIEnv *env, fz_shade *sh)
+{
+	jobject jsh;
+
+	if (!ctx || !sh) return NULL;
+
+	fz_keep_shade(ctx, sh);
+	jsh = (*env)->NewObject(env, cls_Shade, mid_Shade_init, jlong_cast(sh));
+	if (!jsh) fz_drop_shade(ctx, sh);
+	if ((*env)->ExceptionCheck(env)) return NULL;
+
+	return jsh;
+}
+
 static inline jobject to_String_safe(fz_context *ctx, JNIEnv *env, const char *val)
 {
 	jstring jval;
@@ -504,66 +518,6 @@ static inline jobject to_String_safe(fz_context *ctx, JNIEnv *env, const char *v
 		fz_throw_java(ctx, env);
 
 	return jval;
-}
-
-
-static int count_next_hits(const int *marks, int a, int end)
-{
-	int b = a + 1;
-	while (b < end && !marks[b])
-		++b;
-	return b - a;
-}
-
-/* Array of Array of Quad */
-static inline jobjectArray to_SearchHits_safe(fz_context *ctx, JNIEnv *env, const int *marks, const fz_quad *quads, jint n)
-{
-	jobjectArray toparr, arr;
-	int i, k, a, m;
-
-	if (!ctx || !marks || !quads)
-		return NULL;
-
-	/* Count total number of search hits */
-	i = a = 0;
-	while (a < n)
-	{
-		a += count_next_hits(marks, a, n);
-		++i;
-	}
-
-	toparr = (*env)->NewObjectArray(env, i, cls_ArrayOfQuad, NULL);
-	if (!toparr || (*env)->ExceptionCheck(env))
-		return NULL;
-
-	i = a = 0;
-	while (a < n)
-	{
-		m = count_next_hits(marks, a, n);
-
-		arr = (*env)->NewObjectArray(env, m, cls_Quad, NULL);
-		if (!arr || (*env)->ExceptionCheck(env))
-			return NULL;
-		(*env)->SetObjectArrayElement(env, toparr, i++, arr);
-		if ((*env)->ExceptionCheck(env))
-			return NULL;
-
-		for (k = 0; k < m; ++k) {
-			jobject jquad = to_Quad_safe(ctx, env, quads[a+k]);
-			if (!jquad || (*env)->ExceptionCheck(env))
-				return NULL;
-			(*env)->SetObjectArrayElement(env, arr, k, jquad);
-			if ((*env)->ExceptionCheck(env))
-				return NULL;
-			(*env)->DeleteLocalRef(env, jquad);
-		}
-
-		(*env)->DeleteLocalRef(env, arr);
-
-		a += m;
-	}
-
-	return toparr;
 }
 
 static inline jobject to_Rect_safe(fz_context *ctx, JNIEnv *env, fz_rect rect)
@@ -654,6 +608,16 @@ static inline jobject to_PDFWidget_safe(fz_context *ctx, JNIEnv *env, pdf_annot 
 	return jwidget;
 }
 
+static inline jobject to_VectorInfo_safe(fz_context *ctx, JNIEnv *env, int flags)
+{
+	jobject jvecinfo;
+	if (!ctx) return NULL;
+	jvecinfo = (*env)->NewObject(env, cls_StructuredTextWalker_VectorInfo, mid_StructuredTextWalker_VectorInfo_init);
+	(*env)->SetBooleanField(env, jvecinfo, fid_StructuredTextWalker_VectorInfo_isStroked, flags & FZ_STEXT_VECTOR_IS_STROKED);
+	(*env)->SetBooleanField(env, jvecinfo, fid_StructuredTextWalker_VectorInfo_isRectangle, flags & FZ_STEXT_VECTOR_IS_RECTANGLE);
+	return jvecinfo;
+}
+
 /* Conversion functions: C to Java. Take ownership of fitz object. None of these throw fitz exceptions. */
 
 static inline jobject to_Buffer_safe_own(fz_context *ctx, JNIEnv *env, fz_buffer *buf)
@@ -691,6 +655,7 @@ static inline jobject to_Document_safe_own(fz_context *ctx, JNIEnv *env, fz_docu
 
 	pdf = pdf_document_from_fz_document(ctx, doc);
 	if (pdf)
+		/* This relies on the fact that pdf == doc! */
 		obj = (*env)->NewObject(env, cls_PDFDocument, mid_PDFDocument_init, jlong_cast(pdf));
 	else
 		obj = (*env)->NewObject(env, cls_Document, mid_Document_init, jlong_cast(doc));
@@ -711,6 +676,19 @@ static inline jobject to_DisplayList_safe_own(fz_context *ctx, JNIEnv *env, fz_d
 		fz_drop_display_list(ctx, list);
 
 	return jlist;
+}
+
+static inline jobject to_Image_safe_own(fz_context *ctx, JNIEnv *env, fz_image *img)
+{
+	jobject jimg;
+
+	if (!ctx || !img) return NULL;
+
+	jimg = (*env)->NewObject(env, cls_Image, mid_Image_init, jlong_cast(img));
+	if (!jimg)
+		fz_drop_image(ctx, img);
+
+	return jimg;
 }
 
 static inline jobject to_NativeDevice_safe_own(fz_context *ctx, JNIEnv *env, fz_device *device)
@@ -742,6 +720,19 @@ static inline jobject to_Page_safe_own(fz_context *ctx, JNIEnv *env, fz_page *pa
 		fz_drop_page(ctx, page);
 
 	return jobj;
+}
+
+static inline jobject to_PDFDocument_safe_own(fz_context *ctx, JNIEnv *env, pdf_document *pdf)
+{
+	jobject obj;
+
+	if (!ctx || !pdf) return NULL;
+
+	obj = (*env)->NewObject(env, cls_PDFDocument, mid_PDFDocument_init, jlong_cast(pdf));
+	if (!obj)
+		fz_drop_document(ctx, &pdf->super);
+
+	return obj;
 }
 
 static inline jobject to_Link_safe_own(fz_context *ctx, JNIEnv *env, fz_link *link)
@@ -820,6 +811,18 @@ static inline jobject to_Pixmap_safe_own(fz_context *ctx, JNIEnv *env, fz_pixmap
 		fz_drop_pixmap(ctx, pixmap);
 
 	return jobj;
+}
+
+static inline jobject to_String_safe_own(fz_context *ctx, JNIEnv *env, char *val)
+{
+	jstring jval;
+	if (!ctx) return NULL;
+
+	jval = (*env)->NewStringUTF(env, val);
+
+	fz_free(ctx, val);
+
+	return jval;
 }
 
 static inline jobject to_StructuredText_safe_own(fz_context *ctx, JNIEnv *env, fz_stext_page *text)

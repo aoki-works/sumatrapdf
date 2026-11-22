@@ -1,40 +1,38 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
-enum class TextSearchDirection : bool { Backward = false, Forward = true };
+struct TextSearch : public TextSelection {
+    enum class Direction : bool {
+        Backward = false,
+        Forward = true
+    };
 
-struct ProgressUpdateUI;
-
-class TextSearch : public TextSelection {
-  public:
     TextSearch(EngineBase* engine, DocumentTextCache* textCache);
     ~TextSearch();
 
-    bool GetSensitive(void) const;
-    void SetSensitive(bool sensitive);
-    void SetDirection(TextSearchDirection direction);
+    void SetMatchCase(bool sensitive);
+    void SetDirection(Direction direction);
     void SetLastResult(TextSelection* sel);
-    TextSel* FindFirst(int page, const WCHAR* text, ProgressUpdateUI* tracker = nullptr, bool conti=false);
-    TextSel* FindNext(ProgressUpdateUI* tracker = nullptr, bool conti=false, bool only_in_page=false);
-    bool wordSearch = false;  // CPS Lab.
+    TextSel* FindFirst(int page, const WCHAR* text);
+    TextSel* FindNext();
 
     int GetCurrentPageNo() const;
     int GetSearchHitStartPageNo() const;
 
-  protected:
+    ProgressUpdateCb progressCb;
+
     // Lightweight container for page and offset within the page to use as return value of MatchEnd
     struct PageAndOffset {
         int page;
         int offset;
     };
 
-    Vec<const WCHAR*> findWords;    // CPS lab.
     WCHAR* findText = nullptr;
     WCHAR* anchor = nullptr;
     int findPage = 0;
     int searchHitStartAt = 0; // when text found spans several pages, searchHitStartAt < findPage
     bool forward = true;
-    bool caseSensitive = false;
+    bool matchCase = false;
     // these two options are implicitly set when the search text begins
     // resp. ends in a single space (many users already search that way),
     // combining them yields a 'Whole words' search
@@ -42,17 +40,14 @@ class TextSearch : public TextSelection {
     bool matchWordEnd = false;
 
     void SetText(const WCHAR* text);
-    bool FindTextInPage(int pageNo, PageAndOffset* finalGlyph, bool conti=false);
-    bool FindStartingAtPage(int pageNo, ProgressUpdateUI* tracker, bool conti=false);
+    bool FindTextInPage(int pageNo, PageAndOffset* finalGlyph);
+    bool FindStartingAtPage(int pageNo);
     PageAndOffset MatchEnd(const WCHAR* start) const;
-    PageAndOffset wMatchEnd(const WCHAR* start) const;  // CPS Lab
 
     void Clear();
     void Reset();
 
-  private:
     const WCHAR* pageText = nullptr;
-    Rect* pageRects = nullptr;    // CPS Lab
     int findIndex = 0;
 
     WCHAR* lastText = nullptr;

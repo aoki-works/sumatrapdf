@@ -1,4 +1,4 @@
-// Copyright (C) 2023-2024 Artifex Software, Inc.
+// Copyright (C) 2023-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -904,8 +904,6 @@ load_shared_strings(fz_context *ctx, fz_archive *arch, fz_xml *rels, doc_info *i
 
 	fz_try(ctx)
 	{
-		fz_xml *pos;
-
 		resolved = make_absolute_path(ctx, file, ss_file);
 		xml = fz_parse_xml_archive_entry(ctx, arch, resolved, 1);
 
@@ -1165,6 +1163,7 @@ fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, 
 				process_rootfile(ctx, archive, file, &info);
 				pos = fz_xml_find_next_dfs(pos, "rootfile", "media-type", "application/hwpml-package+xml");
 			}
+			fz_close_output(ctx, info.out);
 			break;
 		}
 
@@ -1196,6 +1195,8 @@ fz_office_to_html(fz_context *ctx, fz_html_font_set *set, fz_buffer *buffer_in, 
 				pos = fz_xml_find_next_dfs(pos, "Relationship", "Type", schema);
 			}
 		}
+
+		fz_close_output(ctx, info.out);
 	}
 	fz_always(ctx)
 	{
@@ -1247,7 +1248,7 @@ static const fz_htdoc_format_t fz_htdoc_office =
 };
 
 static fz_document *
-office_open_document(fz_context *ctx, const fz_document_handler *handler, fz_stream *file, fz_stream *accel, fz_archive *zip)
+office_open_document(fz_context *ctx, const fz_document_handler *handler, fz_stream *file, fz_stream *accel, fz_archive *zip, void *state)
 {
 	return fz_htdoc_open_document_with_stream_and_dir(ctx, file, zip, &fz_htdoc_office);
 }
@@ -1275,12 +1276,19 @@ static const char *office_mimetypes[] =
 	NULL
 };
 
+/* We are only ever 75% sure here, to allow a 'better' handler, such as sodochandler
+ * to override us by returning 100. */
 static int
-office_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler, fz_stream *stream, fz_archive *zip)
+office_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler, fz_stream *stream, fz_archive *zip, void **state, fz_document_recognize_state_free_fn **free_state)
 {
 	fz_archive *arch = NULL;
 	int ret = 0;
 	fz_xml *xml = NULL;
+
+	if (state)
+		*state = NULL;
+	if (free_state)
+		*free_state = NULL;
 
 	fz_var(arch);
 	fz_var(ret);
@@ -1301,7 +1309,7 @@ office_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler
 		if (xml)
 		{
 			if (fz_xml_find_dfs(xml, "rootfile", "media-type", "application/hwpml-package+xml"))
-				ret = 100; /* HWPX */
+				ret = 75; /* HWPX */
 			break;
 		}
 		xml = fz_try_parse_xml_archive_entry(ctx, arch, "_rels/.rels", 0);
@@ -1309,7 +1317,7 @@ office_recognize_doc_content(fz_context *ctx, const fz_document_handler *handler
 		{
 			if (fz_xml_find_dfs(xml, "Relationship", "Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"))
 			{
-				ret = 100; /* DOCX | PPTX | XLSX */
+				ret = 75; /* DOCX | PPTX | XLSX */
 			}
 			break;
 		}

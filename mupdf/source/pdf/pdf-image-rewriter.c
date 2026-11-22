@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -428,18 +428,6 @@ resample(fz_context *ctx, fz_pixmap *src, int method, float from_dpi, float to_d
 	return fz_keep_pixmap(ctx, src);
 }
 
-static int
-fmt_is_lossy(int fmt)
-{
-	if (fmt == FZ_IMAGE_JBIG2 ||
-		fmt == FZ_IMAGE_JPEG ||
-		fmt == FZ_IMAGE_JPX ||
-		fmt == FZ_IMAGE_JXR)
-		return 1;
-
-	return 0;
-}
-
 static fz_compressed_buffer *
 fz_recompress_image_as_jpeg(fz_context *ctx, fz_pixmap *pix, const char *quality, fz_colorspace **cs)
 {
@@ -717,7 +705,7 @@ do_image_rewrite(fz_context *ctx, void *opaque, fz_image **image, fz_matrix ctm,
 	fz_pixmap *newpix = NULL;
 	image_type type;
 	int fmt = fz_compressed_image_type(ctx, *image);
-	int lossy = fmt_is_lossy(fmt);
+	int lossy = fz_is_lossy_image(ctx, *image);
 	size_t orig_len = pdf_dict_get_int64(ctx, im_obj, PDF_NAME(Length));
 
 	/* FIXME: We don't recompress im_obj->mask! */
@@ -888,6 +876,8 @@ gather_image_info(fz_context *ctx, pdf_document *doc, int page_num, image_info *
 
 		for (annot = pdf_first_annot(ctx, page); annot != NULL; annot = pdf_next_annot(ctx, annot))
 			pdf_filter_annot_contents(ctx, doc, annot, &options);
+		for (annot = pdf_first_widget(ctx, page); annot != NULL; annot = pdf_next_annot(ctx, annot))
+			pdf_filter_annot_contents(ctx, doc, annot, &options);
 	}
 	fz_always(ctx)
 		fz_drop_page(ctx, &page->super);
@@ -918,6 +908,8 @@ rewrite_image_info(fz_context *ctx, pdf_document *doc, int page_num, image_info 
 		pdf_filter_page_contents(ctx, doc, page, &options);
 
 		for (annot = pdf_first_annot(ctx, page); annot != NULL; annot = pdf_next_annot(ctx, annot))
+			pdf_filter_annot_contents(ctx, doc, annot, &options);
+		for (annot = pdf_first_widget(ctx, page); annot != NULL; annot = pdf_next_annot(ctx, annot))
 			pdf_filter_annot_contents(ctx, doc, annot, &options);
 	}
 	fz_always(ctx)

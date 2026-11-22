@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -105,7 +105,6 @@ static void dev_text(fz_context *ctx, fz_device *dev_, const fz_text *text, fz_m
 				fz_text_item *item = &span->items[i];
 				float adv = 0;
 				fz_rect bounds;
-				fz_matrix combined;
 
 				trm.e = item->x;
 				trm.f = item->y;
@@ -116,7 +115,7 @@ static void dev_text(fz_context *ctx, fz_device *dev_, const fz_text *text, fz_m
 						continue;
 
 				if (span->items[i].gid >= 0)
-					adv = fz_advance_glyph(ctx, span->font, span->items[i].gid, span->wmode);
+					adv = span->items[i].adv;
 
 				bounds = fz_bound_glyph(ctx, span->font, span->items[i].gid, combined);
 				if (extract_add_char(dev->writer->extract, combined.e, combined.f, item->ucs, adv,
@@ -188,6 +187,7 @@ static void dev_fill_image(fz_context *ctx, fz_device *dev_, fz_image *img, fz_m
 			else if (compressed->params.type == FZ_IMAGE_FAX) type = "fax";
 			else if (compressed->params.type == FZ_IMAGE_FLATE) type = "flate";
 			else if (compressed->params.type == FZ_IMAGE_LZW) type = "lzw";
+			else if (compressed->params.type == FZ_IMAGE_BROTLI) type = "brotli";
 			else if (compressed->params.type == FZ_IMAGE_BMP) type = "bmp";
 			else if (compressed->params.type == FZ_IMAGE_GIF) type = "gif";
 			else if (compressed->params.type == FZ_IMAGE_JBIG2) type = "jbig2";

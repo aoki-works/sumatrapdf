@@ -79,6 +79,8 @@ struct fz_color_converter
 	fz_color_convert_fn *convert;
 	fz_color_convert_fn *convert_via;
 	fz_colorspace *ds;
+	fz_separations *dseps;
+	int dst_n;
 	fz_colorspace *ss;
 	fz_colorspace *ss_via;
 	void *opaque;
@@ -91,6 +93,7 @@ struct fz_colorspace_context
 {
 	int ctx_refs;
 	fz_colorspace *gray, *rgb, *bgr, *cmyk, *lab;
+	fz_colorspace *ps_gray, *ps_rgb, *ps_bgr, *ps_cmyk;
 #if FZ_ENABLE_ICC
 	void *icc_instance;
 #endif
@@ -99,10 +102,10 @@ struct fz_colorspace_context
 void fz_drop_colorspace_store_key(fz_context *ctx, fz_colorspace *cs);
 fz_colorspace *fz_keep_colorspace_store_key(fz_context *ctx, fz_colorspace *cs);
 
-void fz_init_cached_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_colorspace *is, fz_color_params params);
+void fz_init_cached_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_separations *seps, fz_colorspace *is, fz_color_params params);
 void fz_fin_cached_color_converter(fz_context *ctx, fz_color_converter *cc);
 fz_color_convert_fn *fz_lookup_fast_color_converter(fz_context *ctx, fz_colorspace *ss, fz_colorspace *ds);
-void fz_find_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_colorspace *is, fz_color_params params);
+void fz_find_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_separations *seps, fz_colorspace *is, fz_color_params params);
 void fz_drop_color_converter(fz_context *ctx, fz_color_converter *cc);
 
 /*
@@ -115,6 +118,11 @@ void fz_fast_any_to_alpha(fz_context *ctx, const fz_pixmap *src, fz_pixmap *dst,
 void fz_convert_fast_pixmap_samples(fz_context *ctx, const fz_pixmap *src, fz_pixmap *dst, int copy_spots);
 void fz_convert_slow_pixmap_samples(fz_context *ctx, const fz_pixmap *src, fz_pixmap *dst, fz_colorspace *prf, fz_color_params params, int copy_spots);
 
+/**
+	Attempt to init a color converter to work by copying separation values.
+*/
+int
+fz_init_separation_copy_color_converter(fz_context *ctx, fz_color_converter *cc, fz_colorspace *ss, fz_colorspace *ds, fz_separations *dseps, fz_colorspace *is, fz_color_params params);
 
 
 #endif

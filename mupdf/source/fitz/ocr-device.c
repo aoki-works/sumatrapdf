@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -99,7 +99,7 @@ typedef struct word_record_s {
 	int len;
 	fz_rect bbox;
 	int n;
-	int unicode[1];
+	int unicode[FZ_FLEXIBLE_ARRAY];
 } word_record;
 
 typedef struct fz_ocr_device_s
@@ -134,6 +134,7 @@ typedef struct fz_ocr_device_s
 
 	char *language;
 	char *datadir;
+	char *options;
 } fz_ocr_device;
 
 static void
@@ -314,14 +315,14 @@ fz_ocr_end_group(fz_context *ctx, fz_device *dev)
 }
 
 static int
-fz_ocr_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id)
+fz_ocr_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id, int doc_id)
 {
 	fz_ocr_device *ocr = (fz_ocr_device *)dev;
 
 	/* Always pass 0 as tile id here so that neither device can
 	 * disagree about whether the contents need to be sent. */
-	(void)fz_begin_tile_id(ctx, ocr->list_dev, area, view, xstep, ystep, ctm, 0);
-	(void)fz_begin_tile_id(ctx, ocr->draw_dev, area, view, xstep, ystep, ctm, 0);
+	(void)fz_begin_tile_tid(ctx, ocr->list_dev, area, view, xstep, ystep, ctm, 0, 0);
+	(void)fz_begin_tile_tid(ctx, ocr->draw_dev, area, view, xstep, ystep, ctm, 0, 0);
 
 	return 0;
 }
@@ -390,6 +391,7 @@ drop_ocr_device(fz_context *ctx, fz_ocr_device *ocr)
 	fz_free(ctx, ocr->chars);
 	fz_free(ctx, ocr->language);
 	fz_free(ctx, ocr->datadir);
+	fz_free(ctx, ocr->options);
 }
 
 static void
@@ -422,7 +424,7 @@ flush_word(fz_context *ctx, fz_ocr_device *ocr)
 			ocr->words = fz_realloc_array(ctx, ocr->words, new_max, word_record *);
 			ocr->words_max = new_max;
 		}
-		word = (word_record *)Memento_label(fz_malloc(ctx, sizeof(word_record) + sizeof(int) * (ocr->char_len-1)), "word_record");
+		word = fz_malloc_flexible(ctx, word_record, unicode, ocr->char_len);
 		word->len = ocr->char_len;
 		word->bbox = ocr->word_bbox;
 		word->n = 0;
@@ -669,7 +671,7 @@ rewrite_span(fz_context *ctx, fz_rewrite_device *dev, fz_matrix ctm, const fz_te
 
 	/* And do the actual rewriting */
 	for (i = 0; i < rspan->len; i++) {
-		float advance = fz_advance_glyph(ctx, span->font, rspan->items[i].gid, wmode);
+		float advance = rspan->items[i].adv;
 		fz_point vadv = { dir.x * advance, dir.y * advance };
 		rewrite_char(ctx, dev, ctm, &rspan->items[i], vadv);
 	}
@@ -878,11 +880,11 @@ rewrite_end_group(fz_context *ctx, fz_device *dev)
 }
 
 static int
-rewrite_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id)
+rewrite_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id, int doc_id)
 {
 	fz_rewrite_device *rewrite = (fz_rewrite_device *)dev;
 
-	return fz_begin_tile_id(ctx, rewrite->target, area, view, xstep, ystep, ctm, id);
+	return fz_begin_tile_tid(ctx, rewrite->target, area, view, xstep, ystep, ctm, id, doc_id);
 }
 
 static void
@@ -1056,7 +1058,7 @@ fz_ocr_close_device(fz_context *ctx, fz_device *dev)
 	fz_close_device(ctx, ocr->draw_dev);
 
 	/* Now run the OCR */
-	tessapi = ocr_init(ctx, ocr->language, ocr->datadir);
+	tessapi = ocr_init(ctx, ocr->language, ocr->datadir, ocr->options);
 
 	fz_try(ctx)
 	{
@@ -1108,6 +1110,21 @@ fz_new_ocr_device(fz_context *ctx,
 		int (*progress)(fz_context *, void *, int),
 		void *progress_arg)
 {
+	return fz_new_ocr_device_with_options(ctx, target, ctm, mediabox, with_list, language, datadir, progress, progress_arg, NULL);
+}
+
+fz_device *
+fz_new_ocr_device_with_options(fz_context *ctx,
+		fz_device *target,
+		fz_matrix ctm,
+		fz_rect mediabox,
+		int with_list,
+		const char *language,
+		const char *datadir,
+		int (*progress)(fz_context *, void *, int),
+		void *progress_arg,
+		const char *options)
+{
 #ifdef OCR_DISABLED
 	fz_throw(ctx, FZ_ERROR_UNSUPPORTED, "OCR Disabled in this build");
 #else
@@ -1115,6 +1132,9 @@ fz_new_ocr_device(fz_context *ctx,
 
 	if (target == NULL)
 		fz_throw(ctx, FZ_ERROR_ARGUMENT, "OCR devices require a target");
+
+	if (options == NULL)
+		options = "";
 
 	dev = fz_new_derived_device(ctx, fz_ocr_device);
 
@@ -1160,6 +1180,8 @@ fz_new_ocr_device(fz_context *ctx,
 		fz_rect bbox;
 		fz_irect ibox;
 		fz_point res;
+
+		dev->options = fz_strdup(ctx, options);
 
 		dev->target = target;
 		dev->mediabox = mediabox;

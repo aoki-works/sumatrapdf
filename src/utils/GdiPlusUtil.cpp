@@ -270,9 +270,8 @@ static Bitmap* WICDecodeImageFromStream(IStream* stream) {
     HRESULT hr;
     int iRot = -1;
 
-#define HR(hr)      \
-    if (FAILED(hr)) \
-        return nullptr;
+#define HR(hr) \
+    if (FAILED(hr)) return nullptr;
     ScopedComPtr<IWICImagingFactory> pFactory;
     if (!pFactory.Create(CLSID_WICImagingFactory)) {
         return nullptr;
@@ -323,7 +322,7 @@ static Bitmap* WICDecodeImageFromStream(IStream* stream) {
 }
 
 static void MaybeFlipBitmap(Bitmap* bmp) {
-    u8 buf[64] = {0}; // empirically is 26
+    u8 buf[64] = {}; // empirically is 26
 
     UINT propSize = bmp->GetPropertyItemSize(PropertyTagOrientation);
     if (propSize == 0) {

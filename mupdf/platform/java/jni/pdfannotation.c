@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -637,6 +637,152 @@ FUN(PDFAnnotation_addInkListStrokeVertex)(JNIEnv *env, jobject self, float x, fl
 		jni_rethrow_void(env, ctx);
 }
 
+JNIEXPORT jboolean JNICALL
+FUN(PDFAnnotation_hasCallout)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jboolean has = JNI_FALSE;
+
+	fz_try(ctx)
+		has = pdf_annot_has_callout(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return has;
+}
+
+JNIEXPORT jint JNICALL
+FUN(PDFAnnotation_getCalloutStyle)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	enum pdf_line_ending s = 0;
+
+	fz_try(ctx)
+		s = pdf_annot_callout_style(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return s;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setCalloutStyle)(JNIEnv *env, jobject self, jint s)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_try(ctx)
+		pdf_set_annot_callout_style(ctx, annot, s);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jobject JNICALL
+FUN(PDFAnnotation_getCalloutPoint)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_point p;
+
+	if (!ctx || !annot) return NULL;
+
+	fz_try(ctx)
+		p = pdf_annot_callout_point(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return (*env)->NewObject(env, cls_Point, mid_Point_init, p.x, p.y);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setCalloutPoint)(JNIEnv *env, jobject self, jobject jp)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_point p;
+
+	if (!ctx || !annot) return;
+
+	if (!jp) jni_throw_arg_void(env, "point must not be null");
+
+	p.x = (*env)->GetFloatField(env, jp, fid_Point_x);
+	p.y = (*env)->GetFloatField(env, jp, fid_Point_y);
+
+	fz_try(ctx)
+		pdf_set_annot_callout_point(ctx, annot, p);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jobject JNICALL
+FUN(PDFAnnotation_getCalloutLine)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_point points[3] = { 0 };
+	jobject jline = NULL;
+	jobject jpoint = NULL;
+	int i, n;
+
+	if (!ctx || !annot) return NULL;
+
+	fz_try(ctx)
+		pdf_annot_callout_line(ctx, annot, points, &n);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	if (n == 0)
+		return NULL;
+
+	jline = (*env)->NewObjectArray(env, n, cls_Point, NULL);
+	if (!jline || (*env)->ExceptionCheck(env)) return NULL;
+
+	for (i = 0; i < n; i++)
+	{
+		jpoint = (*env)->NewObject(env, cls_Point, mid_Point_init, points[i].x, points[i].y);
+		if (!jpoint || (*env)->ExceptionCheck(env)) return NULL;
+		(*env)->SetObjectArrayElement(env, jline, i, jpoint);
+		if ((*env)->ExceptionCheck(env)) return NULL;
+		(*env)->DeleteLocalRef(env, jpoint);
+	}
+
+	return jline;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setCalloutLineNative)(JNIEnv *env, jobject self, jint n, jobject ja, jobject jb, jobject jc)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_point line[3];
+
+	if (!ctx || !annot) return;
+
+	if (n >= 2 && !ja) jni_throw_arg_void(env, "points must not be null");
+	if (n >= 2 && !jb) jni_throw_arg_void(env, "points must not be null");
+	if (n >= 3 && !jc) jni_throw_arg_void(env, "points must not be null");
+
+	if (n >= 2) {
+		line[0].x = (*env)->GetFloatField(env, ja, fid_Point_x);
+		line[0].y = (*env)->GetFloatField(env, ja, fid_Point_y);
+		line[1].x = (*env)->GetFloatField(env, jb, fid_Point_x);
+		line[1].y = (*env)->GetFloatField(env, jb, fid_Point_y);
+	}
+	if (n >= 3) {
+		line[2].x = (*env)->GetFloatField(env, jc, fid_Point_x);
+		line[2].y = (*env)->GetFloatField(env, jc, fid_Point_y);
+	}
+
+	fz_try(ctx)
+	{
+		if (n == 0 || n == 2 || n == 3)
+			pdf_set_annot_callout_line(ctx, annot, line, n);
+	}
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
 JNIEXPORT void JNICALL
 FUN(PDFAnnotation_eventEnter)(JNIEnv *env, jobject self)
 {
@@ -1002,6 +1148,21 @@ FUN(PDFAnnotation_setLine)(JNIEnv *env, jobject self, jobject ja, jobject jb)
 		pdf_set_annot_line(ctx, annot, a, b);
 	fz_catch(ctx)
 		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFAnnotation_hasDefaultAppearance)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jboolean has = JNI_FALSE;
+
+	fz_try(ctx)
+		has = pdf_annot_has_default_appearance(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return has;
 }
 
 JNIEXPORT jobject JNICALL
@@ -1704,6 +1865,425 @@ FUN(PDFAnnotation_setPopup)(JNIEnv *env, jobject self, jobject jrect)
 
 	fz_try(ctx)
 		pdf_set_annot_popup(ctx, annot, rect);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jfloat JNICALL
+FUN(PDFAnnotation_getLineLeader)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jfloat v;
+
+	if (!ctx || !annot) return 0;
+
+	fz_try(ctx)
+		v = pdf_annot_line_leader(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return v;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setLineLeader)(JNIEnv *env, jobject self, jfloat length)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_line_leader(ctx, annot, length);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+
+JNIEXPORT jfloat JNICALL
+FUN(PDFAnnotation_getLineLeaderExtension)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jfloat v;
+
+	if (!ctx || !annot) return 0;
+
+	fz_try(ctx)
+		v = pdf_annot_line_leader_extension(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return v;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setLineLeaderExtension)(JNIEnv *env, jobject self, jfloat extension)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_line_leader_extension(ctx, annot, extension);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jfloat JNICALL
+FUN(PDFAnnotation_getLineLeaderOffset)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jfloat v;
+
+	if (!ctx || !annot) return 0;
+
+	fz_try(ctx)
+		v = pdf_annot_line_leader_offset(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return v;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setLineLeaderOffset)(JNIEnv *env, jobject self, jfloat offset)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_line_leader_offset(ctx, annot, offset);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFAnnotation_getLineCaption)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jboolean v;
+
+	if (!ctx || !annot) return JNI_FALSE;
+
+	fz_try(ctx)
+		v = pdf_annot_line_caption(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return v;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setLineCaption)(JNIEnv *env, jobject self, jboolean caption)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_line_caption(ctx, annot, caption);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jobject JNICALL
+FUN(PDFAnnotation_getLineCaptionOffset)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_point offset;;
+
+	if (!ctx || !annot) return NULL;
+
+	fz_try(ctx)
+		offset = pdf_annot_line_caption_offset(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return to_Point_safe(ctx, env, offset);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setLeaderLines)(JNIEnv *env, jobject self, jobject joffset)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_point offset = from_Point(env, joffset);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_line_caption_offset(ctx, annot, offset);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_requestSynthesis)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_annot_request_synthesis(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_requestResynthesis)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_annot_request_resynthesis(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFAnnotation_getHot)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jboolean hot = JNI_FALSE;
+
+	if (!ctx || !annot) return JNI_FALSE;
+
+	fz_try(ctx)
+		hot = pdf_annot_hot(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return hot;
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setHot)(JNIEnv *env, jobject self, jboolean hot)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_hot(ctx, annot, hot);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_process)(JNIEnv *env, jobject self, jobject jproc)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	pdf_processor *proc = make_pdf_processor(env, ctx, jproc);
+
+	if (!ctx || !annot) return;
+	if (!proc) jni_throw_arg_void(env, "processor must not be null");
+
+	fz_try(ctx)
+	{
+		pdf_processor_push_resources(ctx, proc, pdf_page_resources(ctx, pdf_annot_page(ctx, annot)));
+		pdf_process_annot(ctx, proc, annot, NULL);
+		pdf_close_processor(ctx, proc);
+	}
+	fz_always(ctx)
+	{
+		pdf_drop_obj(ctx, pdf_processor_pop_resources(ctx, proc));
+		pdf_drop_processor(ctx, proc);
+	}
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFAnnotation_hasRichContents)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jboolean has = JNI_FALSE;
+
+	if (!ctx || !annot) return JNI_FALSE;
+
+	fz_try(ctx)
+		has = pdf_annot_has_rich_contents(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return has;
+}
+
+JNIEXPORT jstring JNICALL
+FUN(PDFAnnotation_getRichContents)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	const char *contents = NULL;
+
+	if (!ctx || !annot) return NULL;
+
+	fz_try(ctx)
+		contents = pdf_annot_rich_contents(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return to_String_safe(ctx, env, contents);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setRichContents)(JNIEnv *env, jobject self, jstring jplaintext, jstring jrichtext)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	const char *plaintext = NULL;
+	const char *richtext = NULL;
+
+	if (!ctx || !annot) return;
+
+	if (jplaintext)
+	{
+		plaintext = (*env)->GetStringUTFChars(env, jplaintext, NULL);
+		if (!plaintext) return;
+	}
+	if (jrichtext)
+	{
+		richtext = (*env)->GetStringUTFChars(env, jrichtext, NULL);
+		if (!richtext)
+		{
+			if (plaintext)
+				(*env)->ReleaseStringUTFChars(env, jplaintext, plaintext);
+			return;
+		}
+	}
+
+	fz_try(ctx)
+		pdf_set_annot_rich_contents(ctx, annot, plaintext, richtext);
+	fz_always(ctx)
+	{
+		if (richtext)
+			(*env)->ReleaseStringUTFChars(env, jrichtext, richtext);
+		if (plaintext)
+			(*env)->ReleaseStringUTFChars(env, jplaintext, plaintext);
+	}
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jboolean JNICALL
+FUN(PDFAnnotation_hasRichDefaults)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	jboolean has = JNI_FALSE;
+
+	if (!ctx || !annot) return JNI_FALSE;
+
+	fz_try(ctx)
+		has = pdf_annot_has_rich_defaults(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return has;
+}
+
+JNIEXPORT jstring JNICALL
+FUN(PDFAnnotation_getRichDefaults)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	const char *defaults = NULL;
+
+	if (!ctx || !annot) return NULL;
+
+	fz_try(ctx)
+		defaults = pdf_annot_rich_defaults(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return to_String_safe(ctx, env, defaults);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setRichDefault)(JNIEnv *env, jobject self, jstring jstyle)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	const char *style = NULL;
+
+	if (!ctx || !annot) return;
+
+	if (jstyle)
+	{
+		style = (*env)->GetStringUTFChars(env, jstyle, NULL);
+		if (!style) return;
+	}
+
+	fz_try(ctx)
+		pdf_set_annot_rich_defaults(ctx, annot, style);
+	fz_always(ctx)
+		if (style)
+			(*env)->ReleaseStringUTFChars(env, jstyle, style);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT jobject JNICALL
+FUN(PDFAnnotation_getStampImageObject)(JNIEnv *env, jobject self)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	pdf_obj *obj = NULL;
+
+	if (!ctx || !annot) return NULL;
+
+	fz_try(ctx)
+		obj = pdf_annot_stamp_image_obj(ctx, annot);
+	fz_catch(ctx)
+		jni_rethrow(env, ctx);
+
+	return to_PDFObject_safe(ctx, env, obj);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setStampImageObject)(JNIEnv *env, jobject self, jobject jobj)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	pdf_obj *obj = from_PDFObject(env, jobj);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_stamp_image_obj(ctx, annot, obj);
+	fz_catch(ctx)
+		jni_rethrow_void(env, ctx);
+}
+
+JNIEXPORT void JNICALL
+FUN(PDFAnnotation_setStampImage)(JNIEnv *env, jobject self, jobject jimg)
+{
+	fz_context *ctx = get_context(env);
+	pdf_annot *annot = from_PDFAnnotation(env, self);
+	fz_image *img = from_Image(env, jimg);
+
+	if (!ctx || !annot) return;
+
+	fz_try(ctx)
+		pdf_set_annot_stamp_image(ctx, annot, img);
 	fz_catch(ctx)
 		jni_rethrow_void(env, ctx);
 }

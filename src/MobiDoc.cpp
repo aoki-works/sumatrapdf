@@ -214,8 +214,7 @@ class HuffDicDecompressor {
     bool DecodeOne(u32 code, str::Str& dst);
 };
 
-HuffDicDecompressor::HuffDicDecompressor() {
-}
+HuffDicDecompressor::HuffDicDecompressor() {}
 
 bool HuffDicDecompressor::DecodeOne(u32 code, str::Str& dst) {
     u16 dict = (u16)(code >> codeLength);
@@ -329,7 +328,7 @@ static void ReadHuffReader(HuffHeader& huffHdr, ByteOrderDecoder& d) {
 bool HuffDicDecompressor::SetHuffData(u8* huffData, size_t huffDataLen) {
     // for now catch cases where we don't have both big endian and little endian
     // versions of the data
-    ReportIf(kHuffRecordLen != huffDataLen);
+    // ReportIf(kHuffRecordLen != huffDataLen);
     // but conservatively assume we only need big endian version
     if (huffDataLen < kHuffRecordMinLen) {
         return false;
@@ -388,7 +387,7 @@ bool HuffDicDecompressor::AddCdicData(u8* cdicData, u32 cdicDataLen) {
     }
     u32 size = cdicDataLen - hdrLen;
 
-    u32 maxSize = 1 << codeLength;
+    u32 maxSize = 2u * (1u << codeLength);
     if (maxSize >= size) {
         return false;
     }
@@ -398,11 +397,12 @@ bool HuffDicDecompressor::AddCdicData(u8* cdicData, u32 cdicDataLen) {
     return true;
 }
 
-static void DecodeMobiDocHeader(const u8* buf, MobiHeader* hdr) {
+static void DecodeMobiDocHeader(const u8* buf, size_t bufLen, MobiHeader* hdr) {
     memset(hdr, 0, sizeof(MobiHeader));
     hdr->drmEntriesCount = (u32)-1;
 
-    ByteOrderDecoder d(buf, kMobiHeaderLen, ByteOrderDecoder::BigEndian);
+    size_t decLen = std::min(bufLen, (size_t)kMobiHeaderLen);
+    ByteOrderDecoder d(buf, decLen, ByteOrderDecoder::BigEndian);
     d.Bytes(hdr->id, 4);
     hdr->hdrLen = d.UInt32();
     hdr->type = d.UInt32();
@@ -452,9 +452,6 @@ static void DecodeMobiDocHeader(const u8* buf, MobiHeader* hdr) {
     hdr->extraDataFlags = d.UInt16();
     if (hdr->hdrLen >= 232) {
         hdr->indxRec = d.UInt32();
-        ReportIf(kMobiHeaderLen != d.Offset());
-    } else {
-        ReportIf(kMobiHeaderLen - 4 != d.Offset());
     }
 }
 
@@ -533,7 +530,8 @@ bool MobiDoc::ParseHeader() {
     }
 
     MobiHeader mobiHdr;
-    DecodeMobiDocHeader(firstRecData + kPalmDocHeaderLen, &mobiHdr);
+    size_t mobiDataLen = recSize - kPalmDocHeaderLen;
+    DecodeMobiDocHeader(firstRecData + kPalmDocHeaderLen, mobiDataLen, &mobiHdr);
     if (!str::EqN("MOBI", mobiHdr.id, 4)) {
         logf("MobiHeader.id is not 'MOBI'\n");
         return false;
@@ -589,8 +587,8 @@ bool MobiDoc::ParseHeader() {
         }
         size_t cdicsCount = mobiHdr.huffmanRecCount - 1;
         if (cdicsCount > kCdicsMax) {
-            logf("MobiDoc::ParseHeader: cdicsCount: %d, kCdicsMax: %d\n", cdicsCount, kCdicsMax);
-            ReportIf(true);
+            logf("MobiDoc::ParseHeader: cdicsCount: %d, kCdicsMax: %d\n", (int)cdicsCount, kCdicsMax);
+            ReportDebugIf(true);
             return false;
         }
         for (size_t i = 0; i < cdicsCount; i++) {

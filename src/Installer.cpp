@@ -20,8 +20,8 @@
 #include "wingui/WinGui.h"
 
 #include "resource.h"
-#include "AppSettings.h"
 #include "Settings.h"
+#include "AppSettings.h"
 #include "Flags.h"
 #include "Version.h"
 #include "Annotation.h"
@@ -42,6 +42,7 @@ struct InstallerWnd;
 static InstallerWnd* gWnd = nullptr;
 static lzma::SimpleArchive gArchive{};
 static bool gInstallStarted = false; // a bit of a hack
+static bool gInstallFailed = false;
 
 static PreviousInstallationInfo gPrevInstall;
 Flags gCliNew;
@@ -64,7 +65,6 @@ struct InstallerWnd {
     Button* btnInstall = nullptr;
 
     bool showOptions = false;
-    bool failed = false;
     HANDLE hThread = nullptr;
 };
 
@@ -91,6 +91,7 @@ static Checkbox* CreateCheckbox(HWND hwndParent, const char* s, bool isChecked) 
     args.parent = hwndParent;
     args.text = s;
     args.initialState = isChecked ? Checkbox::State::Checked : Checkbox::State::Unchecked;
+    args.isRtl = IsUIRtl();
 
     Checkbox* w = new Checkbox();
     w->Create(args);
@@ -143,7 +144,7 @@ static bool ExtractInstallerFiles(lzma::SimpleArchive* archive, const char* dest
 
 static bool CopySelfToDir(const char* destDir) {
     logf("CopySelfToDir(%s)\n", destDir);
-    TempStr exePath = GetExePathTemp();
+    TempStr exePath = GetSelfExePathTemp();
     TempStr dstPath = path::JoinTemp(destDir, kExeName);
     bool failIfExists = false;
     bool ok = file::Copy(dstPath, exePath, failIfExists);
@@ -236,8 +237,9 @@ void RemoveAppShortcuts() {
 }
 
 static void InstallerThread(Flags* cli) {
-    gWnd->failed = true;
     bool ok;
+
+    gInstallFailed = true;
 
     TempStr installedExePath = path::JoinTemp(cli->installDir, kExeName);
     auto allUsers = cli->allUsers;
@@ -270,18 +272,18 @@ static void InstallerThread(Flags* cli) {
     gPrevInstall.previewInstalled = false;
 
     if (cli->withFilter) {
-        RegisterSearchFilter(allUsers);
+        RegisterSearchFilter(allUsers, cli->installDir);
     }
 
     if (cli->withPreview) {
-        RegisterPreviewer(allUsers);
+        RegisterPreviewer(allUsers, cli->installDir);
     }
 
     CreateAppShortcuts(allUsers, installedExePath);
 
     // consider installation a success from here on
     // (still warn, if we've failed to create the uninstaller, though)
-    gWnd->failed = false;
+    gInstallFailed = false;
 
     ok = WriteUninstallerRegistryInfo(key, allUsers, cli->installDir);
     if (!ok) {
@@ -296,7 +298,7 @@ static void InstallerThread(Flags* cli) {
     ProgressStep();
     log("Installer thread finished\n");
 Exit:
-    if (gWnd->hwnd) {
+    if (gWnd && gWnd->hwnd) {
         if (!gCli->silent) {
             Sleep(500); // allow a glimpse of the completed progress bar before hiding it
             PostMessageW(gWnd->hwnd, WM_APP_INSTALLATION_FINISHED, 0, 0);
@@ -305,7 +307,7 @@ Exit:
 }
 
 static void RestartElevatedForAllUsers(Flags* cli) {
-    char* exePath = GetExePathTemp();
+    char* exePath = GetSelfExePathTemp();
     const char* cmdLine = "-run-install-now";
     bool allUsersChecked = gWnd && gWnd->checkboxForAllUsers && gWnd->checkboxForAllUsers->IsChecked();
     bool allUsers = cli->allUsers || allUsersChecked;
@@ -352,6 +354,8 @@ int GetInstallerWinDx() {
 }
 
 static void StartInstallation(InstallerWnd* wnd) {
+    gInstallStarted = true;
+
     // create a progress bar in place of the Options button
     int dx = DpiScale(wnd->hwnd, GetInstallerWinDx() / 2);
     Rect rc(0, 0, dx, gButtonDy);
@@ -365,6 +369,8 @@ static void StartInstallation(InstallerWnd* wnd) {
     Progress::CreateArgs args;
     args.initialMax = nInstallationSteps;
     args.parent = wnd->hwnd;
+    args.isRtl = IsUIRtl();
+
     wnd->progressBar = new Progress();
     wnd->progressBar->Create(args);
     RECT prc = {rc.x, rc.y, rc.x + rc.dx, rc.y + rc.dy};
@@ -381,12 +387,9 @@ static void StartInstallation(InstallerWnd* wnd) {
     DeleteWnd(&wnd->checkboxRegisterPreview);
     DeleteWnd(&wnd->btnOptions);
 
-    wnd->btnInstall->SetIsEnabled(false);
-
     SetMsg(_TRA("Installation in progress..."), COLOR_MSG_INSTALLATION);
     HwndRepaintNow(wnd->hwnd);
 
-    gInstallStarted = true;
     auto fn = MkFunc0(InstallerThread, &gCliNew);
     wnd->hThread = StartThread(fn, "InstallerThread");
 }
@@ -399,12 +402,22 @@ static TempStr GetInstalledExePathTemp(Flags* cli) {
 }
 
 static void OnButtonInstall(InstallerWnd* wnd) {
+    // gInstallStarted is set in StartInstallation because we might not proceed here
+    if (gInstallStarted) {
+        // I've seen crashes where somehow "Install" button was pressed twice
+        logf("OnButtonInstall: called but gInstallStarted is %d\n", (int)gInstallStarted);
+        // ReportIfFast(gInstallStarted);
+        return;
+    }
+
     Flags* cli = &gCliNew;
     if (wnd->showOptions) {
         // hide and disable "Options" button during installation
         OnButtonOptions(wnd);
     }
+    wnd->btnInstall->SetIsEnabled(false);
 
+    // TODO: if needs elevation, this might not have enough prermissions
     {
         /* if the app is running, we have to kill it so that we can over-write the executable */
         char* exePath = GetInstalledExePathTemp(cli);
@@ -413,8 +426,10 @@ static void OnButtonInstall(InstallerWnd* wnd) {
 
     logf("OnButtonInstall: before CheckInstallUninstallPossible()\n");
     if (!CheckInstallUninstallPossible(wnd->hwnd)) {
+        wnd->btnInstall->SetIsEnabled(true);
         return;
     }
+
     logf("OnButtonInstall: after CheckInstallUninstallPossible()\n");
     logf("OnButtonInstall: wnd: 0x%p\n", wnd);
     logf("OnButtonInstall: wnd->editInstallationDir: 0x%p\n", wnd->editInstallationDir);
@@ -469,13 +484,13 @@ static void OnInstallationFinished(Flags* cli) {
 
     DeleteWnd(&gWnd->btnInstall);
     DeleteWnd(&gWnd->progressBar);
-
-    if (gWnd->failed) {
-        gWnd->btnExit = CreateDefaultButton(gWnd->hwnd, _TRA("Close"));
+    auto isRtl = IsUIRtl();
+    if (gInstallFailed) {
+        gWnd->btnExit = CreateDefaultButton(gWnd->hwnd, _TRA("Close"), isRtl);
         gWnd->btnExit->onClick = MkFunc0Void(OnButtonExit);
         SetMsg(_TRA("Installation failed!"), COLOR_MSG_FAILED);
     } else {
-        gWnd->btnRunSumatra = CreateDefaultButton(gWnd->hwnd, _TRA("Start SumatraPDF"));
+        gWnd->btnRunSumatra = CreateDefaultButton(gWnd->hwnd, _TRA("Start SumatraPDF"), isRtl);
         gWnd->btnRunSumatra->onClick = MkFunc0Void(OnButtonStartSumatra);
         SetMsg(_TRA("Thank you! SumatraPDF has been installed."), COLOR_MSG_OK);
     }
@@ -484,7 +499,7 @@ static void OnInstallationFinished(Flags* cli) {
 
     CloseHandle(gWnd->hThread);
 
-    if (cli->fastInstall && !gWnd->failed) {
+    if (cli->fastInstall && !gInstallFailed) {
         StartSumatra();
         ::ExitProcess(0);
     }
@@ -492,7 +507,7 @@ static void OnInstallationFinished(Flags* cli) {
 
 static void ShowAndEnable(Wnd* w, bool enable) {
     if (w) {
-        HwndSetVisibility(w->hwnd, enable);
+        ShowWindow(w->hwnd, enable ? SW_SHOW : SW_HIDE);
         w->SetIsEnabled(enable);
     }
 }
@@ -689,14 +704,15 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd, Flags* cli) {
         "CreateInstallerWindowControls: cli->allUsers: %d, cli->withPreview: %d, cli->withFilter: %d, install dir: "
         "'%s'\n",
         (int)cli->allUsers, (int)cli->withPreview, (int)cli->withFilter, cli->installDir);
-    // intelligently show options if user chose non-defaults
-    // via cmd-line
+    // show options if user chose non-defaults via cmd-line
+    // or if previous install had them enabled
     bool showOptions = false;
 
     HWND hwnd = wnd->hwnd;
     int margin = DpiScale(hwnd, kInstallerWinMargin);
+    bool isRtl = IsUIRtl();
 
-    wnd->btnInstall = CreateDefaultButton(hwnd, _TRA("Install SumatraPDF"));
+    wnd->btnInstall = CreateDefaultButton(hwnd, _TRA("Install SumatraPDF"), isRtl);
     auto b = wnd->btnInstall;
     b->onClick = MkFunc0(OnButtonInstall, wnd);
     {
@@ -710,7 +726,7 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd, Flags* cli) {
     }
 
     Rect r = ClientRect(hwnd);
-    wnd->btnOptions = CreateDefaultButton(hwnd, _TRA("&Options"));
+    wnd->btnOptions = CreateDefaultButton(hwnd, _TRA("&Options"), isRtl);
     b = wnd->btnOptions;
     b->onClick = MkFunc0(OnButtonOptions, wnd);
     int x = margin;
@@ -773,7 +789,10 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd, Flags* cli) {
         wnd->checkboxForAllUsers = CreateCheckbox(hwnd, s, isChecked);
         wnd->checkboxForAllUsers->onStateChanged = MkFunc0Void(ForAllUsersStateChanged);
 
-        checkDy = wnd->checkboxRegisterPreview->GetIdealSize().dy;
+        checkDy = 0;
+        if (wnd->checkboxRegisterPreview) {
+            checkDy = wnd->checkboxRegisterPreview->GetIdealSize().dy;
+        }
         rc = {x, y, x + dx, y + checkDy};
         wnd->checkboxForAllUsers->SetPos(&rc);
         y -= checkDy;
@@ -782,7 +801,7 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd, Flags* cli) {
     // a bit more space between text box and checkboxes
     y -= (DpiScale(hwnd, 4) + margin);
 
-    wnd->btnBrowseDir = CreateDefaultButton(hwnd, "&...");
+    wnd->btnBrowseDir = CreateDefaultButton(hwnd, "&...", isRtl);
     wnd->btnBrowseDir->onClick = MkFunc0(OnButtonBrowse, wnd);
 
     Size btnSize2 = wnd->btnBrowseDir->GetIdealSize();
@@ -790,6 +809,8 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd, Flags* cli) {
     Edit::CreateArgs eargs;
     eargs.parent = hwnd;
     eargs.withBorder = true;
+    eargs.isRtl = IsUIRtl();
+
     wnd->editInstallationDir = new Edit();
     HWND ehwnd = wnd->editInstallationDir->Create(eargs);
     wnd->editInstallationDir->SetText(cli->installDir);
@@ -814,6 +835,8 @@ static void CreateInstallerWindowControls(InstallerWnd* wnd, Flags* cli) {
     Static::CreateArgs args;
     args.parent = hwnd;
     args.text = s2;
+    args.isRtl = IsUIRtl();
+
     wnd->staticInstDir = new Static();
     wnd->staticInstDir->Create(args);
     wnd->staticInstDir->SetBounds(rc);
@@ -1073,7 +1096,7 @@ bool ExtractInstallerFiles(char* dir) {
     return ExtractInstallerFiles(&gArchive, dir);
 }
 
-static bool MismatchedOSDialog(HWND hwndParent) {
+static bool ShouldInstallMismatchedArch(HWND hwndParent) {
     logf("Mismatch of the OS and executable arch\n");
 
     constexpr int kBtnIdContinue = 100;
@@ -1118,9 +1141,9 @@ static bool MismatchedOSDialog(HWND hwndParent) {
             url = "https://www.sumatrapdfreader.org/prerelease";
         }
         LaunchBrowser(url);
-        return true;
+        return false;
     }
-    return false;
+    return true;
 }
 
 int RunInstaller() {
@@ -1141,15 +1164,23 @@ int RunInstaller() {
         StartLogToFile(installerLogPath, removeLog);
     }
     logf("------------- Starting SumatraPDF installation\n");
+    {
+        DWORD parentPid = 0;
+        TempStr path = GetParentProcessPath(&parentPid);
+        if (path) {
+            logf("Parent process: pid=%d, path='%s'\n", (int)parentPid, path);
+        } else if (parentPid != 0) {
+            logf("Parent process: pid=%d, path unknown\n", (int)parentPid);
+        } else {
+            logf("Parent process: unknown\n");
+        }
+    }
     if (!IsProcessAndOsArchSame()) {
         logfa("quitting because !IsProcessAndOsArchSame()\n");
-        MismatchedOSDialog(nullptr);
-        RunNonElevated(installerLogPath);
-        return 1;
+        bool ok = ShouldInstallMismatchedArch(nullptr);
+        if (!ok) return 1;
     }
-    if (!OpenEmbeddedFilesArchive()) {
-        return 1;
-    }
+    if (!OpenEmbeddedFilesArchive()) return 1;
 
     GetPreviousInstallInfo(&gPrevInstall);
     // with -run-install all values should be explicitly set
@@ -1174,16 +1205,19 @@ int RunInstaller() {
         gCliNew.installDir = str::Dup(dir);
     }
     char* cmdLine = ToUtf8Temp(GetCommandLineW());
-    logf("Running'%s', cmdLine: '%s', installing into dir '%s'\n", GetExePathTemp(), cmdLine, gCliNew.installDir);
+    logf("RunInstaller: '%s', cmdLine: '%s', installing into dir '%s'\n", GetSelfExePathTemp(), cmdLine,
+         gCliNew.installDir);
 
     int ret = 0;
 
     // restart as admin if necessary. in non-silent mode it happens after clicking
     // Install button
-    bool requiresSilentElevation = gCli->silent || gCli->fastInstall;
+    bool requiresSilentElevation = gCli->silent || gCli->fastInstall || gCli->runInstallNow;
     bool isElevated = IsProcessRunningElevated();
+    logf("RunInstaller: requiresSilentElevation: %d, isElevated: %d\n", (int)requiresSilentElevation, (int)isElevated);
     if (requiresSilentElevation && !isElevated) {
         bool needsElevation = gCliNew.allUsers || gPrevInstall.allUsers;
+        logf("RunInstaller: needsElevation: %d\n", (int)needsElevation);
         if (needsElevation) {
             logf(
                 "Restarting as elevated: gCli->silent: %d, gCli->fastInstall: %d, isElevated: %d, gCli->allUsers: %d, "
@@ -1220,9 +1254,8 @@ int RunInstaller() {
 
     if (gCli->silent) {
         gInstallStarted = true;
-        logfa("gCli->silent, before running InstallerThread()\n");
         InstallerThread(&gCliNew);
-        ret = gWnd->failed ? 1 : 0;
+        ret = gInstallFailed ? 1 : 0;
     } else {
         log("Before CreateInstallerWindow()\n");
         if (!CreateInstallerWindow(&gCliNew)) {
@@ -1240,16 +1273,16 @@ int RunInstaller() {
         // re-register if we un-registered but installation was cancelled
         if (gPrevInstall.searchFilterInstalled) {
             log("re-registering search filter\n");
-            RegisterSearchFilter(gCli->allUsers);
+            RegisterSearchFilter(gPrevInstall.allUsers, gPrevInstall.installationDir);
         }
         if (gPrevInstall.previewInstalled) {
             log("re-registering previewer\n");
-            RegisterPreviewer(gCli->allUsers);
+            RegisterPreviewer(gPrevInstall.allUsers, gPrevInstall.installationDir);
         }
     }
     log("Installer finished\n");
 Exit:
-    if (installerLogPath) {
+    if (installerLogPath && gInstallStarted) {
         RunNonElevated(installerLogPath);
     } else if (!gCli->silent && (ret != 0)) {
         // if installation failed, automatically show the log

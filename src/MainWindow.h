@@ -26,7 +26,6 @@ struct Annotation;
 struct ILinkHandler;
 
 // Current action being performed with a mouse
-// clang-format off
 enum class MouseAction {
     None = 0,
     Dragging,
@@ -34,16 +33,13 @@ enum class MouseAction {
     Scrolling,
     SelectingText
 };
-// clang-format on
 
-// clang-format off
 enum PresentationMode {
     PM_DISABLED = 0,
     PM_ENABLED,
     PM_BLACK_SCREEN,
     PM_WHITE_SCREEN
 };
-// clang-format on
 
 // WM_GESTURE handling
 struct TouchState {
@@ -54,16 +50,14 @@ struct TouchState {
 };
 
 /* Describes position, the target (URL or file path) and infotip of a "hyperlink" */
-struct StaticLinkInfo {
+struct StaticLink {
     Rect rect;
     char* target = nullptr;
-    char* infotip = nullptr;
+    char* tooltip = nullptr;
 
-    explicit StaticLinkInfo(Rect rect, const char* target, const char* infotip = nullptr);
-    StaticLinkInfo() = default;
-    StaticLinkInfo(const StaticLinkInfo&);
-    StaticLinkInfo& operator=(const StaticLinkInfo& other);
-    ~StaticLinkInfo();
+    explicit StaticLink(Rect rect, const char* target, const char* infotip = nullptr);
+    StaticLink() = default;
+    ~StaticLink();
 };
 
 /* Describes information related to one window with (optional) a document
@@ -106,7 +100,7 @@ struct MainWindow {
     HWND hwndPageEdit = nullptr;
     HWND hwndPageBg = nullptr;
     HWND hwndPageTotal = nullptr;
-    HWND hwndTbInfoText = nullptr;
+    HWND hwndTbWarningMsg = nullptr;
 
     // state related to table of contents (PDF bookmarks etc.)
     HWND hwndTocBox = nullptr;
@@ -169,6 +163,11 @@ struct MainWindow {
     HBRUSH brMovePattern = nullptr;
     Annotation* annotationBeingDragged = nullptr;
 
+    // Vars for resizing annotations
+    int resizeHandle = 0; // ResizeHandle enum casted to int
+    bool annotationBeingResized = false;
+    RectF annotationOriginalRect;
+
     /* when moving the document by smooth scrolling, this keeps track of
        the speed at which we should scroll, which depends on the distance
        of the mouse from the point where the user middle clicked. */
@@ -181,12 +180,9 @@ struct MainWindow {
     Rect selectionRect;
     // size of the current rectangular selection in document units
     SizeF selectionMeasure;
-    // if true, shape of selection region is circle. if false, the shape is
-    // rectangle.
-    bool circularSelectionRegion = false;
 
     // a list of static links (mainly used for About and Frequently Read pages)
-    Vec<StaticLinkInfo*> staticLinks;
+    Vec<StaticLink*> staticLinks;
 
     bool isFullScreen = false;
     PresentationMode presentation = PM_DISABLED;
@@ -206,6 +202,7 @@ struct MainWindow {
 
     HANDLE findThread = nullptr;
     bool findCancelled = false;
+    bool findMatchCase = false;
 
     ILinkHandler* linkHandler = nullptr;
     IPageElement* linkOnLastButtonDown = nullptr;
@@ -234,6 +231,11 @@ struct MainWindow {
     TouchState touchState;
 
     FrameRateWnd* frameRateWnd = nullptr;
+
+    // set at the beginning of CloseWindow() to prevent
+    // processing commands while closing (e.g. reentrancy
+    // via modal dialogs pumping messages)
+    bool isBeingClosed = false;
 
     SumatraUIAutomationProvider* uiaProvider = nullptr;
 
@@ -265,6 +267,9 @@ bool IsRightDragging(MainWindow*);
 MainWindow* FindMainWindowByTab(WindowTab*);
 MainWindow* FindMainWindowByHwnd(HWND);
 bool IsMainWindowValid(MainWindow*);
+bool IsWindowTabValid(WindowTab*);
 MainWindow* FindMainWindowByController(DocController*);
 extern Vec<MainWindow*> gWindows;
 void HighlightTab(MainWindow*, WindowTab*);
+HWND GetHwndForNotification();
+bool AppIsValidHWND(HWND);

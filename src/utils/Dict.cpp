@@ -40,9 +40,7 @@ class HasherComparator {
 };
 
 class StrKeyHasherComparator : public HasherComparator {
-    size_t Hash(uintptr_t key) override {
-        return MurmurHash2((const void*)key, str::Len((const char*)key));
-    }
+    size_t Hash(uintptr_t key) override { return MurmurHash2((const void*)key, str::Len((const char*)key)); }
     bool Equal(uintptr_t k1, uintptr_t k2) override {
         const char* s1 = (const char*)k1;
         const char* s2 = (const char*)k2;

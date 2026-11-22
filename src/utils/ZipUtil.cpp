@@ -27,17 +27,13 @@ class FileWriteStream : public ISequentialStream {
         hFile =
             CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     }
-    virtual ~FileWriteStream() {
-        CloseHandle(hFile);
-    }
+    virtual ~FileWriteStream() { CloseHandle(hFile); }
     // IUnknown
     IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv) {
         static const QITAB qit[] = {QITABENT(FileWriteStream, ISequentialStream), {nullptr}};
         return QISearch(this, qit, riid, ppv);
     }
-    IFACEMETHODIMP_(ULONG) AddRef() {
-        return InterlockedIncrement(&refCount);
-    }
+    IFACEMETHODIMP_(ULONG) AddRef() { return InterlockedIncrement(&refCount); }
     IFACEMETHODIMP_(ULONG) Release() {
         LONG newCount = InterlockedDecrement(&refCount);
         if (newCount == 0) {
@@ -46,9 +42,7 @@ class FileWriteStream : public ISequentialStream {
         return newCount;
     }
     // ISequentialStream
-    IFACEMETHODIMP Read(void*, ULONG, ULONG*) {
-        return E_NOTIMPL;
-    }
+    IFACEMETHODIMP Read(void*, ULONG, ULONG*) { return E_NOTIMPL; }
     IFACEMETHODIMP Write(const void* data, ULONG size, ULONG* written) {
         bool ok = WriteFile(hFile, data, size, written, nullptr);
         return ok && *written == size ? S_OK : E_FAIL;
@@ -216,25 +210,16 @@ bool ZipCreator::AddFileFromDir(const char* filePath, const char* dir) {
     return AddFile(filePath, nameInZip);
 }
 
-struct AddZipFileData {
-    ZipCreator* zc;
-    const char* dir;
-};
-
-static void AddZipFile(AddZipFileData* d, VisitDirData* data) {
-    bool ok = d->zc->AddFileFromDir(data->filePath, d->dir);
-    if (!ok) {
-        data->stopTraversal = true;
-    }
-}
-
 bool ZipCreator::AddDir(const char* dir, bool recursive) {
-    auto data = new AddZipFileData;
-    data->dir = dir;
-    data->zc = this;
-    auto fn = MkFunc1(AddZipFile, data);
-    DirTraverse(dir, recursive, fn);
-    delete data;
+    DirIter di{dir};
+    di.recurse = recursive;
+    bool ok;
+    for (DirIterEntry* de : di) {
+        ok = this->AddFileFromDir(de->filePath, dir);
+        if (!ok) {
+            return false;
+        }
+    }
     return true;
 }
 

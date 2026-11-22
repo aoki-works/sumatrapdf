@@ -37,6 +37,10 @@
 
 #include "utils/Log.h"
 
+// workaround for OnMenuExit
+// if this flag is set, CloseWindow will not save prefs before closing the window.
+bool gDontSaveSettings = false;
+
 // SumatraPDF.cpp
 extern void RememberDefaultWindowPosition(MainWindow* win);
 
@@ -77,6 +81,7 @@ TempStr GetSettingsFileNameTemp() {
     return str::DupTemp("SumatraPDF-settings.txt");
 }
 
+// this could be virtual path when running in app store
 TempStr GetSettingsPathTemp() {
     return GetPathInAppDataDirTemp(GetSettingsFileNameTemp());
 }
@@ -84,15 +89,6 @@ TempStr GetSettingsPathTemp() {
 static void setMin(int& i, int minVal) {
     if (i < minVal) {
         i = minVal;
-    }
-}
-
-static void setMinMax(int& i, int minVal, int maxVal) {
-    if (i < minVal) {
-        i = minVal;
-    }
-    if (i > maxVal) {
-        i = maxVal;
     }
 }
 
@@ -255,6 +251,7 @@ bool LoadSettings() {
         gprefs->toolbarSize = 18; // same as kDefaultIconSize in Toolbar.cpp
     }
     setMinMax(gprefs->toolbarSize, 8, 64);
+    setMinMax(gprefs->annotations.freeTextOpacity, 0, 100);
 
     if (!gprefs->treeFontName) {
         gprefs->treeFontName = const_cast<char*>("automatic");
@@ -265,10 +262,6 @@ bool LoadSettings() {
     //    auto fontName = ToWStrTemp(gprefs->fixedPageUI.ebookFontName);
     //    SetDefaultEbookFont(fontName.Get(), gprefs->fixedPageUI.ebookFontSize);
 
-    SetCurrentThemeFromSettings();
-    if (!file::Exists(settingsPath)) {
-        SaveSettings();
-    }
     ResetCachedFonts();
 
     // re-create commands
@@ -284,53 +277,95 @@ bool LoadSettings() {
     FreeAcceleratorTables();
     CreateSumatraAcceleratorTable();
 
-    ReCreateToolbars();
+    for (MainWindow* win : gWindows) {
+        ReCreateToolbar(win);
+    }
+
+    SetCurrentThemeFromSettings();
+    if (!file::Exists(settingsPath)) {
+        SaveSettings();
+    }
+
     logf("LoadSettings('%s') took %.2f ms\n", settingsPath, TimeSinceInMs(timeStart));
     return true;
 }
 
+static TabState* CloneTabState(const TabState* src) {
+    TabState* dst = (TabState*)AllocStruct<TabState>();
+    dst->filePath = str::Dup(src->filePath);
+    dst->displayMode = str::Dup(src->displayMode);
+    dst->pageNo = src->pageNo;
+    dst->zoom = str::Dup(src->zoom);
+    dst->rotation = src->rotation;
+    dst->scrollPos = src->scrollPos;
+    dst->showToc = src->showToc;
+    dst->tocState = new Vec<int>(*src->tocState);
+    return dst;
+}
+
+Vec<SessionData*>* gInitialSessionData = nullptr;
+
 static void RememberSessionState() {
-    Vec<SessionData*>* sessionData = gGlobalPrefs->sessionData;
-    ResetSessionState(sessionData);
+    Vec<SessionData*>* sessionState = gGlobalPrefs->sessionData;
+    FreeSessionDataVec(sessionState);
 
     if (!gGlobalPrefs->rememberOpenedFiles) {
         return;
     }
 
-    if (gWindows.size() == 0) {
-        return;
-    }
-
     for (auto* win : gWindows) {
-        SessionData* data = NewSessionData();
+        SessionData* windowState = NewSessionData();
         for (WindowTab* tab : win->Tabs()) {
-            if (tab->IsAboutTab()) {
+            if (!tab->filePath) {
+                // home page tab
                 continue;
             }
             const char* fp = tab->filePath;
-            FileState* fs = NewDisplayState(fp);
-            if (tab->ctrl) {
-                tab->ctrl->GetDisplayState(fs);
+            if (!tab->ctrl) {
+                // lazy loading, file not loaded into a tab
+                // use the saved state from previous session
+                // note: might stil have issues if multiple tabs with same file
+                bool didFind = false;
+                int nWindows = gInitialSessionData->Size();
+                for (int i = 0; i < nWindows; i++) {
+                    SessionData* psd = gInitialSessionData->At(i);
+                    int nTabs = psd->tabStates->Size();
+                    for (int j = 0; j < nTabs; j++) {
+                        TabState* pts = psd->tabStates->At(j);
+                        if (str::Eq(pts->filePath, fp)) {
+                            TabState* ts = CloneTabState(pts);
+                            windowState->tabStates->Append(ts);
+                            didFind = true;
+                            break;
+                        }
+                    }
+                }
+                logf("RememberSessionState: didn't find state for file '%s'\n", fp ? fp : "(none)");
+                // ReportIf(!didFind);
+                continue;
             }
+            FileState* fs = NewFileState(fp);
+            tab->ctrl->GetDisplayState(fs);
             fs->showToc = tab->showToc;
             *fs->tocState = tab->tocState;
             TabState* ts = NewTabState(fs);
-            data->tabStates->Append(ts);
-            DeleteDisplayState(fs);
+            windowState->tabStates->Append(ts);
+            DeleteFileState(fs);
         }
-        if (data->tabStates->Size() == 0) {
+        if (windowState->tabStates->Size() == 0) {
+            FreeSessionData(windowState);
             continue;
         }
-        data->tabIndex = win->GetTabIdx(win->CurrentTab()) + 1;
-        if (data->tabIndex < 0) {
-            data->tabIndex = 0;
+        windowState->tabIndex = win->GetTabIdx(win->CurrentTab()) + 1;
+        if (windowState->tabIndex < 0) {
+            windowState->tabIndex = 0;
         }
         // TODO: allow recording this state without changing gGlobalPrefs
         RememberDefaultWindowPosition(win);
-        data->windowState = gGlobalPrefs->windowState;
-        data->windowPos = gGlobalPrefs->windowPos;
-        data->sidebarDx = gGlobalPrefs->sidebarDx;
-        sessionData->Append(data);
+        windowState->windowState = gGlobalPrefs->windowState;
+        windowState->windowPos = gGlobalPrefs->windowPos;
+        windowState->sidebarDx = gGlobalPrefs->sidebarDx;
+        sessionState->Append(windowState);
     }
 }
 
@@ -338,14 +373,25 @@ static void RememberSessionState() {
 // added or removed from gFileHistory (in order to keep
 // the list of recently opened documents in sync)
 bool SaveSettings() {
+    if (gDontSaveSettings) {
+        // if we are exiting the application by File->Exit,
+        // OnMenuExit will have called SaveSettings() already
+        // and we skip the call here to avoid saving incomplete session info
+        // (because some windows might have been closed already)
+        return true;
+    }
+
     // don't save preferences without the proper permission
     if (!HasPermission(Perm::SavePreferences)) {
         return false;
     }
     logf("SaveSettings\n");
     // update display states for all tabs
+    // we snapshot the list because SaveSettings() can be called re-entrantly
+    // (e.g. from LoadDocumentFinish while other documents are still loading/closing)
     for (MainWindow* win : gWindows) {
-        for (WindowTab* tab : win->Tabs()) {
+        Vec<WindowTab*> tabs = win->Tabs();
+        for (WindowTab* tab : tabs) {
             UpdateTabFileDisplayStateForTab(tab);
         }
     }
@@ -470,7 +516,7 @@ void RegisterSettingsForFileChanges() {
     ReportIf(gWatchedSettingsFile); // only call me once
     TempStr path = GetSettingsPathTemp();
     auto fn = MkFunc0Void(SchedulePrefsReload);
-    gWatchedSettingsFile = FileWatcherSubscribe(path, fn);
+    gWatchedSettingsFile = FileWatcherSubscribe(path, fn, true);
 }
 
 void UnregisterSettingsForFileChanges() {

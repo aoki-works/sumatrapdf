@@ -26,8 +26,7 @@ class ParseArgs {
     bool canceled = false;
     ValueVisitor* visitor = nullptr;
 
-    explicit ParseArgs(ValueVisitor* visitor) : visitor(visitor) {
-    }
+    explicit ParseArgs(ValueVisitor* visitor) : visitor(visitor) {}
 };
 
 static const char* ParseValue(ParseArgs& args, const char* data);

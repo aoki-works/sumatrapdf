@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -799,7 +799,8 @@ fz_alpha_from_gray(fz_context *ctx, fz_pixmap *gray)
 	unsigned char *sp, *dp;
 	int w, h, sstride, dstride;
 
-	assert(gray->n == 1);
+	if (gray->n != 1)
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "pixmap to fz_alpha_from_gray must be gray without alpha");
 
 	alpha = fz_new_pixmap_with_bbox(ctx, NULL, fz_pixmap_bbox(ctx, gray), 0, 1);
 	dp = alpha->samples;
@@ -814,6 +815,38 @@ fz_alpha_from_gray(fz_context *ctx, fz_pixmap *gray)
 		memcpy(dp, sp, w);
 		sp += sstride;
 		dp += dstride;
+	}
+
+	return alpha;
+}
+
+fz_pixmap *
+fz_alpha_from_rgb(fz_context *ctx, fz_pixmap *color)
+{
+	fz_pixmap *alpha;
+	unsigned char *sp, *dp;
+	int w, h;
+
+	if (color->n != 3)
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "pixmap to fz_alpha_from_rgb must be RGB without alpha");
+
+	alpha = fz_new_pixmap_with_bbox(ctx, NULL, fz_pixmap_bbox(ctx, color), 0, 1);
+	dp = alpha->samples;
+	sp = color->samples;
+
+	assert(alpha->stride == alpha->w);
+	assert(color->stride == color->w * 3);
+
+	h = color->h;
+	while (h--)
+	{
+		w = color->w;
+		while (w--)
+		{
+			*dp = (sp[0] + sp[1] + sp[2]) / 3;
+			dp += 1;
+			sp += 3;
+		}
 	}
 
 	return alpha;
@@ -981,7 +1014,7 @@ void fz_invert_pixmap_rect(fz_context *ctx, fz_pixmap *pix, fz_irect rect)
 	int y0 = fz_clampi(rect.y0 - pix->y, 0, pix->h);
 	int y1 = fz_clampi(rect.y1 - pix->y, 0, pix->h);
 
-	int k, x, y;
+	int x, y;
 	int n = pix->n;
 	int s = pix->s;
 	int cmyk = (pix->colorspace && pix->colorspace->type == FZ_COLORSPACE_CMYK);
@@ -1041,12 +1074,12 @@ void fz_invert_pixmap_rect(fz_context *ctx, fz_pixmap *pix, fz_irect rect)
 				{
 					int c = d[0];
 					int m = d[1];
-					int y = d[2];
+					int ye = d[2];
 					int k = d[3];
-					int mx = fz_maxi(fz_maxi(c, m), y);
+					int mx = fz_maxi(fz_maxi(c, m), ye);
 					d[0] = mx-c;
 					d[1] = mx-m;
-					d[2] = mx-y;
+					d[2] = mx-ye;
 					k = 255 - k - mx;
 					if (k < 0)
 						k = 0;
@@ -1065,6 +1098,7 @@ void fz_invert_pixmap_rect(fz_context *ctx, fz_pixmap *pix, fz_irect rect)
 			for (x = x0; x < x1; x++)
 			{
 				int a = d[n1];
+				int k;
 				for (k = 0; k < n1; k++)
 					d[k] = a - d[k];
 				d += n;
@@ -1079,6 +1113,7 @@ void fz_invert_pixmap_rect(fz_context *ctx, fz_pixmap *pix, fz_irect rect)
 			unsigned char *d = pix->samples + ((y * (size_t)pix->stride) + (x0 * (size_t)pix->n));
 			for (x = x0; x < x1; x++)
 			{
+				int k;
 				for (k = 0; k < n1; k++)
 					d[k] = 255 - d[k];
 				d += n;
@@ -1092,6 +1127,7 @@ void fz_invert_pixmap_rect(fz_context *ctx, fz_pixmap *pix, fz_irect rect)
 			unsigned char *d = pix->samples + ((y * (size_t)pix->stride) + (x0 * (size_t)pix->n));
 			for (x = x0; x < x1; x++)
 			{
+				int k;
 				for (k = 0; k < n; k++)
 					d[k] = 255 - d[k];
 				d += n;
@@ -1647,15 +1683,108 @@ fz_subsample_pixmap_ARM(unsigned char *ptr, int w, int h, int f, int factor,
 #endif
 
 void
+fz_subsample_pixblock_bresenham(unsigned char *s2, int w, int h, int n, int factor, ptrdiff_t stride, int subx, int suby)
+{
+	int fwd, fwd2, back, back2;
+	unsigned char *d;
+	int x, y, xx, yy, nn;
+	int f = 1<<factor;
+
+	/* In ((w+subx)/f) - 1 blocks, we want to repeat a line subx times. */
+	int bxd = ((w+subx)/f) - 1;
+	int bxf = bxd>>1;
+	int byd = ((h+suby)/f) - 1;
+	int byf = byd>>1;
+
+	assert(0 <= bxf && bxf < bxd);
+	assert(0 <= byf && byf < byd);
+	/* And invert to make tests be against 0 */
+	bxf = bxd - bxf;
+	byf = byd - byf;
+
+	d = s2;
+	fwd = stride;		/* Every pixel we step stride forwards */
+	back = f*fwd-n;		/* After f pixels we step back backwards (leaving us advanced by n) */
+	back2 = f*n-1;		/* After f columns we step back2 backwards (leaving us advanced by 1) */
+	fwd2 = (f-1)*n;		/* After n components we step fwd2 forwards (leaving us advanced by f*n) */
+	factor *= 2;
+	for (y = h; y > 0; y -= f)
+	{
+		int bxf2 = bxf;
+		unsigned char *s = s2;
+		for (x = w; x > 0; x -= f)
+		{
+			for (nn = n; nn > 0; nn--)
+			{
+				int v = 0;
+				for (xx = f; xx > 0; xx--)
+				{
+					for (yy = f; yy > 0; yy--)
+					{
+						v += *s;
+						s += fwd;
+					}
+					s -= back;
+				}
+				*d++ = v >> factor;
+				s -= back2;
+			}
+			s += fwd2;
+			bxf2 -= subx;
+			while (bxf2 < 0)
+			{
+				s -= n;
+				bxf2 += bxd;
+			}
+		}
+		s2 += stride * f;
+		byf -= suby;
+		while (byf < 0)
+		{
+			s2 -= stride;
+			byf += byd;
+		}
+	}
+}
+
+void
 fz_subsample_pixmap(fz_context *ctx, fz_pixmap *tile, int factor)
 {
 	int f;
+	int subx, suby;
 
 	if (!tile)
 		return;
 
 	assert(tile->stride >= tile->w * tile->n);
 
+	subx = (tile->w % (1<<factor));
+	suby = (tile->h % (1<<factor));
+	if ((subx != 0 || suby != 0) && tile->w >= (1<<factor) && tile->h >= (1<<factor))
+	{
+		/* Imagine that I've got a 61x61 image that we want to subsample
+		 * by an l2factor of 2 (1<<2 == 4). Naively we'd treat it as a
+		 * 64x64 image and shrink it to a 16x16 one. This would mean that
+		 * the last column/row in the output came from a single pixel,
+		 * and everything internally felt like it shifted up and left
+		 * slightly.
+		 *
+		 * Naive:
+		 *   INPUT:  0  1  2  3 ... 56 57 58 59 60 60 60 60
+		 *   OUTPUT: <--  0 -->     <--  14 --> <--  15 -->
+		 *
+		 * Smarter:
+		 *   INPUT:  0  1  2  3 ... 12 13 14 15 16 17 18 ... 30 31 32 33 34 35 36 ... 45 46 47 48 49 50 51 ... 57 58 59 60
+		 *  OUTPUT:  <--  0 -->     <--  3  -->                       <--  8  -->     <--  11 -->
+		 *                                   <--  4  -->     <--  7  -->                       <--  12 -->     <--  15 -->
+		 *
+		 * So 15, 33, and 48 are used twice.
+		 */
+		subx = subx ? (1<<factor) - subx : 0;
+		suby = suby ? (1<<factor) - suby : 0;
+		fz_subsample_pixblock_bresenham(tile->samples, tile->w, tile->h, tile->n, factor, tile->stride, subx, suby);
+	}
+	else
 	fz_subsample_pixblock(tile->samples, tile->w, tile->h, tile->n, factor, tile->stride);
 
 	f = 1<<factor;

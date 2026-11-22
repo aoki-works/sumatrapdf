@@ -15,11 +15,12 @@ from . import parse
 try:
     import clang.cindex
 except Exception as e:
-    jlib.log('Warning: failed to import clang.cindex: {e=}\n'
-            f'We need Clang Python to build MuPDF python.\n'
-            f'Install with `pip install libclang` (typically inside a Python venv),\n'
-            f'or (OpenBSD only) `pkg_add py3-llvm.`\n'
-            )
+    if '--venv' not in sys.argv:
+        jlib.log('Warning: failed to import clang.cindex: {e=}\n'
+                f'We need Clang Python to build MuPDF python.\n'
+                f'Install with `pip install libclang` (typically inside a Python venv),\n'
+                f'or (OpenBSD only) `pkg_add py3-llvm.`\n'
+                )
     clang = None
 
 omit_fns = [
@@ -193,6 +194,8 @@ class Cpu:
     Members:
         .bits
             .
+        .name:
+            'x32' or 'x64'.
         .windows_subdir
             '' or 'x64/', e.g. platform/win32/x64/Release.
         .windows_name
@@ -309,9 +312,9 @@ class BuildDirs:
                 # `/Od` (no optimisation) and `/RTC1` (extra runtime checks)
                 # because these seem to be conventionally set in VS.
                 #
-                self.cpp_flags = '/MDd /Od /RTC1'
+                self.cpp_flags = '/MDd /Od /RTC1 /D _DEBUG'
             elif '-memento' in dir_so:
-                self.cpp_flags = '/MDd /Od /RTC1 /DMEMENTO'
+                self.cpp_flags = '/MDd /Od /RTC1 /D _DEBUG /DMEMENTO'
             else:
                 self.cpp_flags = None
                 jlib.log( 'Warning: unrecognised {dir_so=}, so cannot determine cpp_flags')
@@ -328,29 +331,57 @@ class BuildDirs:
         if state_.windows:
             # Infer cpu and python version from self.dir_so. And append current
             # cpu and python version if not already present.
-            leaf = os.path.basename(self.dir_so)
-            m = re.match( 'shared-([a-z]+)$', leaf)
-            if m:
-                suffix = f'-{Cpu(cpu_name())}-py{python_version()}'
-                jlib.log('Adding suffix to {leaf!r}: {suffix!r}')
-                self.dir_so += suffix
-                leaf = os.path.basename(self.dir_so)
-            m = re.search( '-(x[0-9]+)-py([0-9.]+)$', leaf)
-            #log(f'self.dir_so={self.dir_so} {os.path.basename(self.dir_so)} m={m}')
-            assert m, f'Failed to parse dir_so={self.dir_so!r} - should be *-x32|x64-pyA.B'
-            self.cpu = Cpu( m.group(1))
-            self.python_version = m.group(2)
+            flags = self.dir_so.split('-')
+            self.cpu = None
+            self.python_version = None
+            for flag in flags:
+                if flag in ('x32', 'x64'):
+                    self.cpu = Cpu(flag)
+                if flag.startswith('py'):
+                    self.python_version = flag[2:]
+            if not self.cpu:
+                self.cpu = Cpu(cpu_name())
+                self.dir_so += f'-{self.cpu.name}'
+            if not self.python_version:
+                self.python_version = python_version()
+                self.dir_so += f'-py{self.python_version}'
             #jlib.log('{self.cpu=} {self.python_version=} {dir_so=}')
         else:
             # Use Python we are running under.
             self.cpu = Cpu(cpu_name())
             self.python_version = python_version()
 
+        # Set Py_LIMITED_API if it occurs in dir_so.
+        self.Py_LIMITED_API = None
+        flags = os.path.basename(self.dir_so).split('-')
+        for flag in flags:
+            if flag in ('Py_LIMITED_API', 'PLA'):
+                self.Py_LIMITED_API = '0x03080000'
+            elif flag.startswith('Py_LIMITED_API='):    # 2024-11-15: fixme: obsolete
+                self.Py_LIMITED_API = flag[len('Py_LIMITED_API='):]
+            elif flag.startswith('Py_LIMITED_API_'):
+                self.Py_LIMITED_API = flag[len('Py_LIMITED_API_'):]
+            elif flag.startswith('PLA_'):
+                self.Py_LIMITED_API = flag[len('PLA_'):]
+        jlib.log(f'{self.Py_LIMITED_API=}')
+
+        # Set swig .i and .cpp paths, including Py_LIMITED_API so that
+        # different values of Py_LIMITED_API can be tested without rebuilding
+        # unnecessarily.
+        Py_LIMITED_API_infix = f'-Py_LIMITED_API_{self.Py_LIMITED_API}' if self.Py_LIMITED_API else ''
+        self.mupdfcpp_swig_i    = lambda language: f'{self.dir_mupdf}/platform/{language}/mupdfcpp_swig{Py_LIMITED_API_infix}.i'
+        self.mupdfcpp_swig_cpp  = lambda language: self.mupdfcpp_swig_i(language) + '.cpp'
+
     def windows_build_type(self):
+        '''
+        Returns `Release` or `Debug`.
+        '''
         dir_so_flags = os.path.basename( self.dir_so).split( '-')
         if 'debug' in dir_so_flags:
             return 'Debug'
         elif 'release' in dir_so_flags:
             return 'Release'
+        elif 'memento' in dir_so_flags:
+            return 'Memento'
         else:
             assert 0, f'Expecting "-release-" or "-debug-" in build_dirs.dir_so={self.dir_so}'

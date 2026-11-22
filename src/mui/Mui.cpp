@@ -65,13 +65,9 @@ static void LeaveMuiCriticalSection() {
 
 class ScopedMuiCritSec {
   public:
-    ScopedMuiCritSec() {
-        EnterMuiCriticalSection();
-    }
+    ScopedMuiCritSec() { EnterMuiCriticalSection(); }
 
-    ~ScopedMuiCritSec() {
-        LeaveMuiCriticalSection();
-    }
+    ~ScopedMuiCritSec() { LeaveMuiCriticalSection(); }
 };
 
 class FontListItem {
@@ -168,7 +164,9 @@ void Destroy() {
         e.Free();
     }
     delete gGraphicsCache;
+    gGraphicsCache = nullptr;
     delete gFontsCache;
+    gFontsCache = nullptr;
     DeleteCriticalSection(&gMuiCs);
 }
 
@@ -227,7 +225,7 @@ CachedFont* GetCachedFont(const WCHAR* name, float sizePt, FontStyle style) {
     }
 
     FontListItem* item = new FontListItem(name, sizePt, style, font, nullptr);
-    ListInsert(&gFontsCache, item);
+    ListInsertFront(&gFontsCache, item);
     return &item->cf;
 }
 

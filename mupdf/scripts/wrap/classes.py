@@ -154,7 +154,7 @@ class ClassExtra:
             Otherwise if true, generated wrapper class must be copyable. If
             pod is false, we generate a copy constructor by looking for a
             fz_keep_*() function; it's an error if we can't find this function
-            [2024-01-24 fixme: actually we don't apear to raise an
+            [2024-01-24 fixme: actually we don't appear to raise an
             error in this case, instead we make class non-copyable.
             e.g. FzCompressedBuffer.].
 
@@ -237,6 +237,8 @@ class ClassExtra:
 
                     Should typically set up the MuPDF struct so that `self_()`
                     can return the original C++ wrapper class instance.
+                comment:
+                    Extra comment for the wrapper class.
                 free:
                     Optional code for freeing the virtual_fnptrs wrapper
                     class. If specified this causes creation of a destructor
@@ -400,7 +402,7 @@ classextras = ClassExtras(
 
         fz_band_writer = ClassExtra(
                 class_top = '''
-                    /* We use these enums to support construction via all the relevent MuPDF functions. */
+                    /* We use these enums to support construction via all the relevant MuPDF functions. */
 
                     enum Cm
                     {
@@ -521,7 +523,7 @@ classextras = ClassExtras(
                     ],
                 constructor_raw=1,
                 class_top = '''
-                        /* We use this enums to support construction via all the relevent MuPDF functions. */
+                        /* We use this enums to support construction via all the relevant MuPDF functions. */
                         enum Fixed
                         {
                             Fixed_GRAY,
@@ -585,7 +587,7 @@ classextras = ClassExtras(
                             ),
                 ],
                 pod = True,
-                # Other code asyncronously writes to our fields, so we are not
+                # Other code asynchronously writes to our fields, so we are not
                 # copyable. todo: maybe tie us to all objects to which we have
                 # been associated?
                 #
@@ -1211,6 +1213,19 @@ classextras = ClassExtras(
                         *({rename.class_("fz_path_walker")}2**) (m_internal + 1) = this;
                         '''),
                     free = f'{rename.ll_fn("fz_free")}(m_internal);\n',
+                    comment = textwrap.dedent(f'''
+                            /*
+                            We require that the `void* arg` passed to callbacks
+                            is the original `fz_path_walker*`. So, for example,
+                            class-aware wrapper mupdf::fz_walk_path() should be
+                            called like:
+
+                                mupdf.FzPath path = ...;
+                                struct Walker : mupdf.FzPathWalker2 {...};
+                                Walker walker(...);
+                                mupdf::fz_walk_path(path, walker, walker.m_internal);
+                            */
+                            ''')
                     ),
                 ),
 
@@ -1500,7 +1515,7 @@ classextras = ClassExtras(
                             if (m_internal->type != FZ_STEXT_BLOCK_IMAGE) {{
                                 throw std::runtime_error("Not an image");
                             }}
-                            return {rename.ll_fn('fz_keep_image')}(m_internal->u.i.image);
+                            return {rename.class_("fz_image")}({rename.ll_fn('fz_keep_image')}(m_internal->u.i.image));
                         }}
                         ''',
                         comment=f'/* Returns m_internal.u.i.image if m_internal->type is FZ_STEXT_BLOCK_IMAGE, else throws. */',
@@ -1520,13 +1535,30 @@ classextras = ClassExtras(
 
         fz_stext_options = ClassExtra(
                 constructors_extra = [
-                    ExtraConstructor( '(int flags)',
+                    ExtraConstructor( '(int flags, float scale=1.0)',
                         '''
-                        : flags( flags)
+                        :
+                        flags(flags),
+                        scale(scale)
+                        {
+                            assert(!(flags & FZ_STEXT_CLIP_RECT));
+                        }
+                        ''',
+                        comment = '/* Construct with .flags, .scale but no clip. */',
+                        ),
+                    ExtraConstructor( '(int flags, fz_rect clip, float scale=1.0)',
+                        '''
+                        :
+                        flags(flags | FZ_STEXT_CLIP_RECT),
+                        scale(scale),
+                        clip(clip)
                         {
                         }
                         ''',
-                        comment = '/* Construct with .flags set to <flags>. */',
+                        comment =
+                                '/* Construct with .flags, .scale and .clip; FZ_STEXT_CLIP_RECT\n'
+                                'is automatically set in .flags. */'
+                                ,
                         ),
                     ],
                 pod='inline',
@@ -1663,9 +1695,9 @@ classextras = ClassExtras(
                     ExtraConstructor( '()',
                         f'''
                         {{
+                            memset(this->internal(), 0, sizeof(*this->internal()));
                             /* Use memcpy() otherwise we get 'invalid array assignment' errors. */
                             memcpy(&this->internal()->write, &pdf_default_write_options, sizeof(this->internal()->write));
-                            memset(&this->internal()->image, 0, sizeof(this->internal()->image));
                         }}
                         ''',
                         comment = '/* Default constructor, makes copy of pdf_default_write_options. */'
@@ -1755,7 +1787,7 @@ classextras = ClassExtras(
                 # We don't need to allocate extra space, and because we are a
                 # POD class, we can simply let our default constructor run.
                 #
-                # this->opaque is passsed as arg[2].
+                # this->opaque is passed as arg[2].
                 #
                 virtual_fnptrs = dict(
                         self_ = lambda name: f'({rename.class_("pdf_filter_options")}2*) {name}',
@@ -1930,6 +1962,10 @@ classextras = ClassExtras(
                         *(({rename.class_("pdf_processor")}2**) (m_internal + 1)) = this;
                         '''),
                     ),
+                ),
+
+        pdf_recolor_options = ClassExtra(
+                pod = 'inline',
                 ),
 
         pdf_redact_options = ClassExtra(

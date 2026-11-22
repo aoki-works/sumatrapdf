@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -125,10 +125,9 @@ fz_rotate(float theta)
 	float s;
 	float c;
 
-	while (theta < 0)
+	theta = fmod(theta, 360);
+	if (theta < 0)
 		theta += 360;
-	while (theta >= 360)
-		theta -= 360;
 
 	if (fabsf(0 - theta) < FLT_EPSILON)
 	{
@@ -165,10 +164,9 @@ fz_rotate(float theta)
 fz_matrix
 fz_pre_rotate(fz_matrix m, float theta)
 {
-	while (theta < 0)
+	theta = fmod(theta, 360);
+	if (theta < 0)
 		theta += 360;
-	while (theta >= 360)
-		theta -= 360;
 
 	if (fabsf(0 - theta) < FLT_EPSILON)
 	{
@@ -258,22 +256,24 @@ fz_transform_page(fz_rect mediabox, float resolution, float rotate)
 fz_matrix
 fz_invert_matrix(fz_matrix src)
 {
-	float a = src.a;
-	float det = a * src.d - src.b * src.c;
-	if (det < -FLT_EPSILON || det > FLT_EPSILON)
-	{
-		fz_matrix dst;
-		float rdet = 1 / det;
-		dst.a = src.d * rdet;
-		dst.b = -src.b * rdet;
-		dst.c = -src.c * rdet;
-		dst.d = a * rdet;
-		a = -src.e * dst.a - src.f * dst.c;
-		dst.f = -src.e * dst.b - src.f * dst.d;
-		dst.e = a;
-		return dst;
-	}
-	return src;
+	double sa = (double)src.a;
+	double sb = (double)src.b;
+	double sc = (double)src.c;
+	double sd = (double)src.d;
+	double da, db, dc, dd, de, df;
+	double det = sa * sd - sb * sc;
+	// If we cannot invert the matrix, return a degenerate one so we can
+	// more easily spot it when debugging!
+	if (det >= -DBL_EPSILON && det <= DBL_EPSILON)
+		return fz_make_matrix(0, 0, 0, 0, 0, 0);
+	det = 1 / det;
+	da = sd * det;
+	db = -sb * det;
+	dc = -sc * det;
+	dd = sa * det;
+	de = -src.e * da - src.f * dc;
+	df = -src.e * db - src.f * dd;
+	return fz_make_matrix(da, db, dc, dd, de, df);
 }
 
 int
@@ -586,9 +586,9 @@ fz_transform_rect(fz_rect r, fz_matrix m)
 	 * invalid rectangle after transformation. */
 	if (invalid)
 	{
-		float t;
-		t = r.x0; r.x0 = r.x1; r.x1 = t;
-		t = r.y0; r.y0 = r.y1; r.y1 = t;
+		float f;
+		f = r.x0; r.x0 = r.x1; r.x1 = f;
+		f = r.y0; r.y0 = r.y1; r.y1 = f;
 	}
 	return r;
 }
@@ -641,6 +641,11 @@ int fz_contains_rect(fz_rect a, fz_rect b)
 		(a.y0 <= b.y0) &&
 		(a.x1 >= b.x1) &&
 		(a.y1 >= b.y1));
+}
+
+int fz_overlaps_rect(fz_rect a, fz_rect b)
+{
+	return !fz_is_empty_rect(fz_intersect_rect(a, b));
 }
 
 int
@@ -773,6 +778,28 @@ int fz_is_point_inside_irect(int x, int y, fz_irect r)
 	return (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1);
 }
 
+int fz_is_rect_inside_rect(fz_rect inner, fz_rect outer)
+{
+	if (!fz_is_valid_rect(outer))
+		return 0;
+	if (!fz_is_valid_rect(inner))
+		return 0;
+	if (inner.x0 >= outer.x0 && inner.x1 <= outer.x1 && inner.y0 >= outer.y0 && inner.y1 <= outer.y1)
+		return 1;
+	return 0;
+}
+
+int fz_is_irect_inside_irect(fz_irect inner, fz_irect outer)
+{
+	if (!fz_is_valid_irect(outer))
+		return 0;
+	if (!fz_is_valid_irect(inner))
+		return 0;
+	if (inner.x0 >= outer.x0 && inner.x1 <= outer.x1 && inner.y0 >= outer.y0 && inner.y1 <= outer.y1)
+		return 1;
+	return 0;
+}
+
 /* cross (b-a) with (p-a) */
 static float
 cross(fz_point a, fz_point b, fz_point p)
@@ -809,15 +836,15 @@ static int fz_is_point_inside_triangle(fz_point p, fz_point a, fz_point b, fz_po
 	 * One of the cross products being 0 indicates that the point is on a line.
 	 * Two of the cross products being 0 indicates that the point is on a vertex.
 	 *
-	 * If 2 of the vertexes are the same, the algorithm still works.
-	 * Iff all 3 of the vertexes are the same, the cross products are all zero. The
+	 * If 2 of the vertices are the same, the algorithm still works.
+	 * Iff all 3 of the vertices are the same, the cross products are all zero. The
 	 * value of p is irrelevant.
 	 */
 	float crossa = cross(a, b, p);
 	float crossb = cross(b, c, p);
 	float crossc = cross(c, a, p);
 
-	/* Check for degenerate case. All vertexes the same. */
+	/* Check for degenerate case. All vertices the same. */
 	if (crossa == 0 && crossb == 0 && crossc == 0)
 		return a.x == p.x && a.y == p.y;
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -481,6 +481,12 @@ fz_begin_tile(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float
 int
 fz_begin_tile_id(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id)
 {
+	return fz_begin_tile_tid(ctx, dev, area, view, xstep, ystep, ctm, id, 0);
+}
+
+int
+fz_begin_tile_tid(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, float xstep, float ystep, fz_matrix ctm, int id, int doc_id)
+{
 	int result = 0;
 
 	push_clip_stack(ctx, dev, area, fz_device_container_stack_is_tile);
@@ -492,7 +498,7 @@ fz_begin_tile_id(fz_context *ctx, fz_device *dev, fz_rect area, fz_rect view, fl
 	if (dev->begin_tile)
 	{
 		fz_try(ctx)
-			result = dev->begin_tile(ctx, dev, area, view, xstep, ystep, ctm, id);
+			result = dev->begin_tile(ctx, dev, area, view, xstep, ystep, ctm, id, doc_id);
 		fz_catch(ctx)
 		{
 			fz_disable_device(ctx, dev);
@@ -785,8 +791,6 @@ fz_structure_to_string(fz_structure type)
 	case FZ_STRUCTURE_ARTIFACT:
 		return "Artifact";
 	}
-
-	return NULL;
 }
 
 fz_structure

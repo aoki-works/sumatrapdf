@@ -8,6 +8,8 @@
 #include "utils/FileUtil.h"
 #include "utils/WinUtil.h"
 #include "utils/Dpi.h"
+#include "utils/GuessFileType.h"
+#include "utils/UITask.h"
 
 #include "wingui/UIModels.h"
 #include "wingui/Layout.h"
@@ -41,7 +43,15 @@
 #include "StressTesting.h"
 #include "Translations.h"
 #include "uia/Provider.h"
+
+#include "utils/Log.h"
+
+static void SafeDeleteTabsCtrl(TabsCtrl* tabsCtrl) {
+    logf("SafeDeleteTabsCtrl: 0x%p\n", tabsCtrl);
+    delete tabsCtrl;
+}
 #include "Theme.h"
+#include "Canvas.h"
 
 #include "utils/Log.h"
 
@@ -54,9 +64,7 @@ struct LinkHandler : ILinkHandler {
     }
     ~LinkHandler() override;
 
-    DocController* GetDocController() override {
-        return win->ctrl;
-    }
+    DocController* GetDocController() override { return win->ctrl; }
     void GotoLink(IPageDestination*) override;
     void GotoNamedDest(const char*) override;
     void ScrollTo(IPageDestination*) override;
@@ -71,31 +79,15 @@ LinkHandler::~LinkHandler() {
 
 Vec<MainWindow*> gWindows;
 
-StaticLinkInfo::StaticLinkInfo(Rect rect, const char* target, const char* infotip) {
+StaticLink::StaticLink(Rect rect, const char* target, const char* infotip) {
     this->rect = rect;
     this->target = str::Dup(target);
-    this->infotip = str::Dup(infotip);
+    this->tooltip = str::Dup(infotip);
 }
 
-StaticLinkInfo::StaticLinkInfo(const StaticLinkInfo& other) {
-    rect = other.rect;
-    str::ReplaceWithCopy(&target, other.target);
-    str::ReplaceWithCopy(&infotip, other.infotip);
-}
-
-StaticLinkInfo& StaticLinkInfo::operator=(const StaticLinkInfo& other) {
-    if (this == &other) {
-        return *this;
-    }
-    rect = other.rect;
-    str::ReplaceWithCopy(&target, other.target);
-    str::ReplaceWithCopy(&infotip, other.infotip);
-    return *this;
-}
-
-StaticLinkInfo::~StaticLinkInfo() {
+StaticLink::~StaticLink() {
     str::Free(target);
-    str::Free(infotip);
+    str::Free(tooltip);
 }
 
 MainWindow::MainWindow(HWND hwnd) {
@@ -116,6 +108,7 @@ void CreateMovePatternLazy(MainWindow* win) {
 }
 
 MainWindow::~MainWindow() {
+    KillTimer(hwndCanvas, kSmoothScrollTimerID);
     FinishStressTest(this);
 
     ReportIf(TabCount() > 0);
@@ -144,7 +137,18 @@ MainWindow::~MainWindow() {
     DeleteVecMembers(staticLinks);
     auto tabs = Tabs();
     DeleteVecMembers(tabs);
-    delete tabsCtrl;
+    {
+        TabsCtrl* tabsCtrlToDelete = tabsCtrl;
+        logf("~MainWindow: destroy tabsCtrl: 0x%p, HWND: 0x%p\n", tabsCtrlToDelete, tabsCtrlToDelete->hwnd);
+        // Tab close can re-enter comctl32 subclass dispatch while unwinding
+        // the current message. Destroy the HWND now, but defer deleting the
+        // C++ object until the UI task queue runs after message dispatch.
+        tabsCtrlToDelete->Destroy();
+        auto fn = MkFunc0(SafeDeleteTabsCtrl, tabsCtrlToDelete);
+        uitask::Post(fn, "SafeDeleteTabsCtrl");
+        tabsCtrl = nullptr;
+    }
+
     // cbHandler is passed into DocController and must be deleted afterwards
     // (all controllers should have been deleted prior to MainWindow, though)
     delete cbHandler;
@@ -245,6 +249,9 @@ int MainWindow::GetTabIdx(WindowTab* tab) const {
 
 Vec<WindowTab*> MainWindow::Tabs() const {
     Vec<WindowTab*> res;
+    if (!tabsCtrl) { // null seen in crash report
+        return res;
+    }
     int nTabs = tabsCtrl->TabCount();
     for (int i = 0; i < nTabs; i++) {
         WindowTab* tab = GetTabsUserData<WindowTab*>(tabsCtrl, i);
@@ -288,7 +295,7 @@ void MainWindow::UpdateCanvasSize() {
 
 Size MainWindow::GetViewPortSize() const {
     Size size = canvasRc.Size();
-    ReportIf(size.IsEmpty());
+    ReportDebugIf(size.IsEmpty());
 
     DWORD style = GetWindowLong(hwndCanvas, GWL_STYLE);
     if ((style & WS_VSCROLL)) {
@@ -301,12 +308,18 @@ Size MainWindow::GetViewPortSize() const {
     return size;
 }
 
-void MainWindow::RedrawAll(bool update) const {
-    // logf("MainWindow::RedrawAll, update: %d  RenderCache:\n", (int)update);
-    InvalidateRect(this->hwndCanvas, nullptr, false);
+static BOOL CALLBACK RedrawHwndCallback(HWND hwnd, LPARAM lp) {
+    bool update = (bool)lp;
+    InvalidateRect(hwnd, nullptr, true);
     if (update) {
-        UpdateWindow(this->hwndCanvas);
+        UpdateWindow(hwnd);
     }
+    return TRUE;
+}
+
+void MainWindow::RedrawAll(bool update) const {
+    EnumChildWindows(this->hwndFrame, RedrawHwndCallback, (LPARAM)update);
+    RedrawHwndCallback(this->hwndFrame, (LPARAM)update);
 }
 
 void MainWindow::RedrawAllIncludingNonClient() const {
@@ -351,10 +364,10 @@ void MainWindow::Focus() const {
     // set focus to an owned modal dialog if there is one
     HWND hwnd = FindModalOwnedBy(hwndFrame);
     if (hwnd != nullptr) {
-        SetFocus(hwnd);
+        HwndSetFocus(hwnd);
         return;
     }
-    SetFocus(hwndFrame);
+    HwndSetFocus(hwndFrame);
 }
 
 void MainWindow::ToggleZoom() const {
@@ -484,6 +497,12 @@ void LinkHandler::LaunchURL(const char* uri) {
     }
 }
 
+// return true if we can load the file based on sniffing file type from content
+static bool IsFileSupportedByContent(const char* filePath) {
+    Kind kindSniffed = GuessFileType(filePath, true);
+    return IsSupportedFileType(kindSniffed, true);
+}
+
 // for safety, only handle relative paths and only open them in SumatraPDF
 // (unless they're of an allowed perceived type) and never launch any external
 // file in plugin mode (where documents are supposed to be self-contained)
@@ -513,6 +532,7 @@ void LinkHandler::LaunchFile(const char* pathOrig, IPageDestination* remoteLink)
     if (!isAbsPath) {
         auto dir = path::GetDirTemp(win->ctrl->GetFilePath());
         fullPath = path::JoinTemp(dir, path);
+        fullPath = path::NormalizeTemp(fullPath);
     }
     path::Type pathType = path::GetType(fullPath);
     if (pathType == path::Type::None) {
@@ -521,7 +541,13 @@ void LinkHandler::LaunchFile(const char* pathOrig, IPageDestination* remoteLink)
         return;
     }
     if (pathType == path::Type::Dir) {
-        SumatraOpenPathInExplorer(fullPath);
+        SumatraOpenPathInDefaultFileManager(fullPath);
+        return;
+    }
+
+    bool canWeOpenIt = IsFileSupportedByContent(fullPath);
+    if (!canWeOpenIt) {
+        SumatraOpenPathInDefaultFileManager(fullPath);
         return;
     }
 
@@ -652,8 +678,8 @@ void UpdateControlsColors(MainWindow* win) {
 
     // logfa("retrieved doc colors in tree control: 0x%x 0x%x\n", treeTxtCol, treeBgCol);
 
-    COLORREF splitterCol = GetSysColor(COLOR_BTNFACE);
-    bool flatTreeWnd = false;
+    COLORREF splitterCol = ThemeControlBackgroundColor();
+    bool flatTreeWnd = true;
 
     {
         auto tocTreeView = win->tocTreeView;
@@ -686,7 +712,7 @@ void UpdateControlsColors(MainWindow* win) {
 void ClearFindBox(MainWindow* win) {
     HWND hwndFocused = GetFocus();
     if (hwndFocused == win->hwndFindEdit) {
-        SetFocus(win->hwndFrame);
+        HwndSetFocus(win->hwndFrame);
     }
     HwndSetText(win->hwndFindEdit, "");
 }
@@ -706,6 +732,9 @@ bool IsMainWindowValid(MainWindow* win) {
 }
 
 MainWindow* FindMainWindowByHwnd(HWND hwnd) {
+    if (!::IsWindow(hwnd)) {
+        return nullptr;
+    }
     for (MainWindow* win : gWindows) {
         if ((win->hwndFrame == hwnd) || ::IsChild(win->hwndFrame, hwnd)) {
             return win;
@@ -725,6 +754,10 @@ MainWindow* FindMainWindowByTab(WindowTab* tabToFind) {
         }
     }
     return nullptr;
+}
+
+bool IsWindowTabValid(WindowTab* tab) {
+    return FindMainWindowByTab(tab) != nullptr;
 }
 
 MainWindow* FindMainWindowByController(DocController* ctrl) {
@@ -748,4 +781,16 @@ void HighlightTab(MainWindow* win, WindowTab* tab) {
         idx = win->GetTabIdx(tab);
     }
     win->tabsCtrl->SetHighlighted(idx);
+}
+
+HWND GetHwndForNotification() {
+    if (gWindows.Size() == 0) {
+        return nullptr;
+    }
+    return gWindows[0]->hwndCanvas;
+}
+
+bool AppIsValidHWND(HWND hwnd) {
+    MainWindow* win = FindMainWindowByHwnd(hwnd);
+    return win && !win->isBeingClosed;
 }

@@ -1,11 +1,6 @@
 /* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
-/* Code related to:
- * user-initiated search
- * DDE commands, including search
- */
-
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/FileUtil.h"
@@ -20,7 +15,6 @@
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
-#include "Annotation.h"
 #include "GlobalPrefs.h"
 #include "ChmModel.h"
 #include "DisplayModel.h"
@@ -37,18 +31,16 @@
 #include "AppTools.h"
 #include "SearchAndDDE.h"
 #include "Selection.h"
+#include "Toolbar.h"
 #include "SumatraDialogs.h"
 #include "Translations.h"
-#include "CPSLabAnnot.h"
-#include "AppSettings.h"
 
 #include "utils/Log.h"
 
 bool gIsStartup = false;
 StrVec gDdeOpenOnStartup;
+
 Kind kNotifFindProgress = "findProgress";
-
-
 
 // don't show the Search UI for document types that don't
 // support extracting text and/or navigating to a specific
@@ -77,36 +69,41 @@ void FindFirst(MainWindow* win) {
         return;
     }
 
-    // copy any selected text to the find bar, if it's still empty
     DisplayModel* dm = win->AsFixed();
-    // note: used to only copy selection to search edit ctrl
-    // if search edit was empty
-    // auto isEditEmpty = Edit_GetTextLength(win->hwndFindEdit) == 0
-    if (dm->textSelection->result.len > 0) {
+    bool hadFindFocus = HwndIsFocused(win->hwndFindEdit);
+
+    // If focus was in the document (not find bar), copy selected text
+    // and set search position at the selection so FindNext advances from it
+    if (!hadFindFocus && dm->textSelection->result.len > 0) {
         AutoFreeWStr selection(dm->textSelection->ExtractText(" "));
         str::NormalizeWSInPlace(selection);
         if (!str::IsEmpty(selection.Get())) {
             TempStr s = ToUtf8Temp(selection);
+            AbortFinding(win, false);
+            dm->textSearch->SetLastResult(dm->textSelection);
+            Edit_SetModify(win->hwndFindEdit, FALSE);
             HwndSetText(win->hwndFindEdit, s);
-            Edit_SetModify(win->hwndFindEdit, TRUE);
+            // EN_UPDATE from HwndSetText triggers search with wasModified=false,
+            // which uses FindNext() from the selection position
+            Edit_SetModify(win->hwndFindEdit, FALSE);
         }
     }
 
     // Don't show a dialog if we don't have to - use the Toolbar instead
     if (gGlobalPrefs->showToolbar && !win->isFullScreen && !win->presentation) {
-        if (HwndIsFocused(win->hwndFindEdit)) {
-            SendMessageW(win->hwndFindEdit, WM_SETFOCUS, 0, 0);
-        } else {
-            SetFocus(win->hwndFindEdit);
+        if (hadFindFocus) {
+            // find bar already focused: treat Ctrl+F as "find next"
+            FindTextOnThread(win, TextSearch::Direction::Forward, true);
+        } else if (!HwndIsFocused(win->hwndFindEdit)) {
+            HwndSetFocus(win->hwndFindEdit);
         }
         return;
     }
 
     TempStr previousFind = HwndGetTextTemp(win->hwndFindEdit);
-    WORD state = (WORD)SendMessageW(win->hwndToolbar, TB_GETSTATE, CmdFindMatch, 0);
-    bool matchCase = (state & TBSTATE_CHECKED) != 0;
+    bool newMatchCase = win->findMatchCase;
 
-    AutoFreeStr findString(Dialog_Find(win->hwndFrame, previousFind, &matchCase));
+    AutoFreeStr findString(Dialog_Find(win->hwndFrame, previousFind, &newMatchCase));
     if (!findString) {
         return;
     }
@@ -114,18 +111,13 @@ void FindFirst(MainWindow* win) {
     HwndSetText(win->hwndFindEdit, findString);
     Edit_SetModify(win->hwndFindEdit, TRUE);
 
-    bool matchCaseChanged = matchCase != (0 != (state & TBSTATE_CHECKED));
-    if (matchCaseChanged) {
-        if (matchCase) {
-            state |= TBSTATE_CHECKED;
-        } else {
-            state &= ~TBSTATE_CHECKED;
-        }
-        SendMessageW(win->hwndToolbar, TB_SETSTATE, CmdFindMatch, state);
-        dm->textSearch->SetSensitive(matchCase);
+    if (newMatchCase != win->findMatchCase) {
+        win->findMatchCase = newMatchCase;
+        dm->textSearch->SetMatchCase(newMatchCase);
+        SetToolbarButtonCheckedState(win, CmdFindToggleMatchCase, win->findMatchCase);
     }
 
-    FindTextOnThread(win, TextSearchDirection::Forward, true);
+    FindTextOnThread(win, TextSearch::Direction::Forward, true);
 }
 
 void FindNext(MainWindow* win) {
@@ -133,7 +125,7 @@ void FindNext(MainWindow* win) {
         return;
     }
     if (SendMessageW(win->hwndToolbar, TB_ISBUTTONENABLED, CmdFindNext, 0)) {
-        FindTextOnThread(win, TextSearchDirection::Forward, true);
+        FindTextOnThread(win, TextSearch::Direction::Forward, true);
     }
 }
 
@@ -142,7 +134,7 @@ void FindPrev(MainWindow* win) {
         return;
     }
     if (SendMessageW(win->hwndToolbar, TB_ISBUTTONENABLED, CmdFindPrev, 0)) {
-        FindTextOnThread(win, TextSearchDirection::Backward, true);
+        FindTextOnThread(win, TextSearch::Direction::Backward, true);
     }
 }
 
@@ -150,12 +142,13 @@ void FindToggleMatchCase(MainWindow* win) {
     if (!win->IsDocLoaded() || !NeedsFindUI(win)) {
         return;
     }
-    WORD state = (WORD)SendMessageW(win->hwndToolbar, TB_GETSTATE, CmdFindMatch, 0);
-    win->AsFixed()->textSearch->SetSensitive((state & TBSTATE_CHECKED) != 0);
+    win->findMatchCase = !win->findMatchCase;
+    win->AsFixed()->textSearch->SetMatchCase(win->findMatchCase);
+    SetToolbarButtonCheckedState(win, CmdFindToggleMatchCase, win->findMatchCase);
     Edit_SetModify(win->hwndFindEdit, TRUE);
 }
 
-void FindSelection(MainWindow* win, TextSearchDirection direction) {
+void FindSelection(MainWindow* win, TextSearch::Direction direction) {
     if (!win->IsDocLoaded() || !NeedsFindUI(win)) {
         return;
     }
@@ -217,31 +210,33 @@ static void UpdateFindStatus(UpdateFindStatusData* d) {
     }
     auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifFindProgress);
     if (!wnd) {
+        logf("UpdateFindStatus: no wnd, setting win->findCancelled to true\n");
         win->findCancelled = true;
         return;
     }
-    if (!UpdateNotificationProgress(wnd, d->current, d->total)) {
+    TempStr msg = str::FormatTemp(_TRA("Searching %d of %d..."), d->current, d->total);
+    int perc = CalcPerc(d->current, d->total);
+    if (!UpdateNotificationProgress(wnd, msg, perc)) {
         // the search has been canceled by closing the notification
+        logf("UpdateFindStatus: UpdateNotificationProgress() returned false, setting win->findCancelled to true\n");
         win->findCancelled = true;
     }
 }
 
-struct FindThreadData : public ProgressUpdateUI {
+struct FindThreadData {
     MainWindow* win = nullptr;
-    TextSearchDirection direction{TextSearchDirection::Forward};
+    TextSearch::Direction direction = TextSearch::Direction::Forward;
     bool wasModified = false;
     AutoFreeWStr text;
     HANDLE thread = nullptr;
 
-    FindThreadData(MainWindow* win, TextSearchDirection direction, const char* text, bool wasModified) {
+    FindThreadData(MainWindow* win, TextSearch::Direction direction, const char* text, bool wasModified) {
         this->win = win;
         this->direction = direction;
         this->text = ToWStr(text);
         this->wasModified = wasModified;
     }
-    ~FindThreadData() override {
-        CloseHandle(thread);
-    }
+    ~FindThreadData() { CloseHandle(thread); }
 
     void ShowUI(bool showProgress) {
         const LPARAM disable = (LPARAM)MAKELONG(0, 0);
@@ -253,23 +248,19 @@ struct FindThreadData : public ProgressUpdateUI {
             args.hwndParent = win->hwndCanvas;
             args.timeoutMs = 0;
             args.onRemoved = MkFunc1Void(RemoveNotification);
-
-            args.progressMsg = _TRA("Searching %d of %d...");
             args.groupId = kNotifFindProgress;
             ShowNotification(args);
         }
 
-        SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindPrev, disable);
-        SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindNext, disable);
-        SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindMatch, disable);
+        SetToolbarButtonEnableState(win, CmdFindPrev, false);
+        SetToolbarButtonEnableState(win, CmdFindNext, false);
+        SetToolbarButtonEnableState(win, CmdFindToggleMatchCase, false);
     }
 
     void HideUI(bool success, bool loopedAround) const {
-        LPARAM enable = (LPARAM)MAKELONG(1, 0);
-
-        SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindPrev, enable);
-        SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindNext, enable);
-        SendMessageW(win->hwndToolbar, TB_ENABLEBUTTON, CmdFindMatch, enable);
+        SetToolbarButtonEnableState(win, CmdFindPrev, true);
+        SetToolbarButtonEnableState(win, CmdFindNext, true);
+        SetToolbarButtonEnableState(win, CmdFindToggleMatchCase, true);
 
         auto wnd = GetNotificationForGroup(win->hwndCanvas, kNotifFindProgress);
 
@@ -279,7 +270,7 @@ struct FindThreadData : public ProgressUpdateUI {
             // i.e. canceled
             RemoveNotification(wnd);
         } else if (!success && loopedAround) {
-            NotificationUpdateMessage(wnd, _TRA("No matches were found"), kNotifDefaultTimeOut);
+            NotificationUpdateMessage(wnd, _TRA("No matches were found"), 0);
         } else {
             auto pageNo = win->AsFixed()->textSearch->GetSearchHitStartPageNo();
             TempStr label = win->ctrl->GetPageLabeTemp(pageNo);
@@ -288,21 +279,27 @@ struct FindThreadData : public ProgressUpdateUI {
                 buf = str::FormatTemp(_TRA("Found text at page %s (again)"), label);
                 MessageBeep(MB_ICONINFORMATION);
             }
-            NotificationUpdateMessage(wnd, buf, kNotifDefaultTimeOut, loopedAround);
+            NotificationUpdateMessage(wnd, buf, 0, loopedAround);
         }
     }
 
-    bool WasCanceled() override {
-        return !IsMainWindowValid(win) || win->findCancelled;
+    bool WasCanceled() {
+        bool winValid = IsMainWindowValid(win);
+        auto res = !winValid || win->findCancelled;
+        if (res) {
+            logf("FindThreadData: WasCanceled() returns true, isMainWindowValid: %d, win->findCancelled: %d\n",
+                 (int)winValid, (int)win->findCancelled);
+        }
+        return res;
     }
 
-    void UpdateProgress(int current, int total) override {
+    void UpdateProgress(int current, int total) {
         auto data = new UpdateFindStatusData;
         data->win = this->win;
         data->current = current;
         data->total = total;
         auto fn = MkFunc0<UpdateFindStatusData>(UpdateFindStatus, data);
-        uitask::Post(fn, "UpdateFindStatus");
+        uitask::Post(fn, nullptr);
     }
 };
 
@@ -349,6 +346,15 @@ static void FindEndTask(FindEndTaskData* d) {
     win->findThread = nullptr;
 }
 
+static void UpdateSearchProgress(FindThreadData* ftd, ProgressUpdateData* data) {
+    if (data->wasCancelled) {
+        bool wasCancelled = ftd->WasCanceled();
+        *data->wasCancelled = wasCancelled;
+        return;
+    }
+    ftd->UpdateProgress(data->current, data->total);
+}
+
 static void FindThread(FindThreadData* ftd) {
     ReportIf(!(ftd && ftd->win && ftd->win->ctrl && ftd->win->ctrl->AsFixed()));
 
@@ -360,25 +366,26 @@ static void FindThread(FindThreadData* ftd) {
     auto engine = dm->GetEngine();
     engine->AddRef();
     defer {
-        engine->Release();
+        SafeEngineRelease(&engine);
     };
 
     TextSel* rect;
-    dm->textSearch->SetDirection(ftd->direction);
+    textSearch->progressCb = MkFunc1<FindThreadData, ProgressUpdateData*>(UpdateSearchProgress, ftd);
+    textSearch->SetDirection(ftd->direction);
     if (ftd->wasModified || !ctrl->ValidPageNo(textSearch->GetCurrentPageNo()) ||
         !dm->GetPageInfo(textSearch->GetCurrentPageNo())->visibleRatio) {
-        rect = textSearch->FindFirst(ctrl->CurrentPageNo(), ftd->text, ftd);
+        rect = textSearch->FindFirst(ctrl->CurrentPageNo(), ftd->text);
     } else {
-        rect = textSearch->FindNext(ftd);
+        rect = textSearch->FindNext();
     }
 
     bool loopedAround = false;
     if (!win->findCancelled && !rect) {
         // With no further findings, start over (unless this was a new search from the beginning)
-        int startPage = (TextSearchDirection::Forward == ftd->direction) ? 1 : ctrl->PageCount();
+        int startPage = (TextSearch::Direction::Forward == ftd->direction) ? 1 : ctrl->PageCount();
         if (!ftd->wasModified || ctrl->CurrentPageNo() != startPage) {
             loopedAround = true;
-            rect = textSearch->FindFirst(startPage, ftd->text, ftd);
+            rect = textSearch->FindFirst(startPage, ftd->text);
         }
     }
 
@@ -412,6 +419,7 @@ bool AbortFinding(MainWindow* win, bool hideMessage) {
     bool res = false;
     if (win->findThread) {
         res = true;
+        logf("AboftFinding: setting win->findCancelled to true\n");
         win->findCancelled = true;
         WaitForSingleObject(win->findThread, INFINITE);
     }
@@ -430,7 +438,7 @@ bool AbortFinding(MainWindow* win, bool hideMessage) {
 //   if true, starting a search for new term
 //   if false, searching for the next occurence of previous term
 // TODO: should detect wasModified by comparing with the last search result
-void FindTextOnThread(MainWindow* win, TextSearchDirection direction, const char* text, bool wasModified,
+void FindTextOnThread(MainWindow* win, TextSearch::Direction direction, const char* text, bool wasModified,
                       bool showProgress) {
     AbortFinding(win, false);
     if (str::IsEmpty(text)) {
@@ -457,7 +465,7 @@ char* ReverseTextTemp(char* s) {
     return ToUtf8Temp(ws);
 }
 
-void FindTextOnThread(MainWindow* win, TextSearchDirection direction, bool showProgress) {
+void FindTextOnThread(MainWindow* win, TextSearch::Direction direction, bool showProgress) {
     char* s = HwndGetTextTemp(win->hwndFindEdit);
     // if document is rtl, need to reverse the text
     // s = ReverseTextTemp(s);
@@ -568,7 +576,9 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
     if (!inverseSearch) {
         Vec<TextEditor*> editors;
         DetectTextEditors(editors);
-        inverseSearch = str::DupTemp(editors[0]->openFileCmd);
+        if (editors.Size() > 0) {
+            inverseSearch = str::DupTemp(editors[0]->openFileCmd);
+        }
     }
 
     AutoFreeStr cmdLine;
@@ -581,7 +591,7 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
     args.msg = _TRA("Cannot start inverse search command. Please check the command line in the settings.");
     if (!str::IsEmpty(cmdLine.Get())) {
         // resolve relative paths with relation to SumatraPDF.exe's directory
-        char* appDir = GetExeDirTemp();
+        char* appDir = GetSelfExeDirTemp();
         AutoCloseHandle process(LaunchProcessInDir(cmdLine, appDir));
         if (!process) {
             ShowNotification(args);
@@ -670,7 +680,7 @@ if focus = 1 then the focus is set to the window
 */
 static const char* HandleSyncCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, srcFile;
-    BOOL line = 0, col = 0, newWindow = 0, setFocus = 1;
+    BOOL line = 0, col = 0, newWindow = 0, setFocus = 0;
     const char* next = str::Parse(cmd, "[ForwardSearch(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &srcFile, &line, &col);
     if (!next) {
         next = str::Parse(cmd, "[ForwardSearch(\"%s\",%? \"%s\",%u,%u,%u,%u)]", &pdfFile, &srcFile, &line, &col,
@@ -737,22 +747,10 @@ Search DDE command
 [Search("<pdffile>","<search-term>")]
 */
 static const char* HandleSearchCmd(const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile, srcFile;
+    AutoFreeStr pdfFile;
     AutoFreeStr term;
-    BOOL newWindow = 0, setFocus = 1;
     const char* next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &pdfFile, &term);
-    if (!next) {
-        next = str::Parse(cmd, "[Search(\"%s\",\"%s\",%u,%u)]", &pdfFile, &term, &newWindow, &setFocus);
-    }
-    // allow to omit the pdffile path, so that editors don't have to know about
-    // multi-file projects (requires that the PDF has already been opened)
-    if (!next) {
-        pdfFile.Reset();
-        next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &srcFile, &term);
-        if (!next) {
-            next = str::Parse(cmd, "[Search(\"%s\",\"%s\",%u,%u)]", &srcFile, &term, &newWindow, &setFocus);
-        }
-    }
+    // TODO: should un-quote text to allow searching text with '"' in them
     if (!next) {
         return nullptr;
     }
@@ -762,26 +760,8 @@ static const char* HandleSearchCmd(const char* cmd, bool* ack) {
     // check if the PDF is already opened
     // TODO: prioritize window with HWND so that if we have the same file
     // opened in multiple tabs / windows, we operate on the one that got the message
-    MainWindow* win = nullptr;
-    if (pdfFile) {
-        // check if the PDF is already opened
-        win = FindMainWindowByFile(pdfFile, !newWindow);
-        // if not then open it
-        if (newWindow || !win) {
-            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
-            win = LoadDocument(&args);
-        } else if (!win->IsDocLoaded()) {
-            ReloadDocument(win, false);
-        }
-    } else {
-        // check if any opened PDF has sync information for the source file
-        win = FindMainWindowBySyncFile(srcFile, true);
-        if (win && newWindow) {
-            LoadArgs args(win->CurrentTab()->filePath, nullptr);
-            win = LoadDocument(&args);
-        }
-    }
-    if (!win || !win->CurrentTab() || win->CurrentTab()->GetEngineType() != kindEngineMupdf) {
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
         return next;
     }
     if (!win->IsDocLoaded()) {
@@ -790,14 +770,10 @@ static const char* HandleSearchCmd(const char* cmd, bool* ack) {
             return next;
         }
     }
-
     bool wasModified = true;
     bool showProgress = true;
-    HwndSetText(win->hwndFindEdit, term);
-    FindTextOnThread(win, TextSearchDirection::Forward, term, wasModified, showProgress);
-    if (setFocus) {
-        win->Focus();
-    }
+    FindTextOnThread(win, TextSearch::Direction::Forward, term, wasModified, showProgress);
+    win->Focus();
     *ack = true;
     return next;
 }
@@ -822,7 +798,7 @@ valid formats:
 static const char* HandleOpenCmd(const char* cmd, bool* ack) {
     AutoFreeStr filePath;
     int newWindow = 0;
-    int setFocus = 1;
+    int setFocus = 0;
     int forceRefresh = 0;
     int inCurrentTab = 0;
     const char* next = str::Parse(cmd, "[Open(\"%s\")]", &filePath);
@@ -952,43 +928,15 @@ e.g.:
 [GoToNamedDest("c:\file.pdf", "chapter.1")]
 */
 static const char* HandleGotoCmd(const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile, destName, srcFile;
-    BOOL newWindow = 0, setFocus = 1;
+    AutoFreeStr pdfFile, destName;
     const char* next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &pdfFile, &destName);
-    if (!next) {
-        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &destName, &newWindow, &setFocus);
-    }
-    if (!next) {
-        pdfFile.Reset();
-        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &srcFile, &destName);
-        if (!next) {
-        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &destName, &newWindow, &setFocus);
-        }
-    }
-    // allow to omit the pdffile path, so that editors don't have to know about
-    // multi-file projects (requires that the PDF has already been opened)
     if (!next) {
         return nullptr;
     }
 
-    MainWindow* win = nullptr;
-    if (pdfFile) {
-        // check if the PDF is already opened
-        win = FindMainWindowByFile(pdfFile, true);
-        // if not then open it
-        if (newWindow || !win) {
-            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
-            win = LoadDocument(&args);
-        } else if (!win->IsDocLoaded()) {
-            ReloadDocument(win, false);
-        }
-    } else {
-        // check if any opened PDF has sync information for the source file
-        win = FindMainWindowBySyncFile(srcFile, true);
-        if (win && newWindow) {
-            LoadArgs args(win->CurrentTab()->filePath, nullptr);
-            win = LoadDocument(&args);
-        }
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
     }
     if (!win->IsDocLoaded()) {
         ReloadDocument(win, false);
@@ -998,9 +946,7 @@ static const char* HandleGotoCmd(const char* cmd, bool* ack) {
     }
 
     win->linkHandler->GotoNamedDest(destName);
-    if (setFocus) {
-        win->Focus();
-    }
+    win->Focus();
     *ack = true;
     return next;
 }
@@ -1013,43 +959,19 @@ DDE command: jump to a page in an already opened document.
 eg: [GoToPage("c:\file.pdf",37)]
 */
 static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile, srcFile;
-    BOOL newWindow = 0, setFocus = 1;
+    AutoFreeStr pdfFile;
     uint page = 0;
     const char* next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &pdfFile, &page);
-    if (!next) {
-        next = str::Parse(cmd, "[GotoPage(\"%S\",%u,%u,%u)]", &pdfFile, &page, &newWindow, &setFocus);
-    }
-    // allow to omit the pdffile path, so that editors don't have to know about
-    // multi-file projects (requires that the PDF has already been opened)
-    if (!next) {
-        pdfFile.Reset();
-        next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &srcFile, &page);
-        if (!next) {
-            next = str::Parse(cmd, "[GotoPage(\"%S\",%u,%u,%u)]", &srcFile, &page, &newWindow, &setFocus);
-        }
-    }
     if (!next) {
         return nullptr;
     }
 
-    MainWindow* win = nullptr;
-    if (pdfFile) {
-        // check if the PDF is already opened
-        win = FindMainWindowByFile(pdfFile, true);
-        if (newWindow || !win) {
-            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
-            win = LoadDocument(&args);
-        } else if (!win->IsDocLoaded()) {
-            ReloadDocument(win, false);
-        }
-    } else {
-        // check if any opened PDF has sync information for the source file
-        win = FindMainWindowBySyncFile(srcFile, true);
-        if (win && newWindow) {
-            LoadArgs args(win->CurrentTab()->filePath, nullptr);
-            win = LoadDocument(&args);
-        }
+    // check if the PDF is already opened
+    // TODO: prioritize window with HWND so that if we have the same file
+    // opened in multiple tabs / windows, we operate on the one that got the message
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
     }
     if (!win->IsDocLoaded()) {
         ReloadDocument(win, false);
@@ -1064,9 +986,7 @@ static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
 
     win->ctrl->GoToPage(page, true);
     *ack = true;
-    if (setFocus) {
-        win->Focus();
-    }
+    win->Focus();
     return next;
 }
 
@@ -1192,240 +1112,6 @@ static const char* HandleGetFileStateCmd(HWND hwnd, const char* cmd, bool* ack, 
     return next;
 }
 
-
-
-/*
- CPS Lab.
- (1) [GetText("<pdffilepath>", "<textFileName>)]
-     [GeWord("<pdffilepath>", "<textFileName>)]
-     [GetBlock("<pdffilepath>", "<textFileName>)]
-*/
-static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile ;
-    AutoFreeStr txtFile ;
-    float zoom = kInvalidZoom;
-    Point scroll(-1, -1);
-    bool get_word = false;
-    bool get_block = false;
-    BOOL setFocus = 0;
-    const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
-    if (!next) {
-        next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
-        if (next) {
-            logf("GetWord : ");
-            get_word = true;
-        } else {
-            next = str::Parse(cmd, "[GetBlock(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
-            if (next) {
-                logf("GetBlock : ");
-                get_block = true;
-            }
-        }
-    }
-    if (!next) {
-        return nullptr;
-    }
-    if ((!get_block) && (!get_block)) {
-        logf("GetText : ");
-    }
-
-    logf("HandleGetTextCmd: '%s'\n", cmd);
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
-    }
-    if (!win->IsDocLoaded()) {
-        ReloadDocument(win, false);
-        if (!win->IsDocLoaded()) {
-            return next;
-        }
-    }
-
-    if (get_block) {
-        logf("  ... SaveBlocksToFile : '%s'\n", txtFile.Get());
-        cpslab::SaveBlocksToFile(win, txtFile.Get());
-    }
-    else if (get_word) {
-        logf("  ... SaveWordsToFile : '%s'\n", txtFile.Get());
-        cpslab::SaveWordsToFile(win, txtFile.Get());
-    } else {
-        logf("  ... SaveTextToFile : '%s'\n", txtFile.Get());
-        cpslab::SaveTextToFile(win, txtFile.Get());
-    }
-    if (setFocus) {
-        win->Focus();
-    }
-    logf("  ... done\n");
-    *ack = true;
-    return next;
-}
-
-
-
-/*
- CPS Lab.
- (2) [MarkWord("<pdffilepath>", "<SetupFile>")]
-     [MarkWord("<pdffilepath>", "<Text>", "<Text>", ...)]
-*/
-static const char* HandleMarkWordCmd(const char* cmd, bool* ack)
-{
-    AutoFreeStr pdfFile ;
-    float zoom = kInvalidZoom;
-    Point scroll(-1, -1);
-    // ---------------------------------------------
-    //AutoFreeStr term;
-    const char* next = str::Parse(cmd, "[MarkWord(\"%s\",%? ", &pdfFile);
-    if (!next) {
-        next = str::Parse(cmd, "[MarkWord(\"%s\")]", &pdfFile);
-    }
-    if (!next) {
-        return nullptr;
-    }
-    logf("MarkWord : ");
-    logf("HandleMarkWordCmd: '%s'\n", cmd);
-    // ---------------------------------------------
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
-    }
-    if (!win->IsDocLoaded()) {
-        ReloadDocument(win, false);
-        if (!win->IsDocLoaded()) {
-            return next;
-        }
-    }
-    // ---------------------------------------------
-    AutoFreeStr word ;
-    StrVec  args;
-    const char* curcmd = next;
-    while (true) {
-        next = str::Parse(curcmd, "\"%s\",%? ", &word);
-        if (!next) {
-            next = str::Parse(curcmd, "\"%s\")]", &word);
-        }
-        if (!next) { break; }
-        // mark_words[0]->word_vec.Append(word.Get());
-        args.Append(word.Get()); 
-        curcmd = next;
-    }
-    // -----------------------------------------------------
-    const char* first_word = nullptr;
-    WindowTab* tab = win->CurrentTab();
-    if (args.Size() == 0) {
-        tab->markers->deleteAnnotations();
-    }
-    else if (args.Size() == 1) {
-        first_word = cpslab::MarkWords(win, args.At(0));  // mark words by setup-file.
-    }
-    else {
-        first_word = cpslab::MarkWords(win, args);
-    }
-    // ---------------------------------------------
-    // Pan to first word.
-    /*  no need to jump to first word
-    if (first_word != nullptr) {
-        bool wasModified = true;
-        bool showProgress = true;
-        HwndSetText(win->hwndFindEdit, first_word);
-        FindTextOnThread(win, TextSearchDirection::Forward, first_word, wasModified, showProgress);
-        win->Focus();
-    }
-    */
-    // ---------------------------------------------
-    MainWindowRerender(win);
-    logf("                done.'\n");
-    *ack = true;
-    return next;
-}
-
-
-/*
- CPS Lab.
-[Select("<pdffilepath>", "<Category>", "<Text>", "<Text>", ...)]
-*/
-static const char* HandleSelectCmd(const char* cmd, bool* ack)
-{
-    AutoFreeStr pdfFile ;
-    float zoom = kInvalidZoom;
-    Point scroll(-1, -1);
-    boolean select_block = false;
-    boolean select_image = false;
-    BOOL setFocus = 1;
-    // ---------------------------------------------
-    const char* next = str::Parse(cmd, "[Select(\"%s\",%? ", &pdfFile);
-    if (!next) {
-        next = str::Parse(cmd, "[SelectBlock(\"%s\",%? ", &pdfFile);
-        if (next) {
-            select_block = true;
-        } else {
-            next = str::Parse(cmd, "[SelectImage(\"%s\",%? ", &pdfFile);
-            if (next) {
-                select_image = true;
-            }
-        }
-    }
-    if (!next) {
-        return nullptr;
-    }
-    // ---------------------------------------------
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
-    }
-    if (!win->IsDocLoaded()) {
-        ReloadDocument(win, false);
-        if (!win->IsDocLoaded()) {
-            return next;
-        }
-    }
-    // ---------------------------------------------
-    DisplayModel* dm = win->AsFixed();
-    WindowTab* tab = win->CurrentTab();
-    const char* curcmd = next;
-    if (select_image || select_block) {
-        int pageNo;
-        int x, y, dx, dy;
-        next = str::Parse(curcmd, "%d, %d, %d, %d, %d)]", &pageNo, &x, &y, &dx, &dy);
-        if (!win->ctrl->ValidPageNo(pageNo)) {
-            return next;
-        }
-        win->ctrl->GoToPage(pageNo, true);
-        DeleteOldSelectionInfo(win, true);
-        if (select_image) {
-            Rect rc = dm->CvtToScreen(pageNo, ToRectF(Rect(x, y, dx, dy)));
-            win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
-            win->showSelection = (win->CurrentTab()->selectionOnPage != nullptr);
-            ScheduleRepaint(win, 0);
-        } else {
-            cpslab::GetTextInRegion(dm, pageNo, Rect(x, y, dx, dy));
-            UpdateTextSelection(win, false);
-        }
-    } else {
-        AutoFreeStr wd ;
-        StrVec  words;
-        while (true) {
-            next = str::Parse(curcmd, "\"%s\",%? ", &wd);
-            if (!next) {
-                next = str::Parse(curcmd, "\"%s\")]", &wd);
-            }
-            if (!next) {
-                break;
-            }
-            words.Append(wd.Get());
-            curcmd = next;
-        }
-        tab->markers->selectWords(win, words);
-    }
-    // ---------------------------------------------
-    MainWindowRerender(win);
-    if (setFocus) {
-        win->Focus();
-    }
-    *ack = true;
-    return next;
-}
-
-
 /*
 Handle all commands as defined in Commands.h
 eg: [CmdClose]
@@ -1450,29 +1136,6 @@ static const char* HandleCmdCommand(HWND hwnd, const char* cmd, bool* ack) {
     *ack = true;
     return next;
 }
-
-/*
-Quit tool
-
-[Quit]
-*/
-static const char* HandleQuitCmd(const char* cmd, bool* ack) {
-    if (!str::StartsWith(cmd, "[Quit]")) {
-        return nullptr;
-    }
-    logf("Quit\n");
-    const char* next = cmd + str::Leni("[Quit]");
-    CreateAndShowMainWindow(nullptr);
-    *ack = true;
-    // ======================
-    SaveSettings();
-    Vec<MainWindow*> toClose = gWindows;
-    for (MainWindow* win : toClose) {
-        CloseWindow(win, true, false);
-    }
-    return next;
-}
-
 
 // returns true if did handle a message
 static bool HandleExecuteCmds(HWND hwnd, const char* cmd) {
@@ -1501,22 +1164,10 @@ static bool HandleExecuteCmds(HWND hwnd, const char* cmd) {
             nextCmd = HandleSearchCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
-            nextCmd = HandleGetTextCmd(cmd, &didHandle);
-        }
-        if (!nextCmd) {
-            nextCmd = HandleMarkWordCmd(cmd, &didHandle);
-        }
-        if (!nextCmd) {
-            nextCmd = HandleSelectCmd(cmd, &didHandle);
-        }
-        if (!nextCmd) {
             nextCmd = HandleCmdCommand(hwnd, cmd, &didHandle);
         }
         if (!nextCmd) {
             nextCmd = HandleNewWindowCmd(cmd, &didHandle);
-        }
-        if (!nextCmd) {
-            nextCmd = HandleQuitCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
             // forwards compatibility: ignore unknown commands (maybe from newer version)
@@ -1606,7 +1257,6 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
     TempStr cmd = HGLOBALToStrTemp((HGLOBAL)hCommand, isUnicode);
     bool didHandle = HandleExecuteCmds(hwnd, cmd);
     DDEACK ack{};
-    // ack.fAck = didHandle ? 0 : 1;    CPS. Lab
     ack.fAck = didHandle ? 1 : 0;
     LPARAM lpres = PackDDElParam(WM_DDE_ACK, *(WORD*)&ack, (UINT_PTR)hCommand);
     PostMessageW(hwndClient, WM_DDE_ACK, (WPARAM)hwnd, lpres);
@@ -1614,10 +1264,8 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
 }
 
 LRESULT OnDDEInitiate(HWND hwnd, WPARAM wp, LPARAM lp) {
-    //ATOM aServer = GlobalAddAtom(kSumatraDdeServer);
-    //ATOM aTopic = GlobalAddAtom(kSumatraDdeTopic);
-    ATOM aServer = GlobalAddAtom(cpslab::PDFSYNC_DDE_SERVICE);
-    ATOM aTopic = GlobalAddAtom(cpslab::PDFSYNC_DDE_TOPIC);
+    ATOM aServer = GlobalAddAtom(kSumatraDdeServer);
+    ATOM aTopic = GlobalAddAtom(kSumatraDdeTopic);
 
     if (LOWORD(lp) == aServer && HIWORD(lp) == aTopic) {
         SendMessageW((HWND)wp, WM_DDE_ACK, (WPARAM)hwnd, MAKELPARAM(aServer, 0));

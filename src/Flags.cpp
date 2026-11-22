@@ -15,93 +15,53 @@
 
 #include "utils/Log.h"
 
-#define ARGS(V)                                  \
-    V(Silent, "s")                               \
-    V(Silent2, "silent")                         \
-    V(FastInstall, "fast-install")               \
-    V(PrintToDefault, "print-to-default")        \
-    V(PrintDialog, "print-dialog")               \
-    V(Help, "h")                                 \
-    V(Help2, "?")                                \
-    V(Help3, "help")                             \
-    V(ExitWhenDone, "exit-when-done")            \
-    V(ExitOnPrint, "exit-on-print")              \
-    V(Restrict, "restrict")                      \
-    V(Presentation, "presentation")              \
-    V(FullScreen, "fullscreen")                  \
-    V(InvertColors, "invertcolors")              \
-    V(InvertColors2, "invert-colors")            \
-    V(Console, "console")                        \
-    V(Install, "install")                        \
-    V(UnInstall, "uninstall")                    \
-    V(WithFilter, "with-filter")                 \
-    V(WithSearch, "with-search")                 \
-    V(WithPreview, "with-preview")               \
-    V(Rand, "rand")                              \
-    V(Regress, "regress")                        \
-    V(Extract, "x")                              \
-    V(Tester, "tester")                          \
-    V(TestApp, "testapp")                        \
-    V(NewWindow, "new-window")                   \
-    V(Log, "log")                                \
-    V(CrashOnOpen, "crash-on-open")              \
-    V(ReuseInstance, "reuse-instance")           \
-    V(EscToExit, "esc-to-exit")                  \
-    V(ArgEnumPrinters, "enum-printers")          \
-    V(SleepMs, "sleep-ms")                       \
-    V(PrintTo, "print-to")                       \
-    V(PrintSettings, "print-settings")           \
-    V(InverseSearch, "inverse-search")           \
-    V(ForwardSearch1, "forward-search")          \
-    V(ForwardSearch2, "fwdsearch")               \
-    V(NamedDest, "nameddest")                    \
-    V(NamedDest2, "named-dest")                  \
-    V(Page, "page")                              \
-    V(View, "view")                              \
-    V(Zoom, "zoom")                              \
-    V(Scroll, "scroll")                          \
-    V(AppData, "appdata")                        \
-    V(Plugin, "plugin")                          \
-    V(StressTest, "stress-test")                 \
-    V(N, "n")                                    \
-    V(Max, "max")                                \
-    V(Render, "render")                          \
-    V(ExtractText, "extract-text")               \
-    V(Bench, "bench")                            \
-    V(Dir, "d")                                  \
-    V(InstallDir, "install-dir")                 \
-    V(Lang, "lang")                              \
-    V(UpdateSelfTo, "update-self-to")            \
-    V(ArgDeleteFile, "delete-file")              \
-    V(BgCol, "bgcolor")                          \
-    V(BgCol2, "bg-color")                        \
-    V(FwdSearchOffset, "fwdsearch-offset")       \
-    V(FwdSearchWidth, "fwdsearch-width")         \
-    V(FwdSearchColor, "fwdsearch-color")         \
-    V(FwdSearchPermanent, "fwdsearch-permanent") \
-    V(MangaMode, "manga-mode")                   \
-    V(Search, "search")                          \
-    V(AllUsers, "all-users")                     \
-    V(AllUsers2, "allusers")                     \
-    V(RunInstallNow, "run-install-now")          \
-    V(Adobe, "a")                                \
-    V(DDE, "dde")                                \
-    V(EngineDump, "engine-dump")                 \
-    V(SetColorRange, "set-color-range")          \
-    V(PdfSyncDDEService, "pdfsync-dde-service")  \
-    V(PdfSyncDDETopic, "pdfsync-dde-topic")      \
-    V(UserAppDDEService, "userapp-dde-service")  \
-    V(UserAppDDETopic, "userapp-dde-topic")      \
-    V(UserAppDDEDebugTopic, "userapp-dde-debug-topic") \
-    V(DocumentMode, "document-mode") \
-    V(ExportTextBlocks, "export-text-blocks")
+// @gen-start flags
+// clang-format off
+enum class Arg {
+    Unknown = -1,
+    Silent = 0, Silent2 = 1, FastInstall = 2, PrintToDefault = 3,
+    PrintDialog = 4, Help = 5, Help2 = 6, Help3 = 7,
+    ExitWhenDone = 8, ExitOnPrint = 9, Restrict = 10, Presentation = 11,
+    FullScreen = 12, InvertColors = 13, InvertColors2 = 14, Console = 15,
+    Install = 16, UnInstall = 17, WithFilter = 18, WithSearch = 19,
+    WithPreview = 20, Rand = 21, Regress = 22, Extract = 23,
+    Tester = 24, TestApp = 25, NewWindow = 26, Log = 27,
+    CrashOnOpen = 28, ReuseInstance = 29, EscToExit = 30, ArgEnumPrinters = 31,
+    SleepMs = 32, PrintTo = 33, PrintSettings = 34, InverseSearch = 35,
+    ForwardSearch1 = 36, ForwardSearch2 = 37, NamedDest = 38, NamedDest2 = 39,
+    Page = 40, View = 41, Zoom = 42, Scroll = 43,
+    AppData = 44, Plugin = 45, StressTest = 46, N = 47,
+    Max = 48, MaxFiles = 49, Render = 50, ExtractText = 51,
+    Bench = 52, Dir = 53, InstallDir = 54, Lang = 55,
+    UpdateSelfTo = 56, ArgDeleteFile = 57, BgCol = 58, BgCol2 = 59,
+    FwdSearchOffset = 60, FwdSearchWidth = 61, FwdSearchColor = 62, FwdSearchPermanent = 63,
+    MangaMode = 64, Search = 65, AllUsers = 66, AllUsers2 = 67,
+    RunInstallNow = 68, Adobe = 69, DDE = 70, EngineDump = 71,
+    SetColorRange = 72, PreviewPipe = 73, IFilterPipe = 74, TestPreviewPipe = 75,
+};
 
-#define MAKE_ARG(__arg, __name) __arg,
-#define MAKE_STR(__arg, __name) __name "\0"
-
-enum class Arg { Unknown = -1, ARGS(MAKE_ARG) };
-
-static const char* gArgNames = ARGS(MAKE_STR);
+static const char* gArgNames =
+    "s\0" "silent\0" "fast-install\0" "print-to-default\0"
+    "print-dialog\0" "h\0" "?\0" "help\0"
+    "exit-when-done\0" "exit-on-print\0" "restrict\0" "presentation\0"
+    "fullscreen\0" "invertcolors\0" "invert-colors\0" "console\0"
+    "install\0" "uninstall\0" "with-filter\0" "with-search\0"
+    "with-preview\0" "rand\0" "regress\0" "x\0"
+    "tester\0" "testapp\0" "new-window\0" "log\0"
+    "crash-on-open\0" "reuse-instance\0" "esc-to-exit\0" "enum-printers\0"
+    "sleep-ms\0" "print-to\0" "print-settings\0" "inverse-search\0"
+    "forward-search\0" "fwdsearch\0" "nameddest\0" "named-dest\0"
+    "page\0" "view\0" "zoom\0" "scroll\0"
+    "appdata\0" "plugin\0" "stress-test\0" "n\0"
+    "max\0" "max-files\0" "render\0" "extract-text\0"
+    "bench\0" "d\0" "install-dir\0" "lang\0"
+    "update-self-to\0" "delete-file\0" "bgcolor\0" "bg-color\0"
+    "fwdsearch-offset\0" "fwdsearch-width\0" "fwdsearch-color\0" "fwdsearch-permanent\0"
+    "manga-mode\0" "search\0" "all-users\0" "allusers\0"
+    "run-install-now\0" "a\0" "dde\0" "engine-dump\0"
+    "set-color-range\0" "preview-pipe\0" "ifilter-pipe\0" "test-preview-pipe\0";
+// clang-format on
+// @gen-end flags
 
 static void EnumeratePrinters() {
     str::Str out;
@@ -358,8 +318,13 @@ FileArgs::~FileArgs() {
 // args into FileArgs
 // returns nullptr if there are not args
 FileArgs* ParseFileArgs(const char* path) {
-    const char* hashPos = str::FindChar(path, '?');
+    const char* hashPos = str::FindCharLast(path, '?');
     if (!hashPos) {
+        return nullptr;
+    }
+    // don't mutilate long file paths that start with "\\?\"
+    int off = (int)(hashPos - path);
+    if (off == 2) {
         return nullptr;
     }
     FileArgs* res = new FileArgs();
@@ -373,13 +338,21 @@ FileArgs* ParseFileArgs(const char* path) {
 
 /* parse argument list. we assume that all unrecognized arguments are file names. */
 void ParseFlags(const WCHAR* cmdLine, Flags& i) {
-    logf("ParseFlags: cmdLine: '%s'\n", ToUtf8Temp(cmdLine));
+    // logf("ParseFlags: cmdLine: '%s'\n", ToUtf8Temp(cmdLine));
     CmdLineArgsIter args(cmdLine);
 
     const char* param = nullptr;
     int paramInt = 0;
 
     for (const char* argName = args.NextArg(); argName != nullptr; argName = args.NextArg()) {
+        // we register SumatraPDF with "%1" "%2" "%3" "%4"
+        // for some reason that makes Directory Opus "Open With" provide the file twice
+        // and gives "%3" and "%4' on cmd-line.
+        // this is a hack to ignore that
+        if (str::Eq(argName, "%2") || str::Eq(argName, "%3") || str::Eq(argName, "%4")) {
+            logf("ParseFlags: skipping '%s'\n", argName);
+            continue;
+        }
         Arg arg = GetArg(argName);
         if (arg == Arg::Unknown) {
             goto CollectFile;
@@ -626,6 +599,11 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
         }
         if (arg == Arg::Max) {
             i.stressTestMax = paramInt;
+            continue;
+        }
+        if (arg == Arg::MaxFiles) {
+            i.maxFiles = paramInt;
+            continue;
         }
         if (arg == Arg::Render) {
             i.testRenderPage = true;
@@ -699,32 +677,16 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
             i.globalPrefArgs.Append(args.EatParam());
             continue;
         }
-        if (arg == Arg::PdfSyncDDEService) {
-            i.pdfsync_dde_service = str::Dup(param);
+        if (arg == Arg::PreviewPipe) {
+            i.previewPipeName = str::Dup(param);
             continue;
         }
-        if (arg == Arg::PdfSyncDDETopic) {
-            i.pdfsync_dde_topic = str::Dup(param);
+        if (arg == Arg::IFilterPipe) {
+            i.ifilterPipeName = str::Dup(param);
             continue;
         }
-        if (arg == Arg::UserAppDDEService) {
-            i.userapp_dde_service = str::Dup(param);
-            continue;
-        }
-        if (arg == Arg::UserAppDDETopic) {
-            i.userapp_dde_topic = str::Dup(param);
-            continue;
-        }
-        if (arg == Arg::UserAppDDEDebugTopic) {
-            i.userapp_dde_debug_topic = str::Dup(param);
-            continue;
-        }
-        if (arg == Arg::DocumentMode) {
-            i.document_mode = true;
-            continue;
-        }
-        if (arg == Arg::ExportTextBlocks) {
-            i.export_text_blocks = str::Dup(param);
+        if (arg == Arg::TestPreviewPipe) {
+            i.testPreviewPipePath = str::Dup(param);
             continue;
         }
         // again, argName is any of the known args, so assume it's a file starting with '-'
@@ -767,8 +729,7 @@ Flags::~Flags() {
     str::Free(deleteFile);
     str::Free(search);
     str::Free(dde);
-    str::Free(pdfsync_dde_service);
-    str::Free(pdfsync_dde_topic);
-    str::Free(userapp_dde_service);
-    str::Free(userapp_dde_topic);
+    str::Free(previewPipeName);
+    str::Free(ifilterPipeName);
+    str::Free(testPreviewPipePath);
 }

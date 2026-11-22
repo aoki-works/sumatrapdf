@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -30,7 +30,6 @@ pdf_run_annot_with_usage(fz_context *ctx, pdf_document *doc, pdf_page *page, pdf
 	fz_rect mediabox;
 	pdf_processor *proc = NULL;
 	fz_default_colorspaces *default_cs = NULL;
-	int flags;
 	int resources_pushed = 0;
 	int struct_parent_num;
 	pdf_obj *struct_parent;
@@ -66,23 +65,12 @@ pdf_run_annot_with_usage(fz_context *ctx, pdf_document *doc, pdf_page *page, pdf
 
 		pdf_page_transform(ctx, page, &mediabox, &page_ctm);
 
-		flags = pdf_dict_get_int(ctx, annot->obj, PDF_NAME(F));
-		if (flags & PDF_ANNOT_IS_NO_ROTATE)
-		{
-			int rotate = pdf_dict_get_inheritable_int(ctx, page->obj, PDF_NAME(Rotate));
-			fz_rect rect = pdf_dict_get_rect(ctx, annot->obj, PDF_NAME(Rect));
-			fz_point tp = fz_transform_point_xy(rect.x0, rect.y1, page_ctm);
-			page_ctm = fz_concat(page_ctm, fz_translate(-tp.x, -tp.y));
-			page_ctm = fz_concat(page_ctm, fz_rotate(-rotate));
-			page_ctm = fz_concat(page_ctm, fz_translate(tp.x, tp.y));
-		}
-
 		ctm = fz_concat(page_ctm, ctm);
 
 		struct_parent = pdf_dict_getl(ctx, page->obj, PDF_NAME(StructParent), NULL);
 		struct_parent_num = pdf_to_int_default(ctx, struct_parent, -1);
 
-		proc = pdf_new_run_processor(ctx, page->doc, dev, ctm, struct_parent_num, usage, NULL, default_cs, cookie);
+		proc = pdf_new_run_processor(ctx, page->doc, dev, ctm, struct_parent_num, usage, NULL, default_cs, cookie, NULL, NULL);
 		pdf_processor_push_resources(ctx, proc, pdf_page_resources(ctx, annot->page));
 		resources_pushed = 1;
 		pdf_process_annot(ctx, proc, annot, cookie);
@@ -91,7 +79,7 @@ pdf_run_annot_with_usage(fz_context *ctx, pdf_document *doc, pdf_page *page, pdf
 	fz_always(ctx)
 	{
 		if (resources_pushed)
-			pdf_processor_pop_resources(ctx, proc);
+			pdf_drop_obj(ctx, pdf_processor_pop_resources(ctx, proc));
 		pdf_drop_processor(ctx, proc);
 		fz_drop_default_colorspaces(ctx, default_cs);
 		pdf_annot_pop_local_xref(ctx, annot);
@@ -195,7 +183,7 @@ pdf_run_page_contents_with_usage_imp(fz_context *ctx, pdf_document *doc, pdf_pag
 			fz_clip_path(ctx, dev, path, 1, ctm, fz_infinite_rect);
 		}
 
-		proc = pdf_new_run_processor(ctx, page->doc, dev, ctm, struct_parent_num, usage, NULL, default_cs, cookie);
+		proc = pdf_new_run_processor(ctx, page->doc, dev, ctm, struct_parent_num, usage, NULL, default_cs, cookie, NULL, NULL);
 		pdf_process_contents(ctx, proc, doc, resources, contents, cookie, NULL);
 		pdf_close_processor(ctx, proc);
 
@@ -259,6 +247,8 @@ void pdf_run_annot(fz_context *ctx, pdf_annot *annot, fz_device *dev, fz_matrix 
 
 	if (!page)
 		fz_throw(ctx, FZ_ERROR_ARGUMENT, "annotation not bound to any page");
+
+	pdf_update_page(ctx, page);
 
 	doc = page->doc;
 
@@ -339,6 +329,8 @@ void pdf_run_page_annots_with_usage(fz_context *ctx, pdf_page *page, fz_device *
 	pdf_document *doc = page->doc;
 	int nocache;
 
+	pdf_update_page(ctx, page);
+
 	nocache = !!(dev->hints & FZ_NO_CACHE);
 	if (nocache)
 		pdf_mark_xref(ctx, doc);
@@ -367,6 +359,8 @@ void pdf_run_page_widgets_with_usage(fz_context *ctx, pdf_page *page, fz_device 
 {
 	pdf_document *doc = page->doc;
 	int nocache;
+
+	pdf_update_page(ctx, page);
 
 	nocache = !!(dev->hints & FZ_NO_CACHE);
 	if (nocache)
@@ -398,6 +392,8 @@ pdf_run_page_with_usage(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matr
 	pdf_document *doc = page->doc;
 	int nocache = !!(dev->hints & FZ_NO_CACHE);
 
+	pdf_update_page(ctx, page);
+
 	if (nocache)
 		pdf_mark_xref(ctx, doc);
 	fz_try(ctx)
@@ -424,11 +420,11 @@ pdf_run_page(fz_context *ctx, pdf_page *page, fz_device *dev, fz_matrix ctm, fz_
 }
 
 void
-pdf_run_glyph(fz_context *ctx, pdf_document *doc, pdf_obj *resources, fz_buffer *contents, fz_device *dev, fz_matrix ctm, void *gstate, fz_default_colorspaces *default_cs)
+pdf_run_glyph(fz_context *ctx, pdf_document *doc, pdf_obj *resources, fz_buffer *contents, fz_device *dev, fz_matrix ctm, void *gstate, fz_default_colorspaces *default_cs, void *fill_gstate, void *stroke_gstate)
 {
 	pdf_processor *proc;
 
-	proc = pdf_new_run_processor(ctx, doc, dev, ctm, -1, "View", gstate, default_cs, NULL);
+	proc = pdf_new_run_processor(ctx, doc, dev, ctm, -1, "View", gstate, default_cs, NULL, fill_gstate, stroke_gstate);
 	fz_try(ctx)
 	{
 		pdf_process_glyph(ctx, proc, doc, resources, contents);

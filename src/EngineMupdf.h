@@ -7,9 +7,7 @@ struct FitzPageImageInfo {
     fz_rect rect = fz_unit_rect;
     fz_matrix transform;
     IPageElement* imageElement = nullptr;
-    ~FitzPageImageInfo() {
-        delete imageElement;
-    }
+    ~FitzPageImageInfo() { delete imageElement; }
 };
 
 struct FzPageInfo {
@@ -54,8 +52,6 @@ class EngineMupdf : public EngineBase {
     ByteSlice GetFileData() override;
     bool SaveFileAs(const char* copyFileName) override;
     PageText ExtractPageText(int pageNo) override;
-    void ExtractPageBlocks(int pageNo, Vec<PageText*>&,
-                           Vec<IPageElement*>&) override;    // CPSLab.
 
     bool HasClipOptimizations(int pageNo) override;
     TempStr GetPropertyTemp(const char* name) override;
@@ -88,7 +84,6 @@ class EngineMupdf : public EngineBase {
     int displayDPI{96};
     fz_document* _doc = nullptr;
     pdf_document* pdfdoc = nullptr;
-    fz_stream* docStream = nullptr;
     Vec<FzPageInfo*> pages;
     fz_outline* outline = nullptr;
     fz_outline* attachments = nullptr;
@@ -127,5 +122,3 @@ RectF ToRectF(fz_rect rect);
 RenderedBitmap* NewRenderedFzPixmap(fz_context* ctx, fz_pixmap* pixmap);
 void MarkNotificationAsModified(EngineMupdf*, Annotation*, AnnotationChange = AnnotationChange::Modify);
 Annotation* MakeAnnotationWrapper(EngineMupdf* engine, pdf_annot* annot, int pageNo);
-
-void InitializeEngineMupdf();

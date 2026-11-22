@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -34,6 +34,7 @@
 #ifdef _WIN32
 #include <io.h>
 #include <windows.h>
+#include <fcntl.h>
 #else
 #include <unistd.h>
 #endif
@@ -60,17 +61,26 @@ file_write(fz_context *ctx, void *opaque, const void *buffer, size_t count)
 		fz_throw(ctx, FZ_ERROR_SYSTEM, "cannot fwrite: %s", strerror(errno));
 }
 
+static int64_t stdout_offset = 0;
+
 static void
 stdout_write(fz_context *ctx, void *opaque, const void *buffer, size_t count)
 {
+	stdout_offset += count;
 	file_write(ctx, stdout, buffer, count);
+}
+
+static int64_t
+stdout_tell(fz_context *ctx, void *opaque)
+{
+	return stdout_offset;
 }
 
 static fz_output fz_stdout_global = {
 	NULL,
 	stdout_write,
 	NULL,
-	NULL,
+	stdout_tell,
 	NULL,
 };
 
@@ -102,7 +112,7 @@ fz_output *fz_stderr(fz_context *ctx)
 static void
 stdods_write(fz_context *ctx, void *opaque, const void *buffer, size_t count)
 {
-	unsigned char *buf = fz_malloc(ctx, count+1);
+	char *buf = fz_malloc(ctx, count+1);
 
 	memcpy(buf, buffer, count);
 	buf[count] = 0;
@@ -247,48 +257,61 @@ fz_new_output_with_path(fz_context *ctx, const char *filename, int append)
 	if (filename == NULL)
 		fz_throw(ctx, FZ_ERROR_ARGUMENT, "no output to write to");
 
-	if (!strcmp(filename, "/dev/null") || !fz_strcasecmp(filename, "nul:"))
+	if (!strcmp(filename, "/dev/null"))
 		return fz_new_output(ctx, 0, NULL, null_write, NULL, NULL);
+	if (!strcmp(filename, "/dev/stdout"))
+	{
+#ifdef _WIN32
+		(void)setmode(fileno(stdout), O_BINARY);
+#endif
+		return fz_stdout(ctx);
+	}
+	if (!strcmp(filename, "/dev/stderr"))
+	{
+#ifdef _WIN32
+		(void)setmode(fileno(stderr), O_BINARY);
+#endif
+		return fz_stderr(ctx);
+	}
 
 	/* If <append> is false, we use fopen()'s 'x' flag to force an error if
 	 * some other process creates the file immediately after we have removed
-	 * it - this avoids vunerability where a less-privilege process can create
+	 * it - this avoids vulnerability where a less-privilege process can create
 	 * a link and get us to overwrite a different file. See:
 	 * 	https://bugs.ghostscript.com/show_bug.cgi?id=701797
 	 * 	http://www.open-std.org/jtc1/sc22//WG14/www/docs/n1339.pdf
 	 */
+#if defined(_WIN32) && !defined(__MINGW32__) && !defined(__MINGW64__)
+#define CLOBBER "x"
+#else
+#define CLOBBER ""
+#endif
+/* On windows, we use variants of fopen and remove that cope with utf8. */
 #ifdef _WIN32
+#define FOPEN fz_fopen_utf8
+#define REMOVE fz_remove_utf8
+#else
+#define FOPEN fopen
+#define REMOVE remove
+#endif
 	/* Ensure we create a brand new file. We don't want to clobber our old file. */
 	if (!append)
 	{
-		if (fz_remove_utf8(filename) < 0)
+		if (REMOVE(filename) < 0)
 			if (errno != ENOENT)
 				fz_throw(ctx, FZ_ERROR_SYSTEM, "cannot remove file '%s': %s", filename, strerror(errno));
 	}
-#if defined(__MINGW32__) || defined(__MINGW64__)
-	file = fz_fopen_utf8(filename, append ? "rb+" : "wb+"); /* 'x' flag not suported. */
-#else
-	file = fz_fopen_utf8(filename, append ? "rb+" : "wb+x");
-#endif
+	file = FOPEN(filename, append ? "rb+" : "wb+" CLOBBER);
 	if (append)
 	{
 		if (file == NULL)
-			file = fz_fopen_utf8(filename, "wb+");
+			file = FOPEN(filename, "wb+");
 		else
 			fseek(file, 0, SEEK_END);
 	}
-#else
-	/* Ensure we create a brand new file. We don't want to clobber our old file. */
-	if (!append)
-	{
-		if (remove(filename) < 0)
-			if (errno != ENOENT)
-				fz_throw(ctx, FZ_ERROR_SYSTEM, "cannot remove file '%s': %s", filename, strerror(errno));
-	}
-	file = fopen(filename, append ? "rb+" : "wb+x");
-	if (file == NULL && append)
-		file = fopen(filename, "wb+");
-#endif
+#undef FOPEN
+#undef REMOVE
+#undef CLOBBER
 	if (!file)
 		fz_throw(ctx, FZ_ERROR_SYSTEM, "cannot open file '%s': %s", filename, strerror(errno));
 
@@ -343,6 +366,8 @@ buffer_drop(fz_context *ctx, void *opaque)
 static void
 buffer_reset(fz_context *ctx, void *opaque)
 {
+	fz_buffer *buffer = opaque;
+	fz_clear_buffer(ctx, buffer);
 }
 
 fz_output *
@@ -387,7 +412,7 @@ fz_reset_output(fz_context *ctx, fz_output *out)
 	if (!out)
 		return;
 	if (out->reset == NULL)
-		fz_throw(ctx, FZ_ERROR_GENERIC, "Cannot reset this output");
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "Cannot reset this output");
 
 	out->reset(ctx, out->state);
 	out->closed = 0;
@@ -632,7 +657,7 @@ fz_write_rune(fz_context *ctx, fz_output *out, int rune)
 void
 fz_write_base64(fz_context *ctx, fz_output *out, const unsigned char *data, size_t size, int newline)
 {
-	static const char set[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	static const char set[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	size_t i;
 	for (i = 0; i + 3 <= size; i += 3)
 	{
@@ -676,7 +701,7 @@ fz_write_base64_buffer(fz_context *ctx, fz_output *out, fz_buffer *buf, int newl
 void
 fz_append_base64(fz_context *ctx, fz_buffer *out, const unsigned char *data, size_t size, int newline)
 {
-	static const char set[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	static const char set[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	size_t i;
 	for (i = 0; i + 3 <= size; i += 3)
 	{

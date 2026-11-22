@@ -50,25 +50,14 @@ class HtmlWindowHandler : public HtmlWindowCallback {
     ChmModel* cm;
 
   public:
-    explicit HtmlWindowHandler(ChmModel* cm) : cm(cm) {
-    }
+    explicit HtmlWindowHandler(ChmModel* cm) : cm(cm) {}
     ~HtmlWindowHandler() override = default;
 
-    bool OnBeforeNavigate(const char* url, bool newWindow) override {
-        return cm->OnBeforeNavigate(url, newWindow);
-    }
-    void OnDocumentComplete(const char* url) override {
-        cm->OnDocumentComplete(url);
-    }
-    void OnLButtonDown() override {
-        cm->OnLButtonDown();
-    }
-    ByteSlice GetDataForUrl(const char* url) override {
-        return cm->GetDataForUrl(url);
-    }
-    void DownloadData(const char* url, const ByteSlice& data) override {
-        cm->DownloadData(url, data);
-    }
+    bool OnBeforeNavigate(const char* url, bool newWindow) override { return cm->OnBeforeNavigate(url, newWindow); }
+    void OnDocumentComplete(const char* url) override { cm->OnDocumentComplete(url); }
+    void OnLButtonDown() override { cm->OnLButtonDown(); }
+    ByteSlice GetDataForUrl(const char* url) override { return cm->GetDataForUrl(url); }
+    void DownloadData(const char* url, const ByteSlice& data) override { cm->DownloadData(url, data); }
 };
 
 struct ChmTocTraceItem {
@@ -126,7 +115,10 @@ void ChmModel::GoToPage(int pageNo, bool) {
 }
 
 bool ChmModel::SetParentHwnd(HWND hwnd) {
-    ReportIf(htmlWindow || htmlWindowCb);
+    if (htmlWindow || htmlWindowCb) {
+        ReportIf(true);
+        RemoveParentHwnd();
+    }
     htmlWindowCb = new HtmlWindowHandler(this);
     htmlWindow = HtmlWindow::Create(hwnd, htmlWindowCb);
     if (!htmlWindow) {
@@ -138,6 +130,9 @@ bool ChmModel::SetParentHwnd(HWND hwnd) {
 }
 
 void ChmModel::RemoveParentHwnd() {
+    if (!htmlWindow && !htmlWindowCb) {
+        return;
+    }
     delete htmlWindow;
     htmlWindow = nullptr;
     delete htmlWindowCb;
@@ -228,7 +223,7 @@ bool ChmModel::HandleLink(IPageDestination* link, ILinkHandler*) {
     Kind k = link->GetKind();
     if (k != kindDestinationScrollTo) {
         logf("ChmModel::HandleLink: unsupported kind '%s'\n", k);
-        ReportIfQuick(link->GetKind() != kindDestinationScrollTo);
+        ReportIfFast(link->GetKind() != kindDestinationScrollTo);
     }
     char* url = PageDestGetName(link);
     if (DisplayPage(url)) {
@@ -387,9 +382,7 @@ struct ChmCacheEntry {
     ByteSlice data;
 
     explicit ChmCacheEntry(const char* url);
-    ~ChmCacheEntry() {
-        data.Free();
-    };
+    ~ChmCacheEntry() { data.Free(); };
 };
 
 ChmCacheEntry::ChmCacheEntry(const char* url) {
@@ -451,7 +444,7 @@ bool ChmModel::OnBeforeNavigate(const char* url, bool newWindow) {
     // instead pass the URL to the system's default browser
     if (url && cb) {
         // TODO: optimize, create just destination
-        auto item = NewChmTocItem(nullptr, nullptr, 0, url);
+        auto item = NewChmTocItem(nullptr, nullptr, 1, url);
         cb->GotoLink(item->dest);
         delete item;
     }
@@ -564,41 +557,45 @@ TocTree* ChmModel::GetToc() {
 // adapted from DisplayModel::NextZoomStep
 float ChmModel::GetNextZoomStep(float towardsLevel) const {
     float currZoom = GetZoomVirtual(true);
-
-    if (gGlobalPrefs->zoomIncrement > 0) {
-        float z1 = currZoom * (gGlobalPrefs->zoomIncrement / 100 + 1);
-        if (currZoom < towardsLevel) {
-            return std::min(z1, towardsLevel);
-        }
-        if (currZoom > towardsLevel) {
-            return std::max(z1, towardsLevel);
+    if (MaybeGetNextZoomByIncrement(&currZoom, towardsLevel)) {
+        // chm uses browser control which only supports integer zoom levels
+        // this ensures we're not stuck on a given zoom level i.e. advance by at least 1%
+        int iCurrZoom2 = (int)GetZoomVirtual(true);
+        int iCurrZoom = (int)currZoom;
+        if (iCurrZoom == iCurrZoom2) {
+            currZoom += 1.f;
         }
         return currZoom;
     }
 
-    Vec<float>* zoomLevels = gGlobalPrefs->zoomLevels;
-    ReportIf(zoomLevels->size() != 0 && (zoomLevels->at(0) < kZoomMin || zoomLevels->Last() > kZoomMax));
-    ReportIf(zoomLevels->size() != 0 && zoomLevels->at(0) > zoomLevels->Last());
+    int nZoomLevels;
+    float* zoomLevels = GetDefaultZoomLevels(&nZoomLevels);
 
-    const float FUZZ = 0.01f;
-    float newZoom = towardsLevel;
-    if (currZoom < towardsLevel) {
-        for (size_t i = 0; i < zoomLevels->size(); i++) {
-            if (zoomLevels->at(i) - FUZZ > currZoom) {
-                newZoom = zoomLevels->at(i);
+    // chm uses browser control which only supports integer zoom levels
+    // this ensures we're not stuck on a given zoom level
+    // due to float => int truncation
+    int iCurrZoom = (int)currZoom;
+    int iTowardsLevel = (int)towardsLevel;
+    int iNewZoom = iTowardsLevel;
+    if (iCurrZoom < towardsLevel) {
+        for (int i = 0; i < nZoomLevels; i++) {
+            int iZoom = (int)zoomLevels[i];
+            if (iZoom > iCurrZoom) {
+                iNewZoom = iZoom;
                 break;
             }
         }
-    } else if (currZoom > towardsLevel) {
-        for (size_t i = zoomLevels->size(); i > 0; i--) {
-            if (zoomLevels->at(i - 1) + FUZZ < currZoom) {
-                newZoom = zoomLevels->at(i - 1);
+    } else if (iCurrZoom > towardsLevel) {
+        for (int i = nZoomLevels - 1; i >= 0; i--) {
+            int iZoom = (int)zoomLevels[i];
+            if (iZoom < iCurrZoom) {
+                iNewZoom = iZoom;
                 break;
             }
         }
     }
 
-    return newZoom;
+    return (float)iNewZoom;
 }
 
 void ChmModel::GetDisplayState(FileState* fs) {
@@ -620,15 +617,16 @@ struct ChmThumbnailTask : HtmlWindowCallback {
     ChmFile* doc = nullptr;
     HWND hwnd = nullptr;
     HtmlWindow* hw = nullptr;
+    bool didSave = false;
     Size size;
-    const OnBitmapRendered* saveThumbnail;
+    const OnBitmapRendered* saveThumbnail = nullptr;
     AutoFreeStr homeUrl;
     Vec<ByteSlice> data;
     CRITICAL_SECTION docAccess;
 
     ChmThumbnailTask(ChmFile* doc, HWND hwnd, Size size, const OnBitmapRendered* saveThumbnail);
     ~ChmThumbnailTask() override;
-    void CreateThumbnail(HtmlWindow* hw);
+    void StartCreateThumbnail(HtmlWindow* hw);
     bool OnBeforeNavigate(const char*, bool newWindow) override;
     void OnDocumentComplete(const char* url) override;
     ByteSlice GetDataForUrl(const char* url) override;
@@ -646,6 +644,7 @@ ChmThumbnailTask::ChmThumbnailTask(ChmFile* doc, HWND hwnd, Size size, const OnB
     this->hwnd = hwnd;
     this->size = size;
     this->saveThumbnail = saveThumbnail;
+    this->didSave = false;
     InitializeCriticalSection(&docAccess);
 }
 
@@ -659,13 +658,14 @@ ChmThumbnailTask::~ChmThumbnailTask() {
     }
     LeaveCriticalSection(&docAccess);
     DeleteCriticalSection(&docAccess);
+    delete saveThumbnail;
 }
 
 bool ChmThumbnailTask::OnBeforeNavigate(const char*, bool newWindow) {
     return !newWindow;
 }
 
-void ChmThumbnailTask::CreateThumbnail(HtmlWindow* hw) {
+void ChmThumbnailTask::StartCreateThumbnail(HtmlWindow* hw) {
     this->hw = hw;
     homeUrl.Set(strconv::AnsiToUtf8(doc->GetHomePath()));
     if (*homeUrl == '/') {
@@ -686,24 +686,33 @@ void ChmThumbnailTask::OnDocumentComplete(const char* url) {
     if (url && *url == '/') {
         url++;
     }
-    if (str::Eq(url, homeUrl)) {
-        Rect area(0, 0, size.dx * 2, size.dy * 2);
-        HBITMAP hbmp = hw->TakeScreenshot(area, size);
-        if (hbmp) {
-            RenderedBitmap* bmp = new RenderedBitmap(hbmp, size);
-            saveThumbnail->Call(bmp);
-        }
-        // TODO: why is destruction on the UI thread necessary?
-        auto fn = MkFunc0<ChmThumbnailTask>(SafeDeleteChmThumbnailTask, this);
-        uitask::Post(fn, "SafeDeleteChmThumbnailTask");
+    if (!str::Eq(url, homeUrl)) {
+        return;
     }
+    logf("ChmThumbnailTask::OnDocumentComplete: '%s'\n", url);
+    if (didSave) {
+        // don't crash creating .chm thumbnail
+        // https://github.com/sumatrapdfreader/sumatrapdf/issues/4519
+        // https://github.com/sumatrapdfreader/sumatrapdf/issues/4833
+        return;
+    }
+    didSave = true;
+    Rect area(0, 0, size.dx * 2, size.dy * 2);
+    HBITMAP hbmp = hw->TakeScreenshot(area, size);
+    if (hbmp) {
+        RenderedBitmap* bmp = new RenderedBitmap(hbmp, size);
+        saveThumbnail->Call(bmp);
+    }
+    // delay deleting because ~ChmThumbnailTask() deletes HtmlWindow
+    // and we're currently processing HtmlWindow messages
+    // TODO: it's possible we still have timing issue
+    auto fn = MkFunc0<ChmThumbnailTask>(SafeDeleteChmThumbnailTask, this);
+    uitask::Post(fn, "SafeDeleteChmThumbnailTask");
 }
 
-void ChmThumbnailTask::OnLButtonDown() {
-}
+void ChmThumbnailTask::OnLButtonDown() {}
 
-void ChmThumbnailTask::DownloadData(const char*, const ByteSlice&) {
-}
+void ChmThumbnailTask::DownloadData(const char*, const ByteSlice&) {}
 
 static void CreateChmThumbnail(const char* path, const Size& size, const OnBitmapRendered* saveThumbnail) {
     // doc and window will be destroyed by the callback once it's invoked
@@ -734,7 +743,7 @@ static void CreateChmThumbnail(const char* path, const Size& size, const OnBitma
         return;
     }
     // is deleted in ChmThumbnailTask::OnDocumentComplete
-    thumbnailTask->CreateThumbnail(hw);
+    thumbnailTask->StartCreateThumbnail(hw);
 }
 
 // Create a thumbnail of chm document by loading it again and rendering

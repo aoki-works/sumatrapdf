@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -44,16 +44,44 @@ string_in_names_list(fz_context *ctx, pdf_obj *p, pdf_obj *names_list)
  * Recreate page tree to only retain specified pages.
  */
 
-static void retainpage(fz_context *ctx, pdf_document *doc, pdf_obj *parent, pdf_obj *kids, int page)
+static void retainpage(fz_context *ctx, pdf_document *doc, pdf_obj *parentobj, pdf_obj *kids, int page, pdf_obj *structparents, pdf_obj *ostructparents)
 {
 	pdf_obj *pageref = pdf_lookup_page_obj(ctx, doc, page);
 
 	pdf_flatten_inheritable_page_items(ctx, pageref);
 
-	pdf_dict_put(ctx, pageref, PDF_NAME(Parent), parent);
+	pdf_dict_put(ctx, pageref, PDF_NAME(Parent), parentobj);
 
 	/* Store page object in new kids array */
 	pdf_array_push(ctx, kids, pageref);
+
+	if (structparents)
+	{
+		int parentnum = pdf_dict_get_int(ctx, pageref, PDF_NAME(StructParents));
+		pdf_obj *parent = pdf_lookup_number(ctx, ostructparents, parentnum);
+		pdf_obj *nums = pdf_dict_get(ctx, structparents, PDF_NAME(Nums));
+		pdf_obj *limits = pdf_dict_get(ctx, structparents, PDF_NAME(Limits));
+		int min, max;
+		pdf_array_push_int(ctx, nums, parentnum);
+		pdf_array_push(ctx, nums, parent);
+		if (limits == NULL)
+		{
+			min = max = parentnum;
+			limits = pdf_new_array(ctx, doc, 2);
+			pdf_dict_put_drop(ctx, structparents, PDF_NAME(Limits), limits);
+		}
+		else
+		{
+			min = pdf_array_get_int(ctx, limits, 0);
+			max = pdf_array_get_int(ctx, limits, 1);
+			if (min > parentnum)
+				min = parentnum;
+			if (max < parentnum)
+				max = parentnum;
+		}
+		pdf_array_put_int(ctx, limits, 0, min);
+		pdf_array_put_int(ctx, limits, 1, max);
+	}
 }
 
 static int dest_is_valid_page(fz_context *ctx, pdf_obj *obj, int *page_object_nums, int pagecount)
@@ -129,9 +157,9 @@ static int strip_stale_annot_refs(fz_context *ctx, pdf_obj *field, int page_coun
 	}
 }
 
-static int strip_outlines(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, int page_count, int *page_object_nums, pdf_obj *names_list);
+static int strip_outlines(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, int page_count, int *page_object_nums, pdf_obj *names_list, pdf_mark_bits *marks);
 
-static int strip_outline(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, int page_count, int *page_object_nums, pdf_obj *names_list, pdf_obj **pfirst, pdf_obj **plast)
+static int strip_outline(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, int page_count, int *page_object_nums, pdf_obj *names_list, pdf_obj **pfirst, pdf_obj **plast, pdf_mark_bits *marks)
 {
 	pdf_obj *prev = NULL;
 	pdf_obj *first = NULL;
@@ -144,7 +172,7 @@ static int strip_outline(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, 
 
 		/* Strip any children to start with. This takes care of
 		 * First/Last/Count for us. */
-		nc = strip_outlines(ctx, doc, current, page_count, page_object_nums, names_list);
+		nc = strip_outlines(ctx, doc, current, page_count, page_object_nums, names_list, marks);
 
 		if (!dest_is_valid(ctx, current, page_count, page_object_nums, names_list))
 		{
@@ -195,7 +223,7 @@ static int strip_outline(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, 
 	return count;
 }
 
-static int strip_outlines(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, int page_count, int *page_object_nums, pdf_obj *names_list)
+static int strip_outlines(fz_context *ctx, pdf_document *doc, pdf_obj *outlines, int page_count, int *page_object_nums, pdf_obj *names_list, pdf_mark_bits *marks)
 {
 	int nc;
 	pdf_obj *first;
@@ -204,11 +232,14 @@ static int strip_outlines(fz_context *ctx, pdf_document *doc, pdf_obj *outlines,
 	if (!pdf_is_dict(ctx, outlines))
 		return 0;
 
+	if (pdf_mark_bits_set(ctx, marks, outlines))
+		fz_throw(ctx, FZ_ERROR_FORMAT, "Cycle detected in outlines");
+
 	first = pdf_dict_get(ctx, outlines, PDF_NAME(First));
 	if (!pdf_is_dict(ctx, first))
 		nc = 0;
 	else
-		nc = strip_outline(ctx, doc, first, page_count, page_object_nums, names_list, &first, &last);
+		nc = strip_outline(ctx, doc, first, page_count, page_object_nums, names_list, &first, &last, marks);
 
 	if (nc == 0)
 	{
@@ -227,7 +258,7 @@ static int strip_outlines(fz_context *ctx, pdf_document *doc, pdf_obj *outlines,
 	return nc;
 }
 
-static void pdf_rearrange_pages_imp(fz_context *ctx, pdf_document *doc, int count, const int *new_page_list)
+static void pdf_rearrange_pages_imp(fz_context *ctx, pdf_document *doc, int count, const int *new_page_list, pdf_clean_options_structure structure)
 {
 	pdf_obj *oldroot, *pages, *kids, *olddests;
 	pdf_obj *root = NULL;
@@ -237,7 +268,10 @@ static void pdf_rearrange_pages_imp(fz_context *ctx, pdf_document *doc, int coun
 	pdf_obj *allfields = NULL;
 	int pagecount, i;
 	int *page_object_nums = NULL;
-	fz_page *page, *next;
+	pdf_obj *structtreeroot = NULL;
+	pdf_obj *ostructparents = NULL;
+	pdf_obj *structparents = NULL;
+	pdf_mark_bits *marks = NULL;
 
 	/* Keep only pages/type and (reduced) dest entries to avoid
 	 * references to unretained pages */
@@ -246,31 +280,32 @@ static void pdf_rearrange_pages_imp(fz_context *ctx, pdf_document *doc, int coun
 	olddests = pdf_load_name_tree(ctx, doc, PDF_NAME(Dests));
 	outlines = pdf_dict_get(ctx, oldroot, PDF_NAME(Outlines));
 	ocproperties = pdf_dict_get(ctx, oldroot, PDF_NAME(OCProperties));
+	if (structure == PDF_CLEAN_STRUCTURE_KEEP)
+	{
+		structtreeroot = pdf_dict_get(ctx, oldroot, PDF_NAME(StructTreeRoot));
+		ostructparents = pdf_dict_get(ctx, structtreeroot, PDF_NAME(ParentTree));
+		if (structtreeroot)
+			structparents = pdf_new_dict(ctx, doc, 3);
+	}
 
 	fz_var(root);
 	fz_var(names_list);
 	fz_var(allfields);
 	fz_var(page_object_nums);
 	fz_var(kids);
+	fz_var(marks);
 
 	fz_try(ctx)
 	{
-		/* Adjust the fz layer of cached pages (by nuking it!) */
-		fz_lock(ctx, FZ_LOCK_ALLOC);
-		{
-			for (page = doc->super.open; page != NULL; page = next)
-			{
-				next = page->next;
-				page->prev = NULL;
-				page->next = NULL;
-			}
-			doc->super.open = NULL;
-		}
-		fz_unlock(ctx, FZ_LOCK_ALLOC);
-
 		root = pdf_new_dict(ctx, doc, 3);
 		pdf_dict_put(ctx, root, PDF_NAME(Type), pdf_dict_get(ctx, oldroot, PDF_NAME(Type)));
 		pdf_dict_put(ctx, root, PDF_NAME(Pages), pdf_dict_get(ctx, oldroot, PDF_NAME(Pages)));
+		if (structtreeroot)
+		{
+			pdf_dict_put(ctx, root, PDF_NAME(StructTreeRoot), structtreeroot);
+			pdf_dict_put(ctx, structtreeroot, PDF_NAME(ParentTree), structparents);
+			pdf_dict_put_array(ctx, structparents, PDF_NAME(Nums), 2);
+		}
 		if (outlines)
 			pdf_dict_put(ctx, root, PDF_NAME(Outlines), outlines);
 		if (ocproperties)
@@ -283,7 +318,7 @@ static void pdf_rearrange_pages_imp(fz_context *ctx, pdf_document *doc, int coun
 
 		/* Retain pages specified */
 		for (i = 0; i < count; ++i)
-			retainpage(ctx, doc, pages, kids, new_page_list[i]);
+			retainpage(ctx, doc, pages, kids, new_page_list[i], structparents, ostructparents);
 
 		/* Update page count */
 		pdf_dict_put_int(ctx, pages, PDF_NAME(Count), pdf_array_len(ctx, kids));
@@ -396,17 +431,20 @@ static void pdf_rearrange_pages_imp(fz_context *ctx, pdf_document *doc, int coun
 				pdf_dict_del(ctx, f, PDF_NAME(A));
 		}
 
-		if (strip_outlines(ctx, doc, outlines, pagecount, page_object_nums, names_list) == 0)
+		marks = pdf_new_mark_bits(ctx, doc);
+		if (strip_outlines(ctx, doc, outlines, pagecount, page_object_nums, names_list, marks) == 0)
 		{
 			pdf_dict_del(ctx, root, PDF_NAME(Outlines));
 		}
 	}
 	fz_always(ctx)
 	{
+		pdf_drop_mark_bits(ctx, marks);
 		fz_free(ctx, page_object_nums);
 		pdf_drop_obj(ctx, allfields);
 		pdf_drop_obj(ctx, root);
 		pdf_drop_obj(ctx, kids);
+		pdf_drop_obj(ctx, structparents);
 	}
 	fz_catch(ctx)
 	{
@@ -414,23 +452,90 @@ static void pdf_rearrange_pages_imp(fz_context *ctx, pdf_document *doc, int coun
 	}
 }
 
-void pdf_rearrange_pages(fz_context *ctx, pdf_document *doc, int count, const int *new_page_list)
+void pdf_rearrange_pages(fz_context *ctx, pdf_document *doc, int count, const int *new_page_list, pdf_clean_options_structure structure)
 {
+	if (structure < PDF_CLEAN_STRUCTURE_DROP || structure > PDF_CLEAN_STRUCTURE_KEEP)
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "Invalid structure argument");
+
 	pdf_begin_operation(ctx, doc, "Rearrange pages");
 	fz_try(ctx)
 	{
-		pdf_rearrange_pages_imp(ctx, doc, count, new_page_list);
+		pdf_rearrange_pages_imp(ctx, doc, count, new_page_list, structure);
 		pdf_end_operation(ctx, doc);
 	}
 	fz_catch(ctx)
 	{
 		pdf_abandon_operation(ctx, doc);
+		pdf_sync_open_pages(ctx, doc);
+		fz_rethrow(ctx);
+	}
+	pdf_sync_open_pages(ctx, doc);
+}
+
+static void pdf_vectorize_pages_imp(fz_context *ctx, pdf_document *doc, int count, const int *new_page_list, pdf_clean_options_vectorize vectorize)
+{
+	int i;
+	int n = pdf_count_pages(ctx, doc);
+	pdf_page *page = NULL;
+
+	fz_var(page);
+
+	fz_try(ctx)
+	{
+		if (count == 0)
+		{
+			for (i = 0; i < n; i++)
+			{
+				page = pdf_load_page(ctx, doc, i);
+				pdf_vectorize_page(ctx, page);
+				pdf_drop_page(ctx, page);
+				page = NULL;
+			}
+		}
+		else
+		{
+			for (i = 0; i < count; i++)
+			{
+				page = pdf_load_page(ctx, doc, new_page_list[i]);
+				pdf_vectorize_page(ctx, page);
+				pdf_drop_page(ctx, page);
+				page = NULL;
+			}
+		}
+	}
+	fz_catch(ctx)
+	{
+		pdf_drop_page(ctx, page);
 		fz_rethrow(ctx);
 	}
 }
 
+void pdf_vectorize_pages(fz_context *ctx, pdf_document *doc, int count, const int *new_page_list, pdf_clean_options_vectorize vectorize)
+{
+	if (vectorize < PDF_CLEAN_VECTORIZE_NO || vectorize > PDF_CLEAN_VECTORIZE_YES)
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "Invalid vectorize argument");
+
+	if (vectorize == PDF_CLEAN_VECTORIZE_NO)
+		return;
+
+	pdf_begin_operation(ctx, doc, "Vectorize pages");
+	fz_try(ctx)
+	{
+		pdf_vectorize_pages_imp(ctx, doc, count, new_page_list, vectorize);
+		pdf_end_operation(ctx, doc);
+	}
+	fz_catch(ctx)
+	{
+		pdf_abandon_operation(ctx, doc);
+		pdf_sync_open_pages(ctx, doc);
+		fz_rethrow(ctx);
+	}
+	pdf_sync_open_pages(ctx, doc);
+}
+
 void pdf_clean_file(fz_context *ctx, char *infile, char *outfile, char *password, pdf_clean_options *opts, int argc, char *argv[])
 {
+	pdf_clean_options default_opts = { 0 };
 	pdf_document *pdf = NULL;
 	int *pages = NULL;
 	int cap, len, page;
@@ -438,12 +543,22 @@ void pdf_clean_file(fz_context *ctx, char *infile, char *outfile, char *password
 	fz_var(pdf);
 	fz_var(pages);
 
+	if (opts == NULL)
+		opts = &default_opts;
+	if (argc > 0 && argv == NULL)
+		fz_throw(ctx, FZ_ERROR_ARGUMENT, "arguments array must be set if arguments exist");
+
 	fz_try(ctx)
 	{
 		pdf = pdf_open_document(ctx, infile);
 		if (pdf_needs_password(ctx, pdf))
 			if (!pdf_authenticate_password(ctx, pdf, password))
 				fz_throw(ctx, FZ_ERROR_ARGUMENT, "cannot authenticate password: %s", infile);
+
+		/* First, we do a prepass across the document to load all the objects
+		 * into memory. We do this to force any repairs to happen before we
+		 * start to apply any edits (which would be lost if a repair is triggered). */
+		pdf_check_document(ctx, pdf);
 
 		len = cap = 0;
 
@@ -480,8 +595,13 @@ void pdf_clean_file(fz_context *ctx, char *infile, char *outfile, char *password
 				argidx++;
 			}
 
-			pdf_rearrange_pages(ctx, pdf, len, pages);
+			pdf_rearrange_pages(ctx, pdf, len, pages, opts->structure);
 		}
+
+		/* Although the API supports passing a page list here, we don't
+		 * need to (and in fact, must not) pass it, because the subset of
+		 * the pages has been done already. */
+		pdf_vectorize_pages(ctx, pdf, 0, NULL, opts->vectorize);
 
 		pdf_rewrite_images(ctx, pdf, &opts->image);
 

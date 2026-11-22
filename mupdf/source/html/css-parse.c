@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -35,6 +35,7 @@ struct lexbuf
 	const unsigned char *s;
 	const char *file;
 	int line;
+	int nest;
 	int lookahead;
 	int c;
 	int string_len;
@@ -72,7 +73,7 @@ FZ_NORETURN static void fz_css_error(struct lexbuf *buf, const char *msg)
 	/* We're going to try to output:
 	 * <section prior to the error> ">" <the char that tripped> "<" <section after the error>
 	 */
-	/* Is the section prior to the error too long? If so, truncate it with an elipsis. */
+	/* Is the section prior to the error too long? If so, truncate it with an ellipsis. */
 	n = sizeof(text)-1;
 	if (err_pos - s > n-PRE_POST_SIZE - 3)
 	{
@@ -227,7 +228,11 @@ static void css_lex_next(struct lexbuf *buf)
 	if (buf->c == 0)
 		return;
 	buf->s += fz_chartorune(&buf->c, (const char *)buf->s);
-	if (buf->c == '\n')
+	if (buf->c == '{')
+		++buf->nest;
+	else if (buf->c == '}')
+		--buf->nest;
+	else if (buf->c == '\n')
 		++buf->line;
 	buf->lookahead = EOF;
 }
@@ -242,6 +247,7 @@ static void css_lex_init(fz_context *ctx, struct lexbuf *buf, fz_pool *pool, con
 	buf->c = -1;
 	buf->file = file;
 	buf->line = 1;
+	buf->nest = 0;
 	css_lex_next(buf);
 
 	buf->string_len = 0;
@@ -272,6 +278,14 @@ static void css_push_char(struct lexbuf *buf, int c)
 		fz_css_error(buf, "token too long");
 	memcpy(buf->string + buf->string_len, out, n);
 	buf->string_len += n;
+}
+
+static void css_push_zero(struct lexbuf *buf)
+{
+	if (buf->string_len + 1 >= (int)nelem(buf->string))
+		fz_css_error(buf, "token too long");
+	buf->string[buf->string_len] = 0;
+	buf->string_len += 1;
 }
 
 static int css_lex_accept(struct lexbuf *buf, int t)
@@ -311,7 +325,7 @@ static int css_lex_number(struct lexbuf *buf)
 	if (css_lex_accept(buf, '%'))
 	{
 		css_push_char(buf, '%');
-		css_push_char(buf, 0);
+		css_push_zero(buf);
 		return CSS_PERCENT;
 	}
 
@@ -324,11 +338,11 @@ static int css_lex_number(struct lexbuf *buf)
 			css_push_char(buf, buf->c);
 			css_lex_next(buf);
 		}
-		css_push_char(buf, 0);
+		css_push_zero(buf);
 		return CSS_LENGTH;
 	}
 
-	css_push_char(buf, 0);
+	css_push_zero(buf);
 	return CSS_NUMBER;
 }
 
@@ -339,7 +353,7 @@ static int css_lex_keyword(struct lexbuf *buf)
 		css_push_char(buf, buf->c);
 		css_lex_next(buf);
 	}
-	css_push_char(buf, 0);
+	css_push_zero(buf);
 	return CSS_KEYWORD;
 }
 
@@ -350,7 +364,7 @@ static int css_lex_hash(struct lexbuf *buf)
 		css_push_char(buf, buf->c);
 		css_lex_next(buf);
 	}
-	css_push_char(buf, 0);
+	css_push_zero(buf);
 	return CSS_HASH;
 }
 
@@ -385,7 +399,7 @@ static int css_lex_string(struct lexbuf *buf, int q)
 		}
 	}
 	css_lex_expect(buf, q);
-	css_push_char(buf, 0);
+	css_push_zero(buf);
 	return CSS_STRING;
 }
 
@@ -418,7 +432,7 @@ static void css_lex_uri(struct lexbuf *buf)
 		else
 			fz_css_error(buf, "unexpected character in url");
 	}
-	css_push_char(buf, 0);
+	css_push_zero(buf);
 }
 
 static int css_lex(struct lexbuf *buf)
@@ -763,6 +777,23 @@ static char *parse_attrib_value(struct lexbuf *buf)
 	fz_css_error(buf, "expected attribute value");
 }
 
+static char *css_lex_pseudo_expr(struct lexbuf *buf)
+{
+	buf->string_len = 0;
+	for (;;)
+	{
+		if (buf->c == 0)
+			return NULL;
+		if (css_lex_accept(buf, ')'))
+		{
+			css_push_zero(buf);
+			return fz_pool_strdup(buf->ctx, buf->pool, buf->string);
+		}
+		css_push_char(buf, buf->c);
+		css_lex_next(buf);
+	}
+}
+
 static fz_css_condition *parse_condition(struct lexbuf *buf)
 {
 	fz_css_condition *c;
@@ -772,14 +803,15 @@ static fz_css_condition *parse_condition(struct lexbuf *buf)
 		(void)accept(buf, ':'); /* swallow css3 :: syntax and pretend it's a normal pseudo-class */
 		if (buf->lookahead != CSS_KEYWORD)
 			fz_css_error(buf, "expected keyword after ':'");
-		c = fz_new_css_condition(buf->ctx, buf->pool, ':', "pseudo", buf->string);
+		c = fz_new_css_condition(buf->ctx, buf->pool, ':', buf->string, NULL);
 		next(buf);
-		if (accept(buf, '('))
+
+		// TODO -- parse :is, :not, :where, :has logical combinations with selector list as argument
+
+		if (buf->lookahead == '(')
 		{
-			white(buf);
-			if (accept(buf, CSS_KEYWORD))
-				white(buf);
-			expect(buf, ')');
+			c->val = css_lex_pseudo_expr(buf);
+			next(buf);
 		}
 		return c;
 	}
@@ -930,6 +962,22 @@ static fz_css_selector *parse_selector_list(struct lexbuf *buf)
 	return head;
 }
 
+static void parse_recover(struct lexbuf *buf)
+{
+	fz_rethrow_unless(buf->ctx, FZ_ERROR_SYNTAX);
+	fz_report_error(buf->ctx);
+	while (buf->lookahead != EOF)
+	{
+		if (accept(buf, '}') && buf->nest <= 0)
+		{
+			buf->nest = 0;
+			white(buf);
+			break;
+		}
+		next(buf);
+	}
+}
+
 static fz_css_rule *parse_ruleset(struct lexbuf *buf)
 {
 	fz_css_selector *s = NULL;
@@ -945,18 +993,7 @@ static fz_css_rule *parse_ruleset(struct lexbuf *buf)
 	}
 	fz_catch(buf->ctx)
 	{
-		fz_rethrow_unless(buf->ctx, FZ_ERROR_SYNTAX);
-		fz_report_error(buf->ctx);
-
-		while (buf->lookahead != EOF)
-		{
-			if (accept(buf, '}'))
-			{
-				white(buf);
-				break;
-			}
-			next(buf);
-		}
+		parse_recover(buf);
 		return NULL;
 	}
 
@@ -968,6 +1005,8 @@ static fz_css_rule *parse_at_page(struct lexbuf *buf)
 	fz_css_selector *s = NULL;
 	fz_css_property *p = NULL;
 
+	fz_try(buf->ctx)
+	{
 	white(buf);
 	if (accept(buf, ':'))
 	{
@@ -978,6 +1017,12 @@ static fz_css_rule *parse_at_page(struct lexbuf *buf)
 	p = parse_declaration_list(buf);
 	expect(buf, '}');
 	white(buf);
+	}
+	fz_catch(buf->ctx)
+	{
+		parse_recover(buf);
+		return NULL;
+	}
 
 	s = fz_new_css_selector(buf->ctx, buf->pool, "@page");
 	return fz_new_css_rule(buf->ctx, buf->pool, s, p);
@@ -988,11 +1033,19 @@ static fz_css_rule *parse_at_font_face(struct lexbuf *buf)
 	fz_css_selector *s = NULL;
 	fz_css_property *p = NULL;
 
+	fz_try(buf->ctx)
+	{
 	white(buf);
 	expect(buf, '{');
 	p = parse_declaration_list(buf);
 	expect(buf, '}');
 	white(buf);
+	}
+	fz_catch(buf->ctx)
+	{
+		parse_recover(buf);
+		return NULL;
+	}
 
 	s = fz_new_css_selector(buf->ctx, buf->pool, "@font-face");
 	return fz_new_css_rule(buf->ctx, buf->pool, s, p);
@@ -1031,7 +1084,7 @@ static void parse_at_rule(struct lexbuf *buf)
 
 static fz_css_rule *parse_stylesheet(struct lexbuf *buf, fz_css_rule *chain)
 {
-	fz_css_rule *rule, **nextp, *tail;
+	fz_css_rule *rule, **nextp, *tail, *x;
 
 	tail = chain;
 	if (tail)
@@ -1054,14 +1107,22 @@ static fz_css_rule *parse_stylesheet(struct lexbuf *buf, fz_css_rule *chain)
 			if (buf->lookahead == CSS_KEYWORD && !strcmp(buf->string, "page"))
 			{
 				next(buf);
-				rule = *nextp = parse_at_page(buf);
+				x = parse_at_page(buf);
+				if (x)
+				{
+					rule = *nextp = x;
 				nextp = &rule->next;
+			}
 			}
 			else if (buf->lookahead == CSS_KEYWORD && !strcmp(buf->string, "font-face"))
 			{
 				next(buf);
-				rule = *nextp = parse_at_font_face(buf);
+				x = parse_at_font_face(buf);
+				if (x)
+				{
+					rule = *nextp = x;
 				nextp = &rule->next;
+			}
 			}
 			else
 			{
@@ -1070,7 +1131,7 @@ static fz_css_rule *parse_stylesheet(struct lexbuf *buf, fz_css_rule *chain)
 		}
 		else
 		{
-			fz_css_rule *x = parse_ruleset(buf);
+			x = parse_ruleset(buf);
 			if (x)
 			{
 				rule = *nextp = x;

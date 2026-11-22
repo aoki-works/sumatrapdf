@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -299,11 +299,23 @@ ps_roll(ps_stack *st, int n, int j)
 			j = n - j;
 	}
 
+	if (j*2 > n)
+	{
+		for (i = j; i < n; i++)
+		{
+			tmp = st->stack[st->sp - n];
+			memmove(st->stack + st->sp - n, st->stack + st->sp - n + 1, (n-1) * sizeof(psobj));
+			st->stack[st->sp - 1] = tmp;
+		}
+	}
+	else
+	{
 	for (i = 0; i < j; i++)
 	{
 		tmp = st->stack[st->sp - 1];
-		memmove(st->stack + st->sp - n + 1, st->stack + st->sp - n, n * sizeof(psobj));
+			memmove(st->stack + st->sp - n + 1, st->stack + st->sp - n, (n-1) * sizeof(psobj));
 		st->stack[st->sp - n] = tmp;
+		}
 	}
 }
 
@@ -493,10 +505,15 @@ ps_run(fz_context *ctx, psobj *code, ps_stack *st, int pc)
 			case PS_OP_IDIV:
 				i2 = ps_pop_int(st);
 				i1 = ps_pop_int(st);
-				if (i2 != 0)
-					ps_push_int(st, i1 / i2);
-				else
+				if (i2 == 0) {
 					ps_push_int(st, DIV_BY_ZERO(i1, i2, INT_MIN, INT_MAX));
+				}
+				else if (i1 == INT_MIN && i2 == -1) {
+					ps_push_int(st, INT_MAX);
+				}
+				else {
+					ps_push_int(st, i1 / i2);
+				}
 				break;
 
 			case PS_OP_INDEX:
@@ -544,10 +561,15 @@ ps_run(fz_context *ctx, psobj *code, ps_stack *st, int pc)
 			case PS_OP_MOD:
 				i2 = ps_pop_int(st);
 				i1 = ps_pop_int(st);
-				if (i2 != 0)
-					ps_push_int(st, i1 % i2);
-				else
+				if (i2 == 0) {
 					ps_push_int(st, DIV_BY_ZERO(i1, i2, INT_MIN, INT_MAX));
+				}
+				else if (i1 == INT_MIN && i2 == -1) {
+					ps_push_int(st, 0);
+				}
+				else {
+					ps_push_int(st, i1 % i2);
+				}
 				break;
 
 			case PS_OP_MUL:
@@ -1002,7 +1024,11 @@ load_sample_func(fz_context *ctx, pdf_function *func_, pdf_obj *dict)
 	}
 
 	for (i = 0, samplecount = func->super.super.n; i < func->super.super.m; i++)
+	{
+		if (samplecount > MAX_SAMPLE_FUNCTION_SIZE / func->size[i])
+			fz_throw(ctx, FZ_ERROR_SYNTAX, "sample function too large");
 		samplecount *= func->size[i];
+	}
 
 	if (samplecount > MAX_SAMPLE_FUNCTION_SIZE)
 		fz_throw(ctx, FZ_ERROR_SYNTAX, "sample function too large");

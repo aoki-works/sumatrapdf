@@ -9,3 +9,6 @@ bool IsDragDistance(int x1, int x2, int y1, int y2);
 void CancelDrag(MainWindow*);
 
 extern Kind kNotifAnnotation;
+
+// Timer for mouse wheel smooth scrolling
+constexpr UINT_PTR kSmoothScrollTimerID = 6;
