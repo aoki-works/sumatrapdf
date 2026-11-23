@@ -1,7 +1,5 @@
 // CPS Lab: command-line build wrapper (not in upstream).
-// 置き場所: <sumatrapdf-port>/cmd/cps-build.ts
 // 使い方:   bun cmd/cps-build.ts [-dbg|-rel] [-64|-32] [-target <name>] [-rebuild] [-premake]
-// 【未実行】この文書の作成時点では、一度も実行していない。T0 で動作を確認すること。
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { detectVisualStudio } from "./util.ts";
