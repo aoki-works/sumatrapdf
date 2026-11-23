@@ -68,7 +68,7 @@ LazyLoading = false
 MainWindowBackground = #80fff200
 
 ; if true, doesn't open Home tab
-NoHomeTab = false
+NoHomeTab = true
 
 ; if true implements pre-3.6 behavior of showing opened files by frequently used
 ; count. If false, shows most recently opened first
@@ -80,11 +80,11 @@ HomePageSortByFrequentlyRead = false
 ReloadModifiedDocuments = true
 
 ; if true, we remember which files we opened and their display settings
-RememberOpenedFiles = true
+RememberOpenedFiles = false
 
 ; if true, we store display settings for each document separately (i.e.
 ; everything after UseDefaultState in FileStates)
-RememberStatePerDocument = true
+RememberStatePerDocument = false
 
 ; if true and SessionData isn't empty, that session will be restored at startup
 RestoreSession = true
@@ -95,7 +95,7 @@ ReuseInstance = true
 ; if false, the menu bar will be hidden for all newly opened windows (use F9 to
 ; show it until the window closes or Alt to show it just briefly), only applies
 ; if UseTabs is false (introduced in version 2.5)
-ShowMenubar = true
+ShowMenubar = false
 
 ; if true, we show the toolbar at the top of the window
 ShowToolbar = true
@@ -105,7 +105,7 @@ ShowFavorites = false
 
 ; if true, we show table of contents (Bookmarks) sidebar if it's present in the
 ; document
-ShowToc = true
+ShowToc = false
 
 ; if true we draw a blue border around links in the document (introduced in
 ; version 3.6)
@@ -167,7 +167,7 @@ UseSysColors = false
 
 ; if true, documents are opened in tabs instead of new windows (introduced in
 ; version 3.0)
-UseTabs = true
+UseTabs = false
 
 ; sequence of zoom levels when zooming in/out; all values must lie between 8.33
 ; and 6400
@@ -417,6 +417,14 @@ WindowState = 1
 ; default position (x, y) and size (width, height) of the window
 WindowPos = 0 0 0 0
 
+; if true, all printable characters except white space are recognized as
+; word-characteres. if false, number, alphabetic and under score (_) are
+; recognized as word-characteres
+PrintableCharAsWordChar = true
+
+; if true, a circular shape is used for the area selection
+CircularSelectionRegion = false
+
 ; information about opened files (in most recently used order)
 FileStates [
   [
@@ -567,5 +575,5 @@ The components are hex values (ranging from 00 to FF) and stand for:
 - `bb` : blue component
 - `aa` : alpha (transparency) component
 
-For example `#ff0000` means red color. `#7fff0000` is half-transparent red.
+For example #ff0000 means red color. #ff00007f is half-transparent red.
 

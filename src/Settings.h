@@ -499,6 +499,12 @@ struct GlobalPrefs {
     int windowState;
     // default position (can be on any monitor)
     Rect windowPos;
+    // if true, all printable characters except white space are recognized
+    // as word-characteres. if false, number, alphabetic and under score
+    // (_) are recognized as word-characteres
+    bool printableCharAsWordChar;
+    // if true, a circular shape is used for the area selection
+    bool circularSelectionRegion;
     // information about opened files (in most recently used order)
     Vec<FileState*>* fileStates;
     // state of the last session, usage depends on RestoreSession
@@ -763,7 +769,7 @@ static const StructInfo gFILETIMEInfo = {sizeof(FILETIME), 2, gFILETIMEFields, "
 
 static const FieldInfo gGlobalPrefsFields[] = {
     {(size_t)-1, SettingType::Comment,
-     (intptr_t)"For documentation, see https://www.sumatrapdfreader.org/settings/settings3-6.html"},
+     (intptr_t)"For documentation, see https://www.sumatrapdfreader.org/settings/settings3-6-2.html"},
     {(size_t)-1, SettingType::Comment, 0},
     {offsetof(GlobalPrefs, checkForUpdates), SettingType::Bool, true},
     {offsetof(GlobalPrefs, customScreenDPI), SettingType::Int, 0},
@@ -775,17 +781,17 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, inverseSearchCmdLine), SettingType::String, 0},
     {offsetof(GlobalPrefs, lazyLoading), SettingType::Bool, false},
     {offsetof(GlobalPrefs, mainWindowBackground), SettingType::Color, (intptr_t)"#80fff200"},
-    {offsetof(GlobalPrefs, noHomeTab), SettingType::Bool, false},
+    {offsetof(GlobalPrefs, noHomeTab), SettingType::Bool, true},
     {offsetof(GlobalPrefs, homePageSortByFrequentlyRead), SettingType::Bool, false},
     {offsetof(GlobalPrefs, reloadModifiedDocuments), SettingType::Bool, true},
-    {offsetof(GlobalPrefs, rememberOpenedFiles), SettingType::Bool, true},
-    {offsetof(GlobalPrefs, rememberStatePerDocument), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, rememberOpenedFiles), SettingType::Bool, false},
+    {offsetof(GlobalPrefs, rememberStatePerDocument), SettingType::Bool, false},
     {offsetof(GlobalPrefs, restoreSession), SettingType::Bool, true},
     {offsetof(GlobalPrefs, reuseInstance), SettingType::Bool, true},
-    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, false},
     {offsetof(GlobalPrefs, showToolbar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showFavorites), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, showToc), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, showToc), SettingType::Bool, false},
     {offsetof(GlobalPrefs, showLinks), SettingType::Bool, false},
     {offsetof(GlobalPrefs, showStartPage), SettingType::Bool, true},
     {offsetof(GlobalPrefs, sidebarDx), SettingType::Int, 0},
@@ -802,7 +808,7 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, uIFontSize), SettingType::Int, 0},
     {offsetof(GlobalPrefs, disableAntiAlias), SettingType::Bool, false},
     {offsetof(GlobalPrefs, useSysColors), SettingType::Bool, false},
-    {offsetof(GlobalPrefs, useTabs), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, useTabs), SettingType::Bool, false},
     {offsetof(GlobalPrefs, zoomLevels), SettingType::FloatArray, (intptr_t)""},
     {offsetof(GlobalPrefs, zoomIncrement), SettingType::Float, (intptr_t)"0"},
     {(size_t)-1, SettingType::Comment, 0},
@@ -834,6 +840,8 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, versionToSkip), SettingType::String, 0},
     {offsetof(GlobalPrefs, windowState), SettingType::Int, 1},
     {offsetof(GlobalPrefs, windowPos), SettingType::Compact, (intptr_t)&gRectInfo},
+    {offsetof(GlobalPrefs, printableCharAsWordChar), SettingType::Bool, true},
+    {offsetof(GlobalPrefs, circularSelectionRegion), SettingType::Bool, false},
     {offsetof(GlobalPrefs, fileStates), SettingType::Array, (intptr_t)&gFileStateInfo},
     {offsetof(GlobalPrefs, sessionData), SettingType::Array, (intptr_t)&gSessionDataInfo},
     {offsetof(GlobalPrefs, reopenOnce), SettingType::StringArray, 0},
@@ -843,7 +851,7 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {(size_t)-1, SettingType::Comment, (intptr_t)"Settings below are not recognized by the current version"},
 };
 static const StructInfo gGlobalPrefsInfo = {
-    sizeof(GlobalPrefs), 78, gGlobalPrefsFields,
+    sizeof(GlobalPrefs), 80, gGlobalPrefsFields,
     "\0\0CheckForUpdates\0CustomScreenDPI\0DefaultDisplayMode\0DefaultZoom\0EnableTeXEnhancements\0EscToExit\0FullPathI"
     "nTitle\0InverseSearchCmdLine\0LazyLoading\0MainWindowBackground\0NoHomeTab\0HomePageSortByFrequentlyRead\0ReloadMo"
     "difiedDocuments\0RememberOpenedFiles\0RememberStatePerDocument\0RestoreSession\0ReuseInstance\0ShowMenubar\0ShowTo"
@@ -851,8 +859,8 @@ static const StructInfo gGlobalPrefsInfo = {
     "lOverScrollbar\0PreventSleepInFullscreen\0TabWidth\0Theme\0TocDy\0ToolbarSize\0TreeFontName\0TreeFontSize\0UIFontS"
     "ize\0DisableAntiAlias\0UseSysColors\0UseTabs\0ZoomLevels\0ZoomIncrement\0\0FixedPageUI\0\0EBookUI\0\0ComicBookUI\0"
     "\0ChmUI\0\0Annotations\0\0ExternalViewers\0\0ForwardSearch\0\0PrinterDefaults\0\0SelectionHandlers\0\0Shortcuts\0"
-    "\0Themes\0\0\0DefaultPasswords\0UiLanguage\0VersionToSkip\0WindowState\0WindowPos\0FileStates\0SessionData\0Reopen"
-    "Once\0TimeOfLastUpdateCheck\0OpenCountWeek\0\0"};
+    "\0Themes\0\0\0DefaultPasswords\0UiLanguage\0VersionToSkip\0WindowState\0WindowPos\0PrintableCharAsWordChar\0Circul"
+    "arSelectionRegion\0FileStates\0SessionData\0ReopenOnce\0TimeOfLastUpdateCheck\0OpenCountWeek\0\0"};
 static const FieldInfo gTheme_1_Fields[] = {
     {offsetof(Theme, name), SettingType::String, (intptr_t)""},
     {offsetof(Theme, textColor), SettingType::Color, (intptr_t)""},

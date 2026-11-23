@@ -71,7 +71,8 @@ static SeqStrings gCommandNames =
     "CmdCommandPalette\0" "CmdShowLog\0" "CmdClearHistory\0"
     "CmdReopenLastClosedFile\0" "CmdNextTab\0" "CmdPrevTab\0"
     "CmdNextTabSmart\0" "CmdPrevTabSmart\0" "CmdMoveTabLeft\0"
-    "CmdMoveTabRight\0" "CmdSelectNextTheme\0" "CmdToggleFrequentlyRead\0"
+    "CmdMoveTabRight\0" "CmdSelectNextTheme\0" "CmdSelectNets\0"
+    "CmdSelectCells\0" "CmdSelectPins\0" "CmdToggleFrequentlyRead\0"
     "CmdInvokeInverseSearch\0" "CmdExec\0" "CmdViewWithExternalViewer\0"
     "CmdSelectionHandler\0" "CmdSetTheme\0" "CmdToggleInverseSearch\0"
     "CmdDebugCorruptMemory\0" "CmdDebugCrashMe\0" "CmdDebugDownloadSymbols\0"
@@ -137,7 +138,8 @@ static i32 gCommandIds[] = {
     CmdCommandPalette, CmdShowLog, CmdClearHistory,
     CmdReopenLastClosedFile, CmdNextTab, CmdPrevTab,
     CmdNextTabSmart, CmdPrevTabSmart, CmdMoveTabLeft,
-    CmdMoveTabRight, CmdSelectNextTheme, CmdToggleFrequentlyRead,
+    CmdMoveTabRight, CmdSelectNextTheme, CmdSelectNets,
+    CmdSelectCells, CmdSelectPins, CmdToggleFrequentlyRead,
     CmdInvokeInverseSearch, CmdExec, CmdViewWithExternalViewer,
     CmdSelectionHandler, CmdSetTheme, CmdToggleInverseSearch,
     CmdDebugCorruptMemory, CmdDebugCrashMe, CmdDebugDownloadSymbols,
@@ -204,7 +206,8 @@ SeqStrings gCommandDescriptions =
     "Command Palette\0" "Show Logs\0" "Clear History\0"
     "Reopen Last Closed\0" "Next Tab\0" "Previous Tab\0"
     "Smart Next Tab\0" "Smart Next Tab\0" "Move Tab Left\0"
-    "Move Tab Right\0" "Select next theme\0" "Toggle Frequently Read\0"
+    "Move Tab Right\0" "Select next theme\0" "Select nets\0"
+    "Select parts\0" "Select pins\0" "Toggle Frequently Read\0"
     "Invoke Inverse Search\0" "Execute a program\0" "View With Custom External Viewer\0"
     "Launch a browser or run command with selection\0" "Set theme\0" "Toggle Inverse Search\0"
     "Debug: Corrupt Memory\0" "Debug: Crash Me\0" "Debug: Download Symbols\0"

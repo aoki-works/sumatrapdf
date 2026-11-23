@@ -176,6 +176,9 @@ export const commands = [
     "CmdMoveTabLeft", "Move Tab Left",
     "CmdMoveTabRight", "Move Tab Right",
     "CmdSelectNextTheme", "Select next theme",
+    "CmdSelectNets", "Select nets", // CPS Lab
+    "CmdSelectCells", "Select parts", // CPS Lab
+    "CmdSelectPins", "Select pins", // CPS Lab
     "CmdToggleFrequentlyRead", "Toggle Frequently Read",
     "CmdInvokeInverseSearch", "Invoke Inverse Search",
     "CmdExec", "Execute a program",

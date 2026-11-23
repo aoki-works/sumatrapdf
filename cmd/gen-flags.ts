@@ -79,6 +79,14 @@ const args = [
     "PreviewPipe", "preview-pipe",
     "IFilterPipe", "ifilter-pipe",
     "TestPreviewPipe", "test-preview-pipe",
+    // CPS Lab
+    "PdfSyncDDEService", "pdfsync-dde-service",
+    "PdfSyncDDETopic", "pdfsync-dde-topic",
+    "UserAppDDEService", "userapp-dde-service",
+    "UserAppDDETopic", "userapp-dde-topic",
+    "UserAppDDEDebugTopic", "userapp-dde-debug-topic",
+    "DocumentMode", "document-mode",
+    "ExportTextBlocks", "export-text-blocks",
 ];
 
 function generateCode(): string {

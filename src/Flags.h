@@ -125,6 +125,29 @@ struct Flags {
     // for testing preview pipe functionality
     char* testPreviewPipePath = nullptr;
 
+    // CPS Lab
+#if defined(DEBUG)
+    // DDE Service/Topic name for PdfSync
+    char* pdfsync_dde_service = str::Dup("xxxSUMATRA");
+    char* pdfsync_dde_topic = str::Dup("xxxcontrol");
+
+    // DDE Service/Topic name for user application
+    char* userapp_dde_service = str::Dup("xxxUSERAPP");
+    char* userapp_dde_topic = str::Dup("xxxcontrol");
+    char* userapp_dde_debug_topic = nullptr;
+#else
+    // DDE Service/Topic name for PdfSync
+    char* pdfsync_dde_service = nullptr;
+    char* pdfsync_dde_topic = nullptr;
+
+    // DDE Service/Topic name for user application
+    char* userapp_dde_service = nullptr;
+    char* userapp_dde_topic = nullptr;
+    char* userapp_dde_debug_topic = nullptr;
+#endif
+    bool document_mode = false;         // CPS Lab
+    char* export_text_blocks = nullptr; // CPS Lab
+
     Flags() = default;
     ~Flags();
 };

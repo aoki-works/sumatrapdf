@@ -38,6 +38,8 @@ enum class Arg {
     MangaMode = 64, Search = 65, AllUsers = 66, AllUsers2 = 67,
     RunInstallNow = 68, Adobe = 69, DDE = 70, EngineDump = 71,
     SetColorRange = 72, PreviewPipe = 73, IFilterPipe = 74, TestPreviewPipe = 75,
+    PdfSyncDDEService = 76, PdfSyncDDETopic = 77, UserAppDDEService = 78, UserAppDDETopic = 79,
+    UserAppDDEDebugTopic = 80, DocumentMode = 81, ExportTextBlocks = 82,
 };
 
 static const char* gArgNames =
@@ -59,7 +61,9 @@ static const char* gArgNames =
     "fwdsearch-offset\0" "fwdsearch-width\0" "fwdsearch-color\0" "fwdsearch-permanent\0"
     "manga-mode\0" "search\0" "all-users\0" "allusers\0"
     "run-install-now\0" "a\0" "dde\0" "engine-dump\0"
-    "set-color-range\0" "preview-pipe\0" "ifilter-pipe\0" "test-preview-pipe\0";
+    "set-color-range\0" "preview-pipe\0" "ifilter-pipe\0" "test-preview-pipe\0"
+    "pdfsync-dde-service\0" "pdfsync-dde-topic\0" "userapp-dde-service\0" "userapp-dde-topic\0"
+    "userapp-dde-debug-topic\0" "document-mode\0" "export-text-blocks\0";
 // clang-format on
 // @gen-end flags
 
@@ -689,6 +693,35 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
             i.testPreviewPipePath = str::Dup(param);
             continue;
         }
+        // CPS Lab
+        if (arg == Arg::PdfSyncDDEService) {
+            i.pdfsync_dde_service = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::PdfSyncDDETopic) {
+            i.pdfsync_dde_topic = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::UserAppDDEService) {
+            i.userapp_dde_service = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::UserAppDDETopic) {
+            i.userapp_dde_topic = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::UserAppDDEDebugTopic) {
+            i.userapp_dde_debug_topic = str::Dup(param);
+            continue;
+        }
+        if (arg == Arg::DocumentMode) {
+            i.document_mode = true;
+            continue;
+        }
+        if (arg == Arg::ExportTextBlocks) {
+            i.export_text_blocks = str::Dup(param);
+            continue;
+        }
         // again, argName is any of the known args, so assume it's a file starting with '-'
         args.RewindParam();
 
@@ -732,4 +765,11 @@ Flags::~Flags() {
     str::Free(previewPipeName);
     str::Free(ifilterPipeName);
     str::Free(testPreviewPipePath);
+    // CPS Lab
+    str::Free(pdfsync_dde_service);
+    str::Free(pdfsync_dde_topic);
+    str::Free(userapp_dde_service);
+    str::Free(userapp_dde_topic);
+    str::Free(userapp_dde_debug_topic);
+    str::Free(export_text_blocks);
 }

@@ -5,7 +5,44 @@
 
 namespace strconv {
 
-WCHAR* Utf8ToWStr(const char* s, size_t cb, Allocator* a) {
+WCHAR* Utf8ToWStr(const char* s, size_t cb,
+                  Allocator* a) { // CPS Lab: fall back to CP_ACP (Shift-JIS) when not valid UTF-8
+    // subtle: if s is nullptr, we return nullptr. if empty string => we return empty string
+    if (!s) {
+        return nullptr;
+    }
+    if (cb == (size_t)-1) {
+        cb = str::Len(s);
+    }
+    if (cb == 0) {
+        return Allocator::AllocArray<WCHAR>(a, 1);
+    }
+    UINT codePage = CP_UTF8; // default code is UFT8
+    // Trye to UTF-8.
+    int cchNeeded = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s, (int)cb, nullptr, 0);
+    if (cchNeeded <= 0) {
+        // this test is not UFT8, try to Shift-JIS/ANSI(CP_ACP)
+        codePage = CP_ACP;
+        cchNeeded = MultiByteToWideChar(CP_ACP, 0, s, (int)cb, nullptr, 0);
+        if (cchNeeded <= 0) {
+            // Unkonwn code (error).
+            return nullptr;
+        }
+    }
+    // memory allocation
+    WCHAR* res = Allocator::AllocArray<WCHAR>(a, cchNeeded + 1);
+    if (!res) {
+        return nullptr;
+    }
+    // convert to WCHAR
+    int cchConverted = MultiByteToWideChar(codePage, 0, s, (int)cb, res, cchNeeded);
+    ReportIf(cchConverted != cchNeeded);
+    res[cchConverted] = L'\0';
+    return res;
+}
+
+// CPS Lab: original implementation of Utf8ToWStr
+WCHAR* regacy_Utf8ToWStr(const char* s, size_t cb, Allocator* a) {
     // subtle: if s is nullptr, we return nullptr. if empty string => we return empty string
     if (!s) {
         return nullptr;

@@ -616,7 +616,7 @@ const globalPrefs: Field[] = [
       "background color of the non-document windows, traditionally yellow",
     ),
   ),
-  mkField("NoHomeTab", Bool, false, "if true, doesn't open Home tab"),
+  mkField("NoHomeTab", Bool, true, "if true, doesn't open Home tab"), // CPS Lab
   mkField(
     "HomePageSortByFrequentlyRead",
     Bool,
@@ -635,11 +635,11 @@ const globalPrefs: Field[] = [
     ),
     "2.5",
   ),
-  mkField("RememberOpenedFiles", Bool, true, "if true, we remember which files we opened and their display settings"),
+  mkField("RememberOpenedFiles", Bool, false, "if true, we remember which files we opened and their display settings"), // CPS Lab
   mkField(
     "RememberStatePerDocument",
     Bool,
-    true,
+    false, // CPS Lab
     "if true, we store display settings for each document separately (i.e. everything " +
       "after UseDefaultState in FileStates)",
   ),
@@ -657,7 +657,7 @@ const globalPrefs: Field[] = [
       mkField(
         "ShowMenubar",
         Bool,
-        true,
+        false, // CPS Lab
         "if false, the menu bar will be hidden for all newly opened windows " +
           "(use F9 to show it until the window closes or Alt to show it just briefly), only applies if UseTabs is false",
       ),
@@ -669,7 +669,7 @@ const globalPrefs: Field[] = [
   mkField(
     "ShowToc",
     Bool,
-    true,
+    false, // CPS Lab
     "if true, we show table of contents (Bookmarks) sidebar if it's present " + "in the document",
   ),
   setVersion(mkField("ShowLinks", Bool, false, "if true we draw a blue border around links in the document"), "3.6"),
@@ -733,7 +733,7 @@ const globalPrefs: Field[] = [
       "if true, we use Windows system colors for background/text color. Over-rides other settings",
     ),
   ),
-  setVersion(mkField("UseTabs", Bool, true, "if true, documents are opened in tabs instead of new windows"), "3.0"),
+  setVersion(mkField("UseTabs", Bool, false, "if true, documents are opened in tabs instead of new windows"), "3.0"), // CPS Lab
   setDoc(
     setExpert(
       mkCompactArray(
@@ -829,6 +829,18 @@ const globalPrefs: Field[] = [
     setStructName(mkCompactStruct("WindowPos", windowPos, "default position (can be on any monitor)"), "Rect"),
     "default position (x, y) and size (width, height) of the window",
   ),
+  setExpert(
+    mkField(
+      "PrintableCharAsWordChar",
+      Bool,
+      true,
+      "if true, all printable characters except white space are recognized as word-characteres. " +
+        "if false, number, alphabetic and under score (_) are recognized as word-characteres",
+    ),
+  ), // CPS Lab
+  setExpert(
+    mkField("CircularSelectionRegion", Bool, false, "if true, a circular shape is used for the area selection"),
+  ), // CPS Lab
 
   mkArray("FileStates", fileSettings, "information about opened files (in most recently used order)"),
   setVersion(mkArray("SessionData", sessionData, "state of the last session, usage depends on RestoreSession"), "3.1"),
