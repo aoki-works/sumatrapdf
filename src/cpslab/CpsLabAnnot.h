@@ -32,14 +32,16 @@ extern const char* MarkWords(MainWindow* win, const char* json_file);
 extern const char* MarkWords(MainWindow* win, StrVec& words);
 extern void CloseEvent(WindowTab* tab);
 extern void CloseEvent(MainWindow* win);
-extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
-extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep="\r\n", Markers* mk=nullptr);
+extern char* GetWordsInCircle(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep = "\r\n",
+                              Markers* mk = nullptr);
+extern char* GetWordsInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep = "\r\n",
+                              Markers* mk = nullptr);
 extern char* GetTextInRegion(const DisplayModel* dm, int pageNo, const Rect regionI, const char* lineSep = "\r\n");
 extern void sendClickPoint(MainWindow* win, int x, int y);
-extern void sendSelectText(MainWindow* win, bool conti=false);
-extern void sendSelectImage(MainWindow* win, int x, int y, bool conti=false);
+extern void sendSelectText(MainWindow* win, bool conti = false);
+extern void sendSelectImage(MainWindow* win, int x, int y, bool conti = false);
 void getPageBlocks(MainWindow* win, int pageNo, Vec<PageText*>& blocks, Vec<IPageElement*>& images);
-void getBlocks(MainWindow* win, std::vector<std::pair<Vec<PageText*>, Vec<IPageElement*> > >&);
+void getBlocks(MainWindow* win, std::vector<std::pair<Vec<PageText*>, Vec<IPageElement*>>>&);
 
 enum class CpsMode {
     None = 0,
@@ -57,53 +59,50 @@ struct TmpAllocator : Allocator {
     void Free(const void*);
 };
 
-class MarkerNode
-{
+class MarkerNode {
   private:
-    WindowTab*  tab_;
+    WindowTab* tab_;
     AutoFreeStr filePath_;
     void* user_area_;
 
   public:
-    AutoFreeStr keyword;        // [Cell|Net|Pin| etc..]
-    PdfColor mark_color;        // marker color
-    PdfColor select_color;      // selector color
-    StrVec words;               // all marker words
-    Vec<Annotation*> annotations;   // marker annotations
-    Vec<char*> mark_words;         // mark wores in annotations
-    Vec<Rect> rects;                // marker rectangles.
-    Vec<int> pages;                 // marker pages.
+    AutoFreeStr keyword;          // [Cell|Net|Pin| etc..]
+    PdfColor mark_color;          // marker color
+    PdfColor select_color;        // selector color
+    StrVec words;                 // all marker words
+    Vec<Annotation*> annotations; // marker annotations
+    Vec<char*> mark_words;        // mark wores in annotations
+    Vec<Rect> rects;              // marker rectangles.
+    Vec<int> pages;               // marker pages.
 
-  public:   // working area
-    StrVec selected_words;      // selected_words
-    Vec<const char*> assoc_cells;    // Cell that associated with the selected pin.
+  public:                         // working area
+    StrVec selected_words;        // selected_words
+    Vec<const char*> assoc_cells; // Cell that associated with the selected pin.
 
   public:
     MarkerNode(WindowTab* tab);
     ~MarkerNode();
 
   public:
-    const char* selectWord(MainWindow* win, const int pageNo, char* word, bool conti=false);
-    const char* selectWords(MainWindow* win, StrVec& words, bool conti=false);
+    const char* selectWord(MainWindow* win, const int pageNo, char* word, bool conti = false);
+    const char* selectWords(MainWindow* win, StrVec& words, bool conti = false);
     size_t getMarkWordsByPageNo(const int pageNo, StrVec& result);
-    int getPage(const char* word, const int pageNo=-1, const bool sens=false);
-    bool tExist(const int pageNo, const char* word, const bool sens=false);
+    int getPage(const char* word, const int pageNo = -1, const bool sens = false);
+    bool tExist(const int pageNo, const char* word, const bool sens = false);
 
   public:
     void* userArea();
     void setUserArea(void*);
 };
 
-struct PageInCell
-{
+struct PageInCell {
     int pageNo;
     str::Str cells;
 };
 
-class Markers
-{
+class Markers {
   private:
-    WindowTab*  tab_;
+    WindowTab* tab_;
     uint select_;
     Vec<PageInCell> page_in_cell_;
     bool sense_;
@@ -114,19 +113,22 @@ class Markers
   public:
     Markers(WindowTab* tab);
     ~Markers();
+
   public:
-    void sendSelectMessage(MainWindow* win, bool conti=false);
+    void sendSelectMessage(MainWindow* win, bool conti = false);
     void parse(const char* fname, bool& have_page_number);
+
   public:
     void selectWords(MainWindow* win, const char* keyword, StrVec& words);
     void selectWords(MainWindow* win, StrVec& words);
+
   public:
     void deleteAnnotations();
     MarkerNode* getMarker(const char* keyword);
     size_t getMarkersByWord(const WCHAR* word, Vec<MarkerNode*>& result);
     size_t getMarkersByWord(const char* word, Vec<MarkerNode*>& result);
     size_t getMarkersByTS(TextSelection* ts, Vec<MarkerNode*>& result);
-    size_t getMarkersByRect(Rect& r, Vec<MarkerNode*>& result, bool specified_object_only=false);
+    size_t getMarkersByRect(Rect& r, Vec<MarkerNode*>& result, bool specified_object_only = false);
     void setSelection(const char* keyword);
     void unsetSelection(const char* keyword);
     bool isSelection(const char* keyword);
