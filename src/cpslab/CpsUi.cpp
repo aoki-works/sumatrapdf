@@ -50,4 +50,32 @@ void OnSelectCommand(MainWindow* win, WindowTab* tab, int cmdId) {
     }
 }
 
+// restores the checked state of the Nets / Parts / Pins buttons from the tab's markers
+void UpdateToolbarButtons(MainWindow* win) {
+    HWND hwnd = win->hwndToolbar;
+    auto s = SendMessage(hwnd, TB_GETSTATE, CmdSelectNets, 0);
+    if (win->CurrentTab()->markers->isSelection("Net")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectNets, s);
+
+    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectCells, 0);
+    if (win->CurrentTab()->markers->isSelection("Cell")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectCells, s);
+
+    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectPins, 0);
+    if (win->CurrentTab()->markers->isSelection("Pin")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectPins, s);
+}
+
 } // namespace cpslab

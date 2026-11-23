@@ -43,6 +43,7 @@ extern "C" {
 #include "wingui/Layout.h"
 #include "wingui/WinGui.h"
 #include "cpslab/CpsLabAnnot.h"
+#include "cpslab/CpsUi.h"
 
 #include "utils/Log.h"
 
@@ -673,30 +674,7 @@ void UpdateToolbarState(MainWindow* win) {
         }
     }
 
-    // CPS Lab: restore the checked state of the Nets / Parts / Pins buttons from the tab's markers
-    auto s = SendMessage(hwnd, TB_GETSTATE, CmdSelectNets, 0);
-    if (win->CurrentTab()->markers->isSelection("Net")) {
-        s |= TBSTATE_CHECKED;
-    } else {
-        s &= ~TBSTATE_CHECKED;
-    }
-    SendMessage(hwnd, TB_SETSTATE, CmdSelectNets, s);
-
-    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectCells, 0);
-    if (win->CurrentTab()->markers->isSelection("Cell")) {
-        s |= TBSTATE_CHECKED;
-    } else {
-        s &= ~TBSTATE_CHECKED;
-    }
-    SendMessage(hwnd, TB_SETSTATE, CmdSelectCells, s);
-
-    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectPins, 0);
-    if (win->CurrentTab()->markers->isSelection("Pin")) {
-        s |= TBSTATE_CHECKED;
-    } else {
-        s &= ~TBSTATE_CHECKED;
-    }
-    SendMessage(hwnd, TB_SETSTATE, CmdSelectPins, s);
+    cpslab::UpdateToolbarButtons(win); // CPS Lab
 }
 
 static void CreateFindBox(MainWindow* win, HFONT hfont, int iconDy) {
