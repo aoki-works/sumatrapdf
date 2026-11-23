@@ -141,6 +141,9 @@
     <ClInclude Include="..\src\Commands.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\CpsLabAnnot.h">
+      <Filter>src</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\CrashHandler.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -429,6 +432,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Commands.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\CpsLabAnnot.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\CrashHandler.cpp">
@@ -828,6 +834,9 @@
       <Filter>cmd</Filter>
     </None>
     <None Include="..\cmd\cppcheck.ts">
+      <Filter>cmd</Filter>
+    </None>
+    <None Include="..\cmd\cps-build.ts">
       <Filter>cmd</Filter>
     </None>
     <None Include="..\cmd\diff.ts">

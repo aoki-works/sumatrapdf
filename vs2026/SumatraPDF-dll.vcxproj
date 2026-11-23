@@ -1077,6 +1077,7 @@
     <ClInclude Include="..\src\ChmModel.h" />
     <ClInclude Include="..\src\CommandPalette.h" />
     <ClInclude Include="..\src\Commands.h" />
+    <ClInclude Include="..\src\CpsLabAnnot.h" />
     <ClInclude Include="..\src\CrashHandler.h" />
     <ClInclude Include="..\src\DisplayMode.h" />
     <ClInclude Include="..\src\DisplayModel.h" />
@@ -1175,6 +1176,7 @@
     <ClCompile Include="..\src\ChmModel.cpp" />
     <ClCompile Include="..\src\CommandPalette.cpp" />
     <ClCompile Include="..\src\Commands.cpp" />
+    <ClCompile Include="..\src\CpsLabAnnot.cpp" />
     <ClCompile Include="..\src\CrashHandler.cpp" />
     <ClCompile Include="..\src\DisplayMode.cpp" />
     <ClCompile Include="..\src\DisplayModel.cpp" />
@@ -1528,6 +1530,7 @@
     <None Include="..\cmd\clean.ts" />
     <None Include="..\cmd\compress-docs-images.ts" />
     <None Include="..\cmd\cppcheck.ts" />
+    <None Include="..\cmd\cps-build.ts" />
     <None Include="..\cmd\diff.ts" />
     <None Include="..\cmd\format.ts" />
     <None Include="..\cmd\gen-commands.ts" />
