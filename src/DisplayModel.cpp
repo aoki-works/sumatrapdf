@@ -62,6 +62,7 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
+#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -1730,23 +1731,15 @@ char* DisplayModel::GetTextInRegion(int pageNo, RectF region) const {
     if (str::IsEmpty(pageText)) {
         return nullptr;
     }
-
-    str::WStr result;
+    // CPS Lab: pick words in the region via cpslab helpers (replaces the 3.6 implementation)
+    char* result;
     Rect regionI = region.Round();
-    for (const WCHAR* src = pageText; *src; src++) {
-        if (*src != '\n') {
-            Rect rect = coords[src - pageText];
-            Rect isect = regionI.Intersect(rect);
-            if (!isect.IsEmpty() && 1.0 * isect.dx * isect.dy / (rect.dx * rect.dy) >= 0.3) {
-                result.AppendChar(*src);
-            }
-        } else if (result.size() > 0 && result.Last() != '\n') {
-            result.Append(L"\r\n", 2);
-        }
+    if (gGlobalPrefs->circularSelectionRegion) {
+        result = cpslab::GetWordsInCircle(this, pageNo, regionI);
+    } else {
+        result = cpslab::GetWordsInRegion(this, pageNo, regionI);
     }
-
-    WCHAR* ws = result.Get();
-    return ToUtf8(ws);
+    return result;
 }
 
 // returns true if it was necessary to scroll the display (horizontally or vertically)

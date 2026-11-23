@@ -432,3 +432,51 @@ bool EngineBase::HandleLink(IPageDestination*, ILinkHandler*) {
     // if not implemented in derived classes
     return false;
 }
+
+void EngineBase::ExtractPageBlocks(int pageNo, Vec<PageText*>& v1, Vec<IPageElement*>& v2) {}
+// skip file:// and maybe file:/// from s. It might be added by mupdf
+// do not free the result
+static const char* SkipFileProtocolTemp(const char* s) {
+    if (!str::StartsWithI(s, "file://")) {
+        return s;
+    }
+    s += 7; // skip "file://"
+    while (*s == '/') {
+        s++;
+    }
+    return s;
+}
+
+// skip mailto: from s
+static const char* SkipMailProtocolTemp(const char* s) {
+    if (!str::StartsWithI(s, "mailto:")) {
+        return s;
+    }
+    s += 7;             // skip "mailto:"
+    while (*s == '/') { // probably not needed but just in case
+        s++;
+    }
+    return s;
+}
+
+// s could be in format "file://path.pdf#page=1"
+// We only want the "path.pdf"
+// TODO: could also parse page=1 and return it so that
+// we can go to the right place
+TempStr CleanupFileURLTemp(const char* s) {
+    s = SkipFileProtocolTemp(s);
+    char* s2 = str::DupTemp(s);
+    char* s3 = str::FindChar(s2, '#');
+    if (s3) {
+        *s3 = 0;
+    }
+    return s2;
+}
+
+// s could be in format "file://path.pdf#page=1" or "mailto:foo@bar.com"
+// We only want the "path.pdf" / "foo@bar.com"
+TempStr CleanupURLForClipbardCopyTemp(const char* s) {
+    TempStr s2 = CleanupFileURLTemp(s);
+    s2 = (char*)SkipMailProtocolTemp(s2);
+    return s2;
+}

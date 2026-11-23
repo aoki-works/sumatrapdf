@@ -10,11 +10,13 @@ struct TextSearch : public TextSelection {
     TextSearch(EngineBase* engine, DocumentTextCache* textCache);
     ~TextSearch();
 
+    bool GetSensitive() const; // CPS Lab: returns matchCase
     void SetMatchCase(bool sensitive);
     void SetDirection(Direction direction);
     void SetLastResult(TextSelection* sel);
-    TextSel* FindFirst(int page, const WCHAR* text);
-    TextSel* FindNext();
+    TextSel* FindFirst(int page, const WCHAR* text, bool conti = false); // CPS Lab: conti
+    TextSel* FindNext(bool conti = false, bool only_in_page = false);    // CPS Lab
+    bool wordSearch = false;                                             // CPS Lab
 
     int GetCurrentPageNo() const;
     int GetSearchHitStartPageNo() const;
@@ -27,6 +29,7 @@ struct TextSearch : public TextSelection {
         int offset;
     };
 
+    Vec<const WCHAR*> findWords; // CPS lab.
     WCHAR* findText = nullptr;
     WCHAR* anchor = nullptr;
     int findPage = 0;
@@ -40,14 +43,16 @@ struct TextSearch : public TextSelection {
     bool matchWordEnd = false;
 
     void SetText(const WCHAR* text);
-    bool FindTextInPage(int pageNo, PageAndOffset* finalGlyph);
-    bool FindStartingAtPage(int pageNo);
+    bool FindTextInPage(int pageNo, PageAndOffset* finalGlyph, bool conti = false); // CPS Lab: conti
+    bool FindStartingAtPage(int pageNo, bool conti = false);                        // CPS Lab: conti
     PageAndOffset MatchEnd(const WCHAR* start) const;
+    PageAndOffset wMatchEnd(const WCHAR* start) const; // CPS Lab
 
     void Clear();
     void Reset();
 
     const WCHAR* pageText = nullptr;
+    Rect* pageRects = nullptr; // CPS Lab
     int findIndex = 0;
 
     WCHAR* lastText = nullptr;

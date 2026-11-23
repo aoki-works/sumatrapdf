@@ -282,7 +282,7 @@ void SetQuadPointsAsRect(Annotation* annot, const Vec<RectF>& rects) {
     {
         auto ctx = e->Ctx();
         ScopedCritSec cs(e->ctxAccess);
-        fz_quad quads[512];
+        fz_quad quads[2048];
         int n = rects.Size();
         if (n == 0) {
             return;
@@ -296,7 +296,7 @@ void SetQuadPointsAsRect(Annotation* annot, const Vec<RectF>& rects) {
         }
         fz_try(ctx) {
             pdf_clear_annot_quad_points(ctx, a);
-            pdf_set_annot_quad_points(ctx, a, n, quads);
+            pdf_set_annot_quad_points(ctx, a, n < kMaxQuads ? n : kMaxQuads, quads); // CPS Lab
             pdf_update_annot(ctx, a);
         }
         fz_catch(ctx) {

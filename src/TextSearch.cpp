@@ -13,6 +13,7 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
+#include "CpsLabAnnot.h"
 
 #define SkipWhitespace(c) for (; str::IsWs(*(c)); (c)++)
 // ignore spaces between CJK glyphs but not between Latin, Greek, Cyrillic, etc. letters
@@ -28,6 +29,7 @@ TextSearch::TextSearch(EngineBase* engine, DocumentTextCache* textCache) : TextS
     nPages = engine->PageCount();
     pagesToSkip.SetSize(nPages);
     markAllPagesNonSkip(pagesToSkip);
+    wordSearch = false;
 }
 
 TextSearch::~TextSearch() {
@@ -35,6 +37,10 @@ TextSearch::~TextSearch() {
 }
 
 void TextSearch::Clear() {
+    while (!findWords.IsEmpty()) {
+        const WCHAR* w = findWords.Pop();
+        str::Free(w);
+    }
     str::FreePtr(&findText);
     str::FreePtr(&anchor);
     str::FreePtr(&lastText);
@@ -43,6 +49,7 @@ void TextSearch::Clear() {
 
 void TextSearch::Reset() {
     pageText = nullptr;
+    pageRects = nullptr; // CPS Lab.
     TextSelection::Reset();
 }
 
@@ -100,7 +107,28 @@ void TextSearch::SetText(const WCHAR* text) {
         this->findText[str::Len(this->findText) - 1] = '\0';
     }
 
+    // CPS Lab.
+    if (this->findText) {
+        char* tmpFindText = strconv::WStrToUtf8(this->findText);
+        StrVec wTmp;
+        Split(&wTmp, tmpFindText, " ", true);
+        for (int k = 0; k < wTmp.Size(); k++) {
+            char* w = wTmp.At(k);
+            const WCHAR* wd = strconv::Utf8ToWStr(w, (size_t)-1);
+            findWords.Append(wd);
+        }
+        str::Free(tmpFindText);
+        if (!findWords.IsEmpty()) {
+            str::Free(anchor);
+            anchor = nullptr;
+        }
+    }
+
     markAllPagesNonSkip(pagesToSkip);
+}
+
+bool TextSearch::GetSensitive() const { // CPS Lab
+    return matchCase;
 }
 
 void TextSearch::SetMatchCase(bool newMatchCase) {
@@ -138,7 +166,7 @@ void TextSearch::SetLastResult(TextSelection* sel) {
     searchHitStartAt = findPage = std::min(startPage, endPage);
     findPage = std::max(startPage, endPage);
     findIndex = (findPage == endPage ? endGlyph : startGlyph);
-    pageText = textCache->GetTextForPage(findPage);
+    pageText = textCache->GetTextForPage(findPage, nullptr, &pageRects); // CPS Lab
     forward = true;
 }
 
@@ -160,6 +188,73 @@ static inline WCHAR CharToLower(WCHAR c) {
         return c + 32;
     }
     return CharToLower2(c);
+}
+
+// == CPS LAB. =====================================================================
+TextSearch::PageAndOffset TextSearch::wMatchEnd(const WCHAR* start) const {
+    const WCHAR* end = start;
+    const PageAndOffset notFound = {-1, -1};
+    int currentPage = findPage;
+    const WCHAR* currentPageText = pageText;
+
+    if (findWords.IsEmpty()) {
+        return notFound;
+    }
+    if (matchWordStart && start > pageText && isWordChar(start[-1]) && isWordChar(start[0])) {
+        return notFound;
+    }
+
+    Vec<const WCHAR*> words = findWords;
+    while (true) {
+        if (!*end) {
+            return notFound;
+        }
+        Vec<const WCHAR*> matched_words;
+        while (!words.IsEmpty()) {
+            const WCHAR* match = words.Pop();
+            bool isMatch = false;
+            if (matchCase) { // CPS Lab
+                isMatch = *match == *end;
+            } else {
+                WCHAR matchLower = CharToLower(*match);
+                WCHAR matchEnd = CharToLower(*end);
+                isMatch = matchLower == matchEnd;
+            }
+            if (isMatch) {
+                match++;
+                if (!(*match)) { // EOL
+                    if (matchWordEnd && end > currentPageText && isWordChar(end[-1]) && isWordChar(end[0])) {
+                        // not matched
+                    } else if (cpslab::IsWord(pageText, pageRects, start, end + 1)) {
+                        int off = (int)(end - currentPageText) + 1;
+                        return {currentPage, off};
+                    }
+                } else {
+                    matched_words.Append(match);
+                }
+            }
+        }
+        if (matched_words.IsEmpty()) {
+            return notFound;
+        }
+        if (!(*end)) {
+            // not skip to next page
+            ++currentPage;
+            end = currentPageText = textCache->GetTextForPage(currentPage);
+            return notFound;
+        }
+        end++;
+        SkipWhitespace(end);
+        while ((!*end) && (currentPage < nPages)) {
+            // treat page break as whitespace, too
+            ++currentPage;
+            end = currentPageText = textCache->GetTextForPage(currentPage);
+            SkipWhitespace(end);
+        }
+        words = matched_words;
+        matched_words.Reset();
+    }
+    return notFound;
 }
 
 // try to match "findText" from "start" with whitespace tolerance
@@ -222,6 +317,9 @@ TextSearch::PageAndOffset TextSearch::MatchEnd(const WCHAR* start) const {
             // -> skip to next page
             ++currentPage;
             end = currentPageText = textCache->GetTextForPage(currentPage);
+            if (wordSearch) {
+                return notFound; // CPS Lab.
+            }
         }
         // treat "??" and "? ?" differently, since '?' could have been a word
         // character that's just missing an encoding (and '?' is the replacement
@@ -242,6 +340,13 @@ TextSearch::PageAndOffset TextSearch::MatchEnd(const WCHAR* start) const {
         return notFound;
     }
 
+    // CPS Lab
+    if (wordSearch) {
+        if (!cpslab::IsWord(pageText, pageRects, start, end)) {
+            return notFound;
+        }
+    }
+
     int off = (int)(end - currentPageText);
     return {currentPage, off};
 }
@@ -254,7 +359,7 @@ static const WCHAR* GetNextIndex(const WCHAR* base, int offset, bool forward) {
     return c;
 }
 
-bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyph) {
+bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyph, bool conti) {
     if (str::IsEmpty(findText)) {
         return false;
     }
@@ -285,18 +390,22 @@ bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyp
             return false;
         }
         findIndex = (int)(found - pageText) + (forward ? 1 : 0);
-        fg = MatchEnd(found);
+        if (findWords.IsEmpty()) {
+            fg = MatchEnd(found);
+        } else {
+            fg = wMatchEnd(found); // CPS Lab
+        }
     } while (fg.page <= 0);
 
     int offset = (int)(found - pageText);
     searchHitStartAt = pageNo;
     StartAt(pageNo, offset);
-    SelectUpTo(fg.page, fg.offset);
+    SelectUpTo(fg.page, fg.offset, conti);
     findIndex = forward ? fg.offset : offset;
 
     // try again if the found text is completely outside the page's mediabox
     if (result.len == 0) {
-        return FindTextInPage(pageNo, finalGlyph);
+        return FindTextInPage(pageNo, finalGlyph, conti);
     }
 
     if (finalGlyph) {
@@ -305,7 +414,7 @@ bool TextSearch::FindTextInPage(int pageNo, TextSearch::PageAndOffset* finalGlyp
     return true;
 }
 
-bool TextSearch::FindStartingAtPage(int pageNo) {
+bool TextSearch::FindStartingAtPage(int pageNo, bool conti) { // CPS Lab: conti
     if (str::IsEmpty(findText)) {
         return false;
     }
@@ -321,17 +430,17 @@ bool TextSearch::FindStartingAtPage(int pageNo) {
 
         Reset();
 
-        pageText = textCache->GetTextForPage(pageNo, &findIndex);
+        pageText = textCache->GetTextForPage(pageNo, &findIndex, &pageRects);
         if (pageText) {
             if (forward) {
                 findIndex = 0;
             }
             PageAndOffset r;
-            if (FindTextInPage(pageNo, &r)) {
+            if (FindTextInPage(pageNo, &r, conti)) {
                 if (forward) {
                     if (findPage != r.page) {
                         findPage = r.page;
-                        pageText = textCache->GetTextForPage(findPage);
+                        pageText = textCache->GetTextForPage(findPage, nullptr, &pageRects);
                     }
                     findIndex = r.offset;
                 }
@@ -349,16 +458,16 @@ bool TextSearch::FindStartingAtPage(int pageNo) {
     return false;
 }
 
-TextSel* TextSearch::FindFirst(int page, const WCHAR* text) {
+TextSel* TextSearch::FindFirst(int page, const WCHAR* text, bool conti) { // CPS Lab: conti
     SetText(text);
 
-    if (FindStartingAtPage(page)) {
+    if (FindStartingAtPage(page, conti)) { // CPS Lab
         return &result;
     }
     return nullptr;
 }
 
-TextSel* TextSearch::FindNext() {
+TextSel* TextSearch::FindNext(bool conti, bool only_in_page) { // CPS Lab
     ReportIf(!findText);
     if (!findText) {
         return nullptr;
@@ -370,17 +479,20 @@ TextSel* TextSearch::FindNext() {
     UpdateProgress(progressCb, findPage, nPages);
 
     PageAndOffset finalGlyph;
-    if (FindTextInPage(findPage, &finalGlyph)) {
+    if (FindTextInPage(findPage, &finalGlyph, conti)) {
         if (forward) {
             findPage = finalGlyph.page;
             findIndex = finalGlyph.offset;
-            pageText = textCache->GetTextForPage(findPage);
+            pageText = textCache->GetTextForPage(findPage, nullptr, &pageRects);
         }
         return &result;
     }
 
+    if (only_in_page) { // CPS.Lab
+        return nullptr;
+    }
     auto next = forward ? 1 : -1;
-    if (FindStartingAtPage(findPage + next)) {
+    if (FindStartingAtPage(findPage + next, conti)) { // CPS Lab
         return &result;
     }
     return nullptr;
