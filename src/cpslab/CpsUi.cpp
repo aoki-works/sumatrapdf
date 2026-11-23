@@ -7,6 +7,7 @@
 #include "wingui/UIModels.h"
 
 #include "Settings.h"
+#include "Flags.h"
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
@@ -76,6 +77,36 @@ void UpdateToolbarButtons(MainWindow* win) {
         s &= ~TBSTATE_CHECKED;
     }
     SendMessage(hwnd, TB_SETSTATE, CmdSelectPins, s);
+}
+
+// applies CPS Lab command-line flags (DDE service/topic names, document mode, text export)
+void InitFromFlags(const Flags& flags) {
+    // DDE Server/Topic name for PdfSync
+    if (flags.pdfsync_dde_service != nullptr) {
+        cpslab::PDFSYNC_DDE_SERVICE = strconv::Utf8ToWStr(flags.pdfsync_dde_service);
+    }
+    // logf("PDFSYNC_DDE_SERVICE : '%ls'\n", PDFSYNC_DDE_SERVICE);
+    if (flags.pdfsync_dde_topic != nullptr) {
+        cpslab::PDFSYNC_DDE_TOPIC = strconv::Utf8ToWStr(flags.pdfsync_dde_topic);
+    }
+    // logf("PDFSYNC_DDE_TOPIC : '%ls'\n", PDFSYNC_DDE_TOPIC);
+
+    // DDE Server/Topic name for UserApp
+    if (flags.userapp_dde_service != nullptr) {
+        cpslab::USERAPP_DDE_SERVICE = strconv::Utf8ToWStr(flags.userapp_dde_service);
+    }
+    if (flags.userapp_dde_topic != nullptr) {
+        cpslab::USERAPP_DDE_TOPIC = strconv::Utf8ToWStr(flags.userapp_dde_topic);
+    }
+    if (flags.userapp_dde_debug_topic != nullptr) {
+        cpslab::USERAPP_DDE_DEBUG_TOPIC = strconv::Utf8ToWStr(flags.userapp_dde_debug_topic);
+    }
+    if (flags.document_mode) {
+        cpslab::MODE = cpslab::CpsMode::Document;
+    }
+    if (flags.export_text_blocks) {
+        cpslab::EXPORT_TEXT_BLOCKS = flags.export_text_blocks;
+    }
 }
 
 } // namespace cpslab
