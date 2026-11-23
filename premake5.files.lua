@@ -779,7 +779,10 @@ function sumatrapdf_files()
     "VirtWnd.*",
     "Uninstaller.cpp",
     "WindowTab.*",
-    "CpsLabAnnot.*", -- CPS Lab
+  })
+  files_in_dir("src/cpslab", { -- CPS Lab
+    "*.cpp",
+    "*.h",
   })
   filter { "configurations:Debug or DebugFull" }
   files_in_dir("src", {

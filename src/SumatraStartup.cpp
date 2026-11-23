@@ -73,7 +73,7 @@
 #include "Theme.h"
 #include "DarkModeSubclass.h"
 #include "CommandPalette.h"
-#include "CpsLabAnnot.h" // CPS Lab
+#include "cpslab/CpsLabAnnot.h" // CPS Lab
 
 #include "utils/Log.h"
 

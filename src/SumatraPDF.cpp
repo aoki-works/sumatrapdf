@@ -90,7 +90,7 @@
 #include "Theme.h"
 #include "Caption.h"
 #include "DarkModeSubclass.h"
-#include "CpsLabAnnot.h" // CPS Lab
+#include "cpslab/CpsLabAnnot.h" // CPS Lab
 
 #include "utils/Log.h"
 

@@ -42,7 +42,7 @@ extern "C" {
 #include "DarkModeSubclass.h"
 #include "wingui/Layout.h"
 #include "wingui/WinGui.h"
-#include "CpsLabAnnot.h"
+#include "cpslab/CpsLabAnnot.h"
 
 #include "utils/Log.h"
 

@@ -22,7 +22,7 @@
 #include "Selection.h"
 #include "Translations.h"
 #include "EditAnnotations.h"
-#include "CpsLabAnnot.h"
+#include "cpslab/CpsLabAnnot.h"
 
 #include "utils/Log.h"
 

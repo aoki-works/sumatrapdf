@@ -62,7 +62,7 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
-#include "CpsLabAnnot.h"
+#include "cpslab/CpsLabAnnot.h"
 
 #include "utils/Log.h"
 

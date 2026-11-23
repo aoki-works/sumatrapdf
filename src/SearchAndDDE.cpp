@@ -35,7 +35,7 @@
 #include "Toolbar.h"
 #include "SumatraDialogs.h"
 #include "Translations.h"
-#include "CPSLabAnnot.h"
+#include "cpslab/CpsLabAnnot.h"
 #include "AppSettings.h"
 
 #include "utils/Log.h"

@@ -37,6 +37,9 @@
     <Filter Include="src">
       <UniqueIdentifier>{2DAB880B-99B4-887C-2230-9F7C8E38947C}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\cpslab">
+      <UniqueIdentifier>{91345854-7DEC-99A1-E6F3-72FDD2CA3492}</UniqueIdentifier>
+    </Filter>
     <Filter Include="src\mui">
       <UniqueIdentifier>{A71E30A9-13FE-AE44-1C16-3A1B887415A6}</UniqueIdentifier>
     </Filter>
@@ -139,9 +142,6 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\Commands.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\CpsLabAnnot.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\CrashHandler.h">
@@ -306,6 +306,9 @@
     <ClInclude Include="..\src\WindowTab.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\cpslab\CpsLabAnnot.h">
+      <Filter>src\cpslab</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\mui\Mui.h">
       <Filter>src\mui</Filter>
     </ClInclude>
@@ -432,9 +435,6 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Commands.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\CpsLabAnnot.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\CrashHandler.cpp">
@@ -625,6 +625,9 @@
     </ClCompile>
     <ClCompile Include="..\src\WindowTab.cpp">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cpslab\CpsLabAnnot.cpp">
+      <Filter>src\cpslab</Filter>
     </ClCompile>
     <ClCompile Include="..\src\mui\Mui.cpp">
       <Filter>src\mui</Filter>

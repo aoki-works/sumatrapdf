@@ -1029,7 +1029,6 @@
     <ClInclude Include="..\src\ChmModel.h" />
     <ClInclude Include="..\src\CommandPalette.h" />
     <ClInclude Include="..\src\Commands.h" />
-    <ClInclude Include="..\src\CpsLabAnnot.h" />
     <ClInclude Include="..\src\CrashHandler.h" />
     <ClInclude Include="..\src\DisplayMode.h" />
     <ClInclude Include="..\src\DisplayModel.h" />
@@ -1084,6 +1083,7 @@
     <ClInclude Include="..\src\UpdateCheck.h" />
     <ClInclude Include="..\src\Version.h" />
     <ClInclude Include="..\src\WindowTab.h" />
+    <ClInclude Include="..\src\cpslab\CpsLabAnnot.h" />
     <ClInclude Include="..\src\mui\Mui.h" />
     <ClInclude Include="..\src\mui\TextRender.h" />
     <ClInclude Include="..\src\resource.h" />
@@ -1128,7 +1128,6 @@
     <ClCompile Include="..\src\ChmModel.cpp" />
     <ClCompile Include="..\src\CommandPalette.cpp" />
     <ClCompile Include="..\src\Commands.cpp" />
-    <ClCompile Include="..\src\CpsLabAnnot.cpp" />
     <ClCompile Include="..\src\CrashHandler.cpp" />
     <ClCompile Include="..\src\DisplayMode.cpp" />
     <ClCompile Include="..\src\DisplayModel.cpp" />
@@ -1201,6 +1200,7 @@
     <ClCompile Include="..\src\Uninstaller.cpp" />
     <ClCompile Include="..\src\UpdateCheck.cpp" />
     <ClCompile Include="..\src\WindowTab.cpp" />
+    <ClCompile Include="..\src\cpslab\CpsLabAnnot.cpp" />
     <ClCompile Include="..\src\mui\Mui.cpp" />
     <ClCompile Include="..\src\mui\TextRender.cpp" />
     <ClCompile Include="..\src\regress\Regress.cpp">

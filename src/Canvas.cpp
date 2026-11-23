@@ -52,7 +52,7 @@
 #include "Tabs.h"
 #include "Toolbar.h"
 #include "Translations.h"
-#include "CpsLabAnnot.h"
+#include "cpslab/CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
