@@ -91,6 +91,7 @@
 #include "Caption.h"
 #include "DarkModeSubclass.h"
 #include "cpslab/CpsLabAnnot.h" // CPS Lab
+#include "cpslab/CpsUi.h"       // CPS Lab
 
 #include "utils/Log.h"
 
@@ -6338,38 +6339,11 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             gDisableInteractiveInverseSearch = !gDisableInteractiveInverseSearch;
             break;
 
-        case CmdSelectPins: { // CPS Lab
-            if (tab != nullptr) {
-                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectPins, 0);
-                if (iResult & TBSTATE_CHECKED) {
-                    tab->markers->setSelection("Pin");
-                } else {
-                    tab->markers->unsetSelection("Pin");
-                }
-            }
-        } break;
-
-        case CmdSelectCells: { // CPS Lab
-            if (tab != nullptr) {
-                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectCells, 0);
-                if (iResult & TBSTATE_CHECKED) {
-                    tab->markers->setSelection("Cell");
-                } else {
-                    tab->markers->unsetSelection("Cell");
-                }
-            }
-        } break;
-
-        case CmdSelectNets: { // CPS Lab
-            if (tab != nullptr) {
-                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectNets, 0);
-                if (iResult & TBSTATE_CHECKED) {
-                    tab->markers->setSelection("Net");
-                } else {
-                    tab->markers->unsetSelection("Net");
-                }
-            }
-        } break;
+        case CmdSelectPins: // CPS Lab
+        case CmdSelectCells:
+        case CmdSelectNets:
+            cpslab::OnSelectCommand(win, tab, cmdId);
+            break;
 
         default:
             return DefWindowProc(hwnd, msg, wp, lp);

@@ -1085,6 +1085,7 @@
     <ClInclude Include="..\src\WindowTab.h" />
     <ClInclude Include="..\src\cpslab\CpsDde.h" />
     <ClInclude Include="..\src\cpslab\CpsLabAnnot.h" />
+    <ClInclude Include="..\src\cpslab\CpsUi.h" />
     <ClInclude Include="..\src\mui\Mui.h" />
     <ClInclude Include="..\src\mui\TextRender.h" />
     <ClInclude Include="..\src\resource.h" />
@@ -1203,6 +1204,7 @@
     <ClCompile Include="..\src\WindowTab.cpp" />
     <ClCompile Include="..\src\cpslab\CpsDde.cpp" />
     <ClCompile Include="..\src\cpslab\CpsLabAnnot.cpp" />
+    <ClCompile Include="..\src\cpslab\CpsUi.cpp" />
     <ClCompile Include="..\src\mui\Mui.cpp" />
     <ClCompile Include="..\src\mui\TextRender.cpp" />
     <ClCompile Include="..\src\regress\Regress.cpp">

@@ -312,6 +312,9 @@
     <ClInclude Include="..\src\cpslab\CpsLabAnnot.h">
       <Filter>src\cpslab</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\cpslab\CpsUi.h">
+      <Filter>src\cpslab</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\mui\Mui.h">
       <Filter>src\mui</Filter>
     </ClInclude>
@@ -636,6 +639,9 @@
       <Filter>src\cpslab</Filter>
     </ClCompile>
     <ClCompile Include="..\src\cpslab\CpsLabAnnot.cpp">
+      <Filter>src\cpslab</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cpslab\CpsUi.cpp">
       <Filter>src\cpslab</Filter>
     </ClCompile>
     <ClCompile Include="..\src\mui\Mui.cpp">
