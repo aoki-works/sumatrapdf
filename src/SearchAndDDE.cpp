@@ -15,6 +15,7 @@
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
+#include "Annotation.h"
 #include "GlobalPrefs.h"
 #include "ChmModel.h"
 #include "DisplayModel.h"
@@ -34,12 +35,13 @@
 #include "Toolbar.h"
 #include "SumatraDialogs.h"
 #include "Translations.h"
+#include "CPSLabAnnot.h"
+#include "AppSettings.h"
 
 #include "utils/Log.h"
 
 bool gIsStartup = false;
 StrVec gDdeOpenOnStartup;
-
 Kind kNotifFindProgress = "findProgress";
 
 // don't show the Search UI for document types that don't
@@ -680,7 +682,7 @@ if focus = 1 then the focus is set to the window
 */
 static const char* HandleSyncCmd(const char* cmd, bool* ack) {
     AutoFreeStr pdfFile, srcFile;
-    BOOL line = 0, col = 0, newWindow = 0, setFocus = 0;
+    BOOL line = 0, col = 0, newWindow = 0, setFocus = 1;
     const char* next = str::Parse(cmd, "[ForwardSearch(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &srcFile, &line, &col);
     if (!next) {
         next = str::Parse(cmd, "[ForwardSearch(\"%s\",%? \"%s\",%u,%u,%u,%u)]", &pdfFile, &srcFile, &line, &col,
@@ -747,10 +749,22 @@ Search DDE command
 [Search("<pdffile>","<search-term>")]
 */
 static const char* HandleSearchCmd(const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile;
+    AutoFreeStr pdfFile, srcFile;
     AutoFreeStr term;
+    BOOL newWindow = 0, setFocus = 1;
     const char* next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &pdfFile, &term);
-    // TODO: should un-quote text to allow searching text with '"' in them
+    if (!next) {
+        next = str::Parse(cmd, "[Search(\"%s\",\"%s\",%u,%u)]", &pdfFile, &term, &newWindow, &setFocus);
+    }
+    // allow to omit the pdffile path, so that editors don't have to know about
+    // multi-file projects (requires that the PDF has already been opened)
+    if (!next) {
+        pdfFile.Reset();
+        next = str::Parse(cmd, "[Search(\"%s\",\"%s\")]", &srcFile, &term);
+        if (!next) {
+            next = str::Parse(cmd, "[Search(\"%s\",\"%s\",%u,%u)]", &srcFile, &term, &newWindow, &setFocus);
+        }
+    }
     if (!next) {
         return nullptr;
     }
@@ -760,8 +774,26 @@ static const char* HandleSearchCmd(const char* cmd, bool* ack) {
     // check if the PDF is already opened
     // TODO: prioritize window with HWND so that if we have the same file
     // opened in multiple tabs / windows, we operate on the one that got the message
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
+    MainWindow* win = nullptr;
+    if (pdfFile) {
+        // check if the PDF is already opened
+        win = FindMainWindowByFile(pdfFile, !newWindow);
+        // if not then open it
+        if (newWindow || !win) {
+            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
+            win = LoadDocument(&args);
+        } else if (!win->IsDocLoaded()) {
+            ReloadDocument(win, false);
+        }
+    } else {
+        // check if any opened PDF has sync information for the source file
+        win = FindMainWindowBySyncFile(srcFile, true);
+        if (win && newWindow) {
+            LoadArgs args(win->CurrentTab()->filePath, nullptr);
+            win = LoadDocument(&args);
+        }
+    }
+    if (!win || !win->CurrentTab() || win->CurrentTab()->GetEngineType() != kindEngineMupdf) {
         return next;
     }
     if (!win->IsDocLoaded()) {
@@ -770,10 +802,14 @@ static const char* HandleSearchCmd(const char* cmd, bool* ack) {
             return next;
         }
     }
+
     bool wasModified = true;
     bool showProgress = true;
+    HwndSetText(win->hwndFindEdit, term); // CPS Lab
     FindTextOnThread(win, TextSearch::Direction::Forward, term, wasModified, showProgress);
-    win->Focus();
+    if (setFocus) { // CPS Lab
+        win->Focus();
+    }
     *ack = true;
     return next;
 }
@@ -798,7 +834,7 @@ valid formats:
 static const char* HandleOpenCmd(const char* cmd, bool* ack) {
     AutoFreeStr filePath;
     int newWindow = 0;
-    int setFocus = 0;
+    int setFocus = 1;
     int forceRefresh = 0;
     int inCurrentTab = 0;
     const char* next = str::Parse(cmd, "[Open(\"%s\")]", &filePath);
@@ -928,15 +964,44 @@ e.g.:
 [GoToNamedDest("c:\file.pdf", "chapter.1")]
 */
 static const char* HandleGotoCmd(const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile, destName;
+    AutoFreeStr pdfFile, destName, srcFile;
+    BOOL newWindow = 0, setFocus = 1;
     const char* next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &pdfFile, &destName);
+    if (!next) {
+        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &destName, &newWindow, &setFocus);
+    }
+    if (!next) {
+        pdfFile.Reset();
+        next = str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\")]", &srcFile, &destName);
+        if (!next) {
+            next =
+                str::Parse(cmd, "[GotoNamedDest(\"%s\",%? \"%s\",%u,%u)]", &pdfFile, &destName, &newWindow, &setFocus);
+        }
+    }
+    // allow to omit the pdffile path, so that editors don't have to know about
+    // multi-file projects (requires that the PDF has already been opened)
     if (!next) {
         return nullptr;
     }
 
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
+    MainWindow* win = nullptr;
+    if (pdfFile) {
+        // check if the PDF is already opened
+        win = FindMainWindowByFile(pdfFile, true);
+        // if not then open it
+        if (newWindow || !win) {
+            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
+            win = LoadDocument(&args);
+        } else if (!win->IsDocLoaded()) {
+            ReloadDocument(win, false);
+        }
+    } else {
+        // check if any opened PDF has sync information for the source file
+        win = FindMainWindowBySyncFile(srcFile, true);
+        if (win && newWindow) {
+            LoadArgs args(win->CurrentTab()->filePath, nullptr);
+            win = LoadDocument(&args);
+        }
     }
     if (!win->IsDocLoaded()) {
         ReloadDocument(win, false);
@@ -946,7 +1011,9 @@ static const char* HandleGotoCmd(const char* cmd, bool* ack) {
     }
 
     win->linkHandler->GotoNamedDest(destName);
-    win->Focus();
+    if (setFocus) {
+        win->Focus();
+    }
     *ack = true;
     return next;
 }
@@ -959,19 +1026,43 @@ DDE command: jump to a page in an already opened document.
 eg: [GoToPage("c:\file.pdf",37)]
 */
 static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
-    AutoFreeStr pdfFile;
+    AutoFreeStr pdfFile, srcFile;
+    BOOL newWindow = 0, setFocus = 1;
     uint page = 0;
     const char* next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &pdfFile, &page);
+    if (!next) {
+        next = str::Parse(cmd, "[GotoPage(\"%S\",%u,%u,%u)]", &pdfFile, &page, &newWindow, &setFocus);
+    }
+    // allow to omit the pdffile path, so that editors don't have to know about
+    // multi-file projects (requires that the PDF has already been opened)
+    if (!next) {
+        pdfFile.Reset();
+        next = str::Parse(cmd, "[GotoPage(\"%S\",%u)]", &srcFile, &page);
+        if (!next) {
+            next = str::Parse(cmd, "[GotoPage(\"%S\",%u,%u,%u)]", &srcFile, &page, &newWindow, &setFocus);
+        }
+    }
     if (!next) {
         return nullptr;
     }
 
-    // check if the PDF is already opened
-    // TODO: prioritize window with HWND so that if we have the same file
-    // opened in multiple tabs / windows, we operate on the one that got the message
-    MainWindow* win = FindMainWindowByFile(pdfFile, true);
-    if (!win) {
-        return next;
+    MainWindow* win = nullptr;
+    if (pdfFile) {
+        // check if the PDF is already opened
+        win = FindMainWindowByFile(pdfFile, true);
+        if (newWindow || !win) {
+            LoadArgs args(pdfFile, !newWindow ? win : nullptr);
+            win = LoadDocument(&args);
+        } else if (!win->IsDocLoaded()) {
+            ReloadDocument(win, false);
+        }
+    } else {
+        // check if any opened PDF has sync information for the source file
+        win = FindMainWindowBySyncFile(srcFile, true);
+        if (win && newWindow) {
+            LoadArgs args(win->CurrentTab()->filePath, nullptr);
+            win = LoadDocument(&args);
+        }
     }
     if (!win->IsDocLoaded()) {
         ReloadDocument(win, false);
@@ -986,7 +1077,9 @@ static const char* HandlePageCmd(HWND, const char* cmd, bool* ack) {
 
     win->ctrl->GoToPage(page, true);
     *ack = true;
-    win->Focus();
+    if (setFocus) {
+        win->Focus();
+    }
     return next;
 }
 
@@ -1113,6 +1206,231 @@ static const char* HandleGetFileStateCmd(HWND hwnd, const char* cmd, bool* ack, 
 }
 
 /*
+ CPS Lab.
+ (1) [GetText("<pdffilepath>", "<textFileName>)]
+     [GeWord("<pdffilepath>", "<textFileName>)]
+     [GetBlock("<pdffilepath>", "<textFileName>)]
+*/
+static const char* HandleGetTextCmd(const char* cmd, bool* ack) {
+    AutoFreeStr pdfFile;
+    AutoFreeStr txtFile;
+    float zoom = kInvalidZoom;
+    Point scroll(-1, -1);
+    bool get_word = false;
+    bool get_block = false;
+    BOOL setFocus = 0;
+    const char* next = str::Parse(cmd, "[GetText(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+    if (!next) {
+        next = str::Parse(cmd, "[GetWord(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+        if (next) {
+            logf("GetWord : ");
+            get_word = true;
+        } else {
+            next = str::Parse(cmd, "[GetBlock(\"%s\",%? \"%s\")]", &pdfFile, &txtFile);
+            if (next) {
+                logf("GetBlock : ");
+                get_block = true;
+            }
+        }
+    }
+    if (!next) {
+        return nullptr;
+    }
+    if ((!get_block) && (!get_block)) {
+        logf("GetText : ");
+    }
+
+    logf("HandleGetTextCmd: '%s'\n", cmd);
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+
+    if (get_block) {
+        logf("  ... SaveBlocksToFile : '%s'\n", txtFile.Get());
+        cpslab::SaveBlocksToFile(win, txtFile.Get());
+    } else if (get_word) {
+        logf("  ... SaveWordsToFile : '%s'\n", txtFile.Get());
+        cpslab::SaveWordsToFile(win, txtFile.Get());
+    } else {
+        logf("  ... SaveTextToFile : '%s'\n", txtFile.Get());
+        cpslab::SaveTextToFile(win, txtFile.Get());
+    }
+    if (setFocus) {
+        win->Focus();
+    }
+    logf("  ... done\n");
+    *ack = true;
+    return next;
+}
+
+/*
+ CPS Lab.
+ (2) [MarkWord("<pdffilepath>", "<SetupFile>")]
+     [MarkWord("<pdffilepath>", "<Text>", "<Text>", ...)]
+*/
+static const char* HandleMarkWordCmd(const char* cmd, bool* ack) {
+    AutoFreeStr pdfFile;
+    float zoom = kInvalidZoom;
+    Point scroll(-1, -1);
+    // ---------------------------------------------
+    // AutoFreeStr term;
+    const char* next = str::Parse(cmd, "[MarkWord(\"%s\",%? ", &pdfFile);
+    if (!next) {
+        next = str::Parse(cmd, "[MarkWord(\"%s\")]", &pdfFile);
+    }
+    if (!next) {
+        return nullptr;
+    }
+    logf("MarkWord : ");
+    logf("HandleMarkWordCmd: '%s'\n", cmd);
+    // ---------------------------------------------
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+    // ---------------------------------------------
+    AutoFreeStr word;
+    StrVec args;
+    const char* curcmd = next;
+    while (true) {
+        next = str::Parse(curcmd, "\"%s\",%? ", &word);
+        if (!next) {
+            next = str::Parse(curcmd, "\"%s\")]", &word);
+        }
+        if (!next) {
+            break;
+        }
+        // mark_words[0]->word_vec.Append(word.Get());
+        args.Append(word.Get());
+        curcmd = next;
+    }
+    // -----------------------------------------------------
+    const char* first_word = nullptr;
+    WindowTab* tab = win->CurrentTab();
+    if (args.Size() == 0) {
+        tab->markers->deleteAnnotations();
+    } else if (args.Size() == 1) {
+        first_word = cpslab::MarkWords(win, args.At(0)); // mark words by setup-file.
+    } else {
+        first_word = cpslab::MarkWords(win, args);
+    }
+    // ---------------------------------------------
+    // Pan to first word.
+    /*  no need to jump to first word
+    if (first_word != nullptr) {
+        bool wasModified = true;
+        bool showProgress = true;
+        HwndSetText(win->hwndFindEdit, first_word);
+        FindTextOnThread(win, TextSearch::Direction::Forward, first_word, wasModified, showProgress);
+        win->Focus();
+    }
+    */
+    // ---------------------------------------------
+    MainWindowRerender(win);
+    logf("                done.'\n");
+    *ack = true;
+    return next;
+}
+
+/*
+ CPS Lab.
+[Select("<pdffilepath>", "<Category>", "<Text>", "<Text>", ...)]
+*/
+static const char* HandleSelectCmd(const char* cmd, bool* ack) {
+    AutoFreeStr pdfFile;
+    float zoom = kInvalidZoom;
+    Point scroll(-1, -1);
+    boolean select_block = false;
+    boolean select_image = false;
+    BOOL setFocus = 1;
+    // ---------------------------------------------
+    const char* next = str::Parse(cmd, "[Select(\"%s\",%? ", &pdfFile);
+    if (!next) {
+        next = str::Parse(cmd, "[SelectBlock(\"%s\",%? ", &pdfFile);
+        if (next) {
+            select_block = true;
+        } else {
+            next = str::Parse(cmd, "[SelectImage(\"%s\",%? ", &pdfFile);
+            if (next) {
+                select_image = true;
+            }
+        }
+    }
+    if (!next) {
+        return nullptr;
+    }
+    // ---------------------------------------------
+    MainWindow* win = FindMainWindowByFile(pdfFile, true);
+    if (!win) {
+        return next;
+    }
+    if (!win->IsDocLoaded()) {
+        ReloadDocument(win, false);
+        if (!win->IsDocLoaded()) {
+            return next;
+        }
+    }
+    // ---------------------------------------------
+    DisplayModel* dm = win->AsFixed();
+    WindowTab* tab = win->CurrentTab();
+    const char* curcmd = next;
+    if (select_image || select_block) {
+        int pageNo;
+        int x, y, dx, dy;
+        next = str::Parse(curcmd, "%d, %d, %d, %d, %d)]", &pageNo, &x, &y, &dx, &dy);
+        if (!win->ctrl->ValidPageNo(pageNo)) {
+            return next;
+        }
+        win->ctrl->GoToPage(pageNo, true);
+        DeleteOldSelectionInfo(win, true);
+        if (select_image) {
+            Rect rc = dm->CvtToScreen(pageNo, ToRectF(Rect(x, y, dx, dy)));
+            win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
+            win->showSelection = (win->CurrentTab()->selectionOnPage != nullptr);
+            ScheduleRepaint(win, 0);
+        } else {
+            cpslab::GetTextInRegion(dm, pageNo, Rect(x, y, dx, dy));
+            UpdateTextSelection(win, false);
+        }
+    } else {
+        AutoFreeStr wd;
+        StrVec words;
+        while (true) {
+            next = str::Parse(curcmd, "\"%s\",%? ", &wd);
+            if (!next) {
+                next = str::Parse(curcmd, "\"%s\")]", &wd);
+            }
+            if (!next) {
+                break;
+            }
+            words.Append(wd.Get());
+            curcmd = next;
+        }
+        tab->markers->selectWords(win, words);
+    }
+    // ---------------------------------------------
+    MainWindowRerender(win);
+    if (setFocus) {
+        win->Focus();
+    }
+    *ack = true;
+    return next;
+}
+
+/*
 Handle all commands as defined in Commands.h
 eg: [CmdClose]
 */
@@ -1134,6 +1452,28 @@ static const char* HandleCmdCommand(HWND hwnd, const char* cmd, bool* ack) {
     logfa("HandleCmdCommand: sending %d (%s) command\n", cmdId, cmdName.Get());
     SendMessageW(win->hwndFrame, WM_COMMAND, cmdId, 0);
     *ack = true;
+    return next;
+}
+
+/*
+Quit tool
+
+[Quit]
+*/
+static const char* HandleQuitCmd(const char* cmd, bool* ack) {
+    if (!str::StartsWith(cmd, "[Quit]")) {
+        return nullptr;
+    }
+    logf("Quit\n");
+    const char* next = cmd + str::Leni("[Quit]");
+    CreateAndShowMainWindow(nullptr);
+    *ack = true;
+    // ======================
+    SaveSettings();
+    Vec<MainWindow*> toClose = gWindows;
+    for (MainWindow* win : toClose) {
+        CloseWindow(win, true, false);
+    }
     return next;
 }
 
@@ -1164,10 +1504,22 @@ static bool HandleExecuteCmds(HWND hwnd, const char* cmd) {
             nextCmd = HandleSearchCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
+            nextCmd = HandleGetTextCmd(cmd, &didHandle);
+        }
+        if (!nextCmd) {
+            nextCmd = HandleMarkWordCmd(cmd, &didHandle);
+        }
+        if (!nextCmd) {
+            nextCmd = HandleSelectCmd(cmd, &didHandle);
+        }
+        if (!nextCmd) {
             nextCmd = HandleCmdCommand(hwnd, cmd, &didHandle);
         }
         if (!nextCmd) {
             nextCmd = HandleNewWindowCmd(cmd, &didHandle);
+        }
+        if (!nextCmd) {
+            nextCmd = HandleQuitCmd(cmd, &didHandle);
         }
         if (!nextCmd) {
             // forwards compatibility: ignore unknown commands (maybe from newer version)
@@ -1264,8 +1616,8 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
 }
 
 LRESULT OnDDEInitiate(HWND hwnd, WPARAM wp, LPARAM lp) {
-    ATOM aServer = GlobalAddAtom(kSumatraDdeServer);
-    ATOM aTopic = GlobalAddAtom(kSumatraDdeTopic);
+    ATOM aServer = GlobalAddAtom(cpslab::PDFSYNC_DDE_SERVICE); // CPS Lab
+    ATOM aTopic = GlobalAddAtom(cpslab::PDFSYNC_DDE_TOPIC);    // CPS Lab
 
     if (LOWORD(lp) == aServer && HIWORD(lp) == aTopic) {
         SendMessageW((HWND)wp, WM_DDE_ACK, (WPARAM)hwnd, MAKELPARAM(aServer, 0));

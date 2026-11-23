@@ -3291,8 +3291,9 @@ RenderedBitmap* EngineMupdf::GetPageImage(int pageNo, RectF rect, int imageIdx) 
 void EngineMupdf::ExtractPageBlocks(int pageNo, Vec<PageText*>& blocks, Vec<IPageElement*>& images) {
     auto ctx = Ctx();
 
-    RenderPageArgs args(pageNo, 100, 0);
-    RenderPage(args);
+    // CPS Lab: the old code called RenderPage(pageNo, zoom=100, 0) here. That asked for a 10000% rendering,
+    // which only "worked" on Win32 because the huge pixmap allocation failed. On x64 it renders forever.
+    // GetFzPageInfo(pageNo, false) below already does the full page load (images, etc.).
 
     // FzPageInfo* pageInfo = GetFzPageInfo(pageNo, true);
     FzPageInfo* pageInfo = GetFzPageInfo(pageNo, false);
@@ -3340,6 +3341,7 @@ void EngineMupdf::ExtractPageBlocks(int pageNo, Vec<PageText*>& blocks, Vec<IPag
             }
             bk = bk->next;
         }
+        fz_drop_stext_page(ctx, stext); // CPS Lab: was leaked
     }
 
     for (auto& img : pageInfo->images) {

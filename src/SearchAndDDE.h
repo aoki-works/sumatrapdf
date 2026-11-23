@@ -30,5 +30,7 @@ bool AbortFinding(MainWindow* win, bool hideMessage);
 void FindTextOnThread(MainWindow* win, TextSearch::Direction direction, bool showProgress);
 void FindTextOnThread(MainWindow* win, TextSearch::Direction direction, const char* text, bool wasModified,
                       bool showProgress);
+
 extern bool gIsStartup;
 extern StrVec gDdeOpenOnStartup;
+

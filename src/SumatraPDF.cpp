@@ -90,13 +90,15 @@
 #include "Theme.h"
 #include "Caption.h"
 #include "DarkModeSubclass.h"
+#include "CpsLabAnnot.h" // CPS Lab
 
 #include "utils/Log.h"
 
 constexpr const char* kRestrictionsFileName = "sumatrapdfrestrict.ini";
 
-constexpr const char* kSumatraWindowTitle = "SumatraPDF";
-constexpr const WCHAR* kSumatraWindowTitleW = L"SumatraPDF";
+// CPS Lab: no "SumatraPDF" in the window title
+constexpr const char* kSumatraWindowTitle = "";
+constexpr const WCHAR* kSumatraWindowTitleW = L"";
 
 // used to show it in debug, but is not very useful,
 // so always disable
@@ -2153,7 +2155,11 @@ MainWindow* LoadDocument(LoadArgs* args) {
         }
     }
     args->ctrl = ctrl;
-    return LoadDocumentFinish(args);
+    auto rtv = LoadDocumentFinish(args);
+    if (cpslab::EXPORT_TEXT_BLOCKS) { // CPS Lab
+        cpslab::SaveBlocksToFile(win, cpslab::EXPORT_TEXT_BLOCKS);
+    }
+    return rtv;
 }
 
 // Loads document data into the MainWindow.
@@ -2807,6 +2813,7 @@ void CloseTab(WindowTab* tab, bool quitIfLast) {
         }
     } else {
         ReportIf(gPluginMode && !gWindows.Contains(win));
+        cpslab::CloseEvent(tab); // CPS Lab: file closed event
         RemoveTab(tab);
         // RemoveTab -> LoadModelIntoTab can pump messages, potentially destroying win
         // and its cbHandler. Since tab was already removed from win's tab list,
@@ -2950,6 +2957,8 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose) {
         }
         return;
     }
+
+    cpslab::CloseEvent(win); // CPS Lab: file closed event
 
     bool lastWindow = (1 == gWindows.size());
     // RememberDefaultWindowPosition becomes a no-op once the window is hidden
@@ -6328,6 +6337,39 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             extern bool gDisableInteractiveInverseSearch;
             gDisableInteractiveInverseSearch = !gDisableInteractiveInverseSearch;
             break;
+
+        case CmdSelectPins: { // CPS Lab
+            if (tab != nullptr) {
+                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectPins, 0);
+                if (iResult & TBSTATE_CHECKED) {
+                    tab->markers->setSelection("Pin");
+                } else {
+                    tab->markers->unsetSelection("Pin");
+                }
+            }
+        } break;
+
+        case CmdSelectCells: { // CPS Lab
+            if (tab != nullptr) {
+                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectCells, 0);
+                if (iResult & TBSTATE_CHECKED) {
+                    tab->markers->setSelection("Cell");
+                } else {
+                    tab->markers->unsetSelection("Cell");
+                }
+            }
+        } break;
+
+        case CmdSelectNets: { // CPS Lab
+            if (tab != nullptr) {
+                auto iResult = SendMessage(win->hwndToolbar, TB_GETSTATE, CmdSelectNets, 0);
+                if (iResult & TBSTATE_CHECKED) {
+                    tab->markers->setSelection("Net");
+                } else {
+                    tab->markers->unsetSelection("Net");
+                }
+            }
+        } break;
 
         default:
             return DefWindowProc(hwnd, msg, wp, lp);
