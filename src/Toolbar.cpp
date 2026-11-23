@@ -42,6 +42,7 @@ extern "C" {
 #include "DarkModeSubclass.h"
 #include "wingui/Layout.h"
 #include "wingui/WinGui.h"
+#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -68,6 +69,14 @@ constexpr int WarningMsgId = (int)CmdLast + 17;
 static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::Open, CmdOpenFile, _TRN("Open")},
     {TbIcon::Print, CmdPrint, _TRN("Print")},
+    {TbIcon::None, 0, nullptr},                                             // separator, CPS Lab
+    {TbIcon::Cell, CmdSelectCells, _TRN("Select Parts")},                   // CPS Lab
+    {TbIcon::Net, CmdSelectNets, _TRN("Select Nets")},                      // CPS Lab
+    {TbIcon::Pin, CmdSelectPins, _TRN("Select Pins")},                      // CPS Lab
+    {TbIcon::None, CmdFindFirst, nullptr},                                  // CPS Lab: moved before page info
+    {TbIcon::SearchPrev, CmdFindPrev, _TRN("Find Previous")},               // CPS Lab: moved before page info
+    {TbIcon::SearchNext, CmdFindNext, _TRN("Find Next")},                   // CPS Lab: moved before page info
+    {TbIcon::MatchCase, CmdFindToggleMatchCase, _TRN("Toggle Match Case")}, // CPS Lab: moved before page info
     {TbIcon::None, PageInfoId, nullptr}, // text box for page number + show current page / no of pages
     {TbIcon::PagePrev, CmdGoToPrevPage, _TRN("Previous Page")},
     {TbIcon::PageNext, CmdGoToNextPage, _TRN("Next Page")},
@@ -78,10 +87,6 @@ static ToolbarButtonInfo gToolbarButtons[] = {
     {TbIcon::RotateRight, CmdRotateRight, _TRN("Rotate &Right")},
     {TbIcon::ZoomOut, CmdZoomOut, _TRN("Zoom Out")},
     {TbIcon::ZoomIn, CmdZoomIn, _TRN("Zoom In")},
-    {TbIcon::None, CmdFindFirst, nullptr},
-    {TbIcon::SearchPrev, CmdFindPrev, _TRN("Find Previous")},
-    {TbIcon::SearchNext, CmdFindNext, _TRN("Find Next")},
-    {TbIcon::MatchCase, CmdFindToggleMatchCase, _TRN("Toggle Match Case")},
 };
 // unicode chars: https://www.compart.com/en/unicode/U+25BC
 
@@ -178,6 +183,14 @@ static bool IsCmdAvailable(MainWindow* win, int cmdId) {
         case CmdFindPrev:
         case CmdFindToggleMatchCase:
             return NeedsFindUI(win);
+        case CmdOpenFile: { // CPS Lab: the Open button is shown only when there is no tab
+            auto tab = win->CurrentTab();
+            return (tab == nullptr);
+        }
+        case CmdSelectNets: // CPS Lab
+        case CmdSelectPins:
+        case CmdSelectCells:
+            return true;
         case PageInfoId:
             return true;
     }
@@ -257,7 +270,11 @@ static TBBUTTON TbButtonFromButtonInfo(const ToolbarButtonInfo& bi, bool noTrans
     }
     b.iBitmap = (int)bi.bmpIndex;
     b.fsState = TBSTATE_ENABLED;
-    b.fsStyle = BTNS_BUTTON;
+    if (bi.cmdId == CmdSelectNets || bi.cmdId == CmdSelectCells || bi.cmdId == CmdSelectPins) {
+        b.fsStyle = TBSTYLE_CHECK; // CPS Lab
+    } else {
+        b.fsStyle = BTNS_BUTTON;
+    }
     if (bi.cmdId == CmdFindToggleMatchCase) {
         b.fsStyle = BTNS_CHECK;
     }
@@ -345,10 +362,11 @@ static void UpdateWarningMessageHwnd(MainWindow* win, const char* s) {
 // TODO: also set checked state instead of calling SetToolbarButtonCheckedState() all over
 void ToolbarUpdateStateForWindow(MainWindow* win, bool setButtonsVisibility) {
     const char* warningMsg = "";
-    DisplayModel* dm = win->AsFixed();
-    if (dm && EngineHasUnsavedAnnotations(dm->GetEngine())) {
-        warningMsg = _TRA("You have unsaved annotations");
-    }
+    // CPS Lab: do not show "You have unsaved annotations"
+    // DisplayModel* dm = win->AsFixed();
+    // if (dm && EngineHasUnsavedAnnotations(dm->GetEngine())) {
+    //     warningMsg = _TRA("You have unsaved annotations");
+    // }
 
     HWND hwnd = win->hwndToolbar;
     int n = TotalButtonsCount();
@@ -611,7 +629,8 @@ void UpdateToolbarFindText(MainWindow* win) {
     Rect findWndRect = WindowRect(win->hwndFindBg);
 
     RECT r{};
-    TbGetRectById(win->hwndToolbar, CmdZoomIn, &r);
+    // CPS Lab: the find box is placed right of the Select Pins button (upstream: right of CmdZoomIn)
+    TbGetRectById(win->hwndToolbar, CmdSelectPins, &r);
     int currX = r.right + DpiScale(win->hwndToolbar, 10);
     int currY = (r.bottom - findWndRect.dy) / 2;
 
@@ -653,6 +672,31 @@ void UpdateToolbarState(MainWindow* win) {
             win->CurrentTab()->prevZoomVirtual = kInvalidZoom;
         }
     }
+
+    // CPS Lab: restore the checked state of the Nets / Parts / Pins buttons from the tab's markers
+    auto s = SendMessage(hwnd, TB_GETSTATE, CmdSelectNets, 0);
+    if (win->CurrentTab()->markers->isSelection("Net")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectNets, s);
+
+    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectCells, 0);
+    if (win->CurrentTab()->markers->isSelection("Cell")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectCells, s);
+
+    s = SendMessage(hwnd, TB_GETSTATE, CmdSelectPins, 0);
+    if (win->CurrentTab()->markers->isSelection("Pin")) {
+        s |= TBSTATE_CHECKED;
+    } else {
+        s &= ~TBSTATE_CHECKED;
+    }
+    SendMessage(hwnd, TB_SETSTATE, CmdSelectPins, s);
 }
 
 static void CreateFindBox(MainWindow* win, HFONT hfont, int iconDy) {
@@ -770,7 +814,8 @@ void UpdateToolbarPageText(MainWindow* win, int pageCount, bool updateOnly) {
     Rect pageWndRect = WindowRect(win->hwndPageBg);
 
     RECT r{};
-    SendMessageW(win->hwndToolbar, TB_GETRECT, CmdPrint, (LPARAM)&r);
+    // CPS Lab: the page box is placed right of the Toggle Match Case button (upstream: right of CmdPrint)
+    TbGetRectById(win->hwndToolbar, CmdFindToggleMatchCase, &r);
     int currX = r.right + DpiScale(win->hwndFrame, 10);
     int currY = (r.bottom - pageWndRect.dy) / 2;
 
