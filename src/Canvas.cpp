@@ -52,6 +52,7 @@
 #include "Tabs.h"
 #include "Toolbar.h"
 #include "Translations.h"
+#include "CpsLabAnnot.h"
 
 #include "utils/Log.h"
 
@@ -430,7 +431,7 @@ bool IsDragDistance(int x1, int x2, int y1, int y2) {
     return dy > dragDy;
 }
 
-static bool gShowAnnotationNotification = true;
+static bool gShowAnnotationNotification = false; // CPS Lab: 3.6 has true
 
 // Forward declaration
 static RectF CalculateResizedRect(MainWindow* win, int x, int y);
@@ -483,6 +484,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
         win->linkOnLastButtonDown = nullptr;
     }
 
+    int dx, dy; // CPS Lab
     Point prevPos = win->dragPrevPos;
     switch (win->mouseAction) {
         case MouseAction::None: {
@@ -532,8 +534,18 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
             [[fallthrough]];
         case MouseAction::Selecting: {
             win->annotationUnderCursor = nullptr;
-            win->selectionRect.dx = x - win->selectionRect.x;
-            win->selectionRect.dy = y - win->selectionRect.y;
+            if (gGlobalPrefs->circularSelectionRegion && dm->textSelection->result.len == 0) {
+                // CPS Lab: circular selection region grows around the start point
+                dx = (x - win->selectionRect.x) - win->selectionRect.dx;
+                dy = (y - win->selectionRect.y) - win->selectionRect.dy;
+                win->selectionRect.x -= dx < dy ? dy : dx;
+                win->selectionRect.y -= dx < dy ? dy : dx;
+                win->selectionRect.dx += 2 * (dx < dy ? dy : dx);
+                win->selectionRect.dy += 2 * (dx < dy ? dy : dx);
+            } else {
+                win->selectionRect.dx = x - win->selectionRect.x;
+                win->selectionRect.dy = y - win->selectionRect.y;
+            }
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
             OnSelectionEdgeAutoscroll(win, x, y);
             ScheduleRepaint(win, 0);
@@ -762,7 +774,13 @@ static void OnMouseLeftButtonDown(MainWindow* win, int x, int y, WPARAM key) {
     if (resizeHandle != ResizeHandle::None || isMoveableAnnot || !canCopy || (isShift || !isOverText) && !isCtrl) {
         StartMouseDrag(win, x, y);
     } else {
-        OnSelectionStart(win, x, y, key);
+        if (cpslab::MODE == cpslab::CpsMode::Document && isOverText) {
+            // Text selection start
+            OnSelectionStart(win, x, y, key);
+        } else if (IsCtrlPressed() && !isOverText) { // CPS Lab
+            // Start area selection (left-button + Ctrl-key)
+            OnSelectionStart(win, x, y, key);
+        }
     }
 }
 
@@ -792,11 +810,27 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
             SendMessageW(win->hwndCanvas, WM_SETCURSOR, 0, 0);
         } else {
             StopMouseDrag(win, x, y, !didDragMouse);
+            if (cpslab::MODE == cpslab::CpsMode::Document) { // CPS Lab
+                if (!didDragMouse) {
+                    cpslab::sendClickPoint(win, x, y);
+                }
+            }
         }
     } else {
         OnSelectionStop(win, x, y, !didDragMouse);
         if (MouseAction::Selecting == ma && win->showSelection) {
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
+        }
+        // CPS Lab: callback to user application via DDE
+        WindowTab* tab = win->CurrentTab();
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            if (tab->selectionOnPage && 0 < tab->selectionOnPage->size()) {
+                cpslab::sendSelectText(win);
+            } else {
+                cpslab::sendClickPoint(win, x, y);
+            }
+        } else {
+            tab->markers->sendSelectMessage(win);
         }
     }
 
@@ -823,8 +857,11 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
     }
 
     if (IsCtrlPressed() && win->annotationUnderCursor) {
-        ShowEditAnnotationsWindow(tab, win->annotationUnderCursor);
-        return;
+        if (gShowAnnotationNotification) { // CPS Lab: disabled by default (do not open the annotation editor on
+                                           // Ctrl+click)
+            ShowEditAnnotationsWindow(tab, win->annotationUnderCursor);
+            return;
+        }
     }
 
     if (win->annotationUnderCursor && (tab->selectedAnnotation || tab->editAnnotsWindow)) {
@@ -910,9 +947,12 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         int pageNo = dm->GetPageNoByPoint(mousePos);
         if (win->ctrl->ValidPageNo(pageNo)) {
             PointF pt = dm->CvtFromScreen(mousePos, pageNo);
-            dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y);
+            dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y, IsCtrlPressed());
             UpdateTextSelection(win, false);
             ScheduleRepaint(win, 0);
+            // CPS Lab: callback to user application via DDE
+            WindowTab* tab = win->CurrentTab();
+            tab->markers->sendSelectMessage(win, IsCtrlPressed());
         }
         return;
     }
@@ -931,6 +971,9 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
         win->showSelection = win->CurrentTab()->selectionOnPage != nullptr;
         ScheduleRepaint(win, 0);
+        if (cpslab::MODE == cpslab::CpsMode::Document) {
+            cpslab::sendSelectImage(win, x, y);
+        }
     }
 }
 
