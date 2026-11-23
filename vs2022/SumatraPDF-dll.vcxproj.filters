@@ -306,6 +306,9 @@
     <ClInclude Include="..\src\WindowTab.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\cpslab\CpsDde.h">
+      <Filter>src\cpslab</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\cpslab\CpsLabAnnot.h">
       <Filter>src\cpslab</Filter>
     </ClInclude>
@@ -628,6 +631,9 @@
     </ClCompile>
     <ClCompile Include="..\src\WindowTab.cpp">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cpslab\CpsDde.cpp">
+      <Filter>src\cpslab</Filter>
     </ClCompile>
     <ClCompile Include="..\src\cpslab\CpsLabAnnot.cpp">
       <Filter>src\cpslab</Filter>
