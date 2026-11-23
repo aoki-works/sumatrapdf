@@ -20,6 +20,7 @@
 #include "SumatraPDF.h"
 #include "MainWindow.h"
 #include "WindowTab.h"
+#include "Selection.h"
 #include "Commands.h"
 #include "cpslab/CpsLabAnnot.h"
 #include "cpslab/CpsUi.h"
@@ -106,6 +107,40 @@ void InitFromFlags(const Flags& flags) {
     }
     if (flags.export_text_blocks) {
         cpslab::EXPORT_TEXT_BLOCKS = flags.export_text_blocks;
+    }
+}
+
+void OnDragStopped(MainWindow* win, int x, int y, bool didDragMouse) {
+    if (cpslab::MODE == cpslab::CpsMode::Document) {
+        if (!didDragMouse) {
+            cpslab::sendClickPoint(win, x, y);
+        }
+    }
+}
+
+// callback to user application via DDE
+void OnSelectionStopped(MainWindow* win, int x, int y) {
+    WindowTab* tab = win->CurrentTab();
+    if (cpslab::MODE == cpslab::CpsMode::Document) {
+        if (tab->selectionOnPage && 0 < tab->selectionOnPage->size()) {
+            cpslab::sendSelectText(win);
+        } else {
+            cpslab::sendClickPoint(win, x, y);
+        }
+    } else {
+        tab->markers->sendSelectMessage(win);
+    }
+}
+
+// callback to user application via DDE
+void OnWordSelected(MainWindow* win) {
+    WindowTab* tab = win->CurrentTab();
+    tab->markers->sendSelectMessage(win, IsCtrlPressed());
+}
+
+void OnImageSelected(MainWindow* win, int x, int y) {
+    if (cpslab::MODE == cpslab::CpsMode::Document) {
+        cpslab::sendSelectImage(win, x, y);
     }
 }
 

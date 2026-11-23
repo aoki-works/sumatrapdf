@@ -53,6 +53,7 @@
 #include "Toolbar.h"
 #include "Translations.h"
 #include "cpslab/CpsLabAnnot.h"
+#include "cpslab/CpsUi.h"
 
 #include "utils/Log.h"
 
@@ -810,28 +811,14 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
             SendMessageW(win->hwndCanvas, WM_SETCURSOR, 0, 0);
         } else {
             StopMouseDrag(win, x, y, !didDragMouse);
-            if (cpslab::MODE == cpslab::CpsMode::Document) { // CPS Lab
-                if (!didDragMouse) {
-                    cpslab::sendClickPoint(win, x, y);
-                }
-            }
+            cpslab::OnDragStopped(win, x, y, didDragMouse); // CPS Lab
         }
     } else {
         OnSelectionStop(win, x, y, !didDragMouse);
         if (MouseAction::Selecting == ma && win->showSelection) {
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
         }
-        // CPS Lab: callback to user application via DDE
-        WindowTab* tab = win->CurrentTab();
-        if (cpslab::MODE == cpslab::CpsMode::Document) {
-            if (tab->selectionOnPage && 0 < tab->selectionOnPage->size()) {
-                cpslab::sendSelectText(win);
-            } else {
-                cpslab::sendClickPoint(win, x, y);
-            }
-        } else {
-            tab->markers->sendSelectMessage(win);
-        }
+        cpslab::OnSelectionStopped(win, x, y); // CPS Lab
     }
 
     win->mouseAction = MouseAction::None;
@@ -950,9 +937,7 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
             dm->textSelection->SelectWordAt(pageNo, pt.x, pt.y, IsCtrlPressed());
             UpdateTextSelection(win, false);
             ScheduleRepaint(win, 0);
-            // CPS Lab: callback to user application via DDE
-            WindowTab* tab = win->CurrentTab();
-            tab->markers->sendSelectMessage(win, IsCtrlPressed());
+            cpslab::OnWordSelected(win); // CPS Lab
         }
         return;
     }
@@ -971,9 +956,7 @@ static void OnMouseLeftButtonDblClk(MainWindow* win, int x, int y, WPARAM key) {
         win->CurrentTab()->selectionOnPage = SelectionOnPage::FromRectangle(dm, rc);
         win->showSelection = win->CurrentTab()->selectionOnPage != nullptr;
         ScheduleRepaint(win, 0);
-        if (cpslab::MODE == cpslab::CpsMode::Document) {
-            cpslab::sendSelectImage(win, x, y);
-        }
+        cpslab::OnImageSelected(win, x, y); // CPS Lab
     }
 }
 
